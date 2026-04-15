@@ -1,0 +1,120 @@
+/* ==========================================
+ * mobile.css — 移动端适配补丁
+ * 针对 ≤ 768px 屏幕的全局样式调整
+ * ========================================== */
+
+/* 禁用长按选择文本（游戏界面） */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* 禁用 iOS 双击缩放 */
+* {
+  touch-action: manipulation;
+}
+
+/* 安全区域适配（刘海屏/底部小黑条） */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* BottomNav 底部导航栏安全区域 */
+.bottom-nav {
+  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0));
+}
+
+/* 聊天输入区固定在底部时的安全间距 */
+.chat-input-bar {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+@media (max-width: 768px) {
+  /* 全局字体调小一档 */
+  html {
+    font-size: 15px;
+  }
+
+  /* 卡片容器去边距 */
+  .t-card {
+    border-radius: var(--radius-sm);
+    margin: 0;
+  }
+
+  /* 对话框全屏化 */
+  .el-dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+  }
+
+  /* 滑动列表优化 */
+  .scroll-list {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+
+  /* 按钮最小触控区域 44px */
+  .t-btn,
+  button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 输入框字体防止 iOS 自动缩放 */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* 房间布局在移动端隐藏侧边栏 */
+  .room-left-sidebar,
+  .room-right-sidebar {
+    display: none !important;
+  }
+
+  /* 移动端骰子面板全屏弹出 */
+  .dice-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-modal);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* 轨迹矩阵在移动端展示为时间线 */
+  .trajectory-matrix .table-wrap {
+    display: none;
+  }
+
+  /* 网格地图在移动端展示为静态预览 */
+  .grid-map canvas.interactive {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 极小屏幕追加调整 */
+  .home-header {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+/* 横屏适配 */
+@media (orientation: landscape) and (max-width: 900px) {
+  .bottom-nav {
+    display: none;
+  }
+}

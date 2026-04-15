@@ -1,0 +1,14 @@
+:root[data-theme='day'] {
+  --el-color-primary: #3b82f6;
+  --el-color-primary-light-3: #93bbfd;
+  --el-color-primary-light-5: #9dc0fe;
+  --el-color-primary-light-7: #bdd5fe;
+  --el-color-primary-light-9: #deeaff;
+  --el-color-primary-dark-2: #2563eb;
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #f9fafb;
+  --el-text-color-primary: #0f172a;
+  --el-text-color-regular: #334155;
+  --el-border-color: #e5e7eb;
+  --el-fill-color-light: #f3f4f6;
+}
