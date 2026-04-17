@@ -1,24 +1,79 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
+import { useAuthStore } from '../stores/auth-store';
 
 const route = useRoute();
+const router = useRouter();
+const authStore = useAuthStore();
+
 const characterId = route.params.id as string | undefined;
+const isEditing = !!characterId;
 
 const form = ref({
   name: '',
-  occupation: '',
-  age: '25',
+  occupation_id: '',
   background: '',
-  attributes: { STR: 50, DEX: 50, POW: 50, CON: 50, APP: 50, SIZ: 50, INT: 60, EDU: 70 },
+  ruleset_id: 'coc7',
+  attributes: { STR: 50, DEX: 50, POW: 50, CON: 50, APP: 50, SIZ: 50, INT: 60, EDU: 70 } as Record<string, number>,
+  skills: {} as Record<string, number>,
 });
 
-function save() {
-  // TODO: 调用 API
-  console.log('save character', form.value);
+const saving = ref(false);
+const saveError = ref('');
+
+onMounted(async () => {
+  if (isEditing && characterId) {
+    try {
+      const res = await fetch(`/api/characters/${characterId}`, {
+        headers: { Authorization: `Bearer ${authStore.token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        form.value.name = data.name ?? '';
+        form.value.occupation_id = data.occupation_id ?? '';
+        form.value.background = data.background ?? '';
+        form.value.ruleset_id = data.ruleset_id ?? 'coc7';
+        if (data.attributes) form.value.attributes = data.attributes;
+        if (data.skills) form.value.skills = data.skills;
+      }
+    } catch { /* ignore */ }
+  }
+});
+
+async function save() {
+  saveError.value = '';
+  saving.value = true;
+  try {
+    const payload = {
+      name: form.value.name,
+      ruleset_id: form.value.ruleset_id,
+      occupation_id: form.value.occupation_id || null,
+      background: form.value.background,
+      attributes: form.value.attributes,
+      skills: form.value.skills,
+    };
+    const url = isEditing ? `/api/characters/${characterId}` : '/api/characters';
+    const method = isEditing ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      router.push('/campaigns');
+    } else {
+      const data = await res.json();
+      saveError.value = data.error || '保存失败';
+    }
+  } catch (e: any) {
+    saveError.value = e.message || '网络错误';
+  } finally {
+    saving.value = false;
+  }
 }
 </script>
 
@@ -35,11 +90,7 @@ function save() {
           </div>
           <div class="field">
             <label>职业</label>
-            <TInput v-model="form.occupation" placeholder="职业" />
-          </div>
-          <div class="field">
-            <label>年龄</label>
-            <TInput v-model="form.age" type="number" placeholder="年龄" />
+            <TInput v-model="form.occupation_id" placeholder="职业" />
           </div>
         </div>
         <div class="field" style="margin-top:12px">
@@ -60,8 +111,8 @@ function save() {
       </div>
 
       <div class="actions">
-        <TButton type="secondary">取消</TButton>
-        <TButton type="primary" @click="save">保存角色</TButton>
+        <TButton type="secondary" @click="router.back()">取消</TButton>
+        <TButton type="primary" @click="save" :loading="saving">保存角色</TButton>
       </div>
     </TCard>
   </div>

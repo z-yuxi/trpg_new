@@ -2,7 +2,11 @@ import jwt from 'jsonwebtoken';
 import type { User } from '@trpg/shared';
 import { userService } from './user-service';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'trpg-platform-default-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required but not set');
+}
+const _JWT_SECRET: string = JWT_SECRET;
 const JWT_EXPIRES_IN = '7d';
 const JWT_REFRESH_EXPIRES_IN = '30d';
 
@@ -22,8 +26,8 @@ export class AuthService {
     const accessPayload: TokenPayload = { userId: user.id, type: 'access' };
     const refreshPayload: TokenPayload = { userId: user.id, type: 'refresh' };
 
-    const access_token = jwt.sign(accessPayload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const refresh_token = jwt.sign(refreshPayload, JWT_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
+    const access_token = jwt.sign(accessPayload, _JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const refresh_token = jwt.sign(refreshPayload, _JWT_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
 
     return {
       access_token,
@@ -33,7 +37,7 @@ export class AuthService {
   }
 
   verifyAccessToken(token: string): TokenPayload {
-    const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const payload = jwt.verify(token, _JWT_SECRET) as TokenPayload;
     if (payload.type !== 'access') {
       throw new Error('Invalid token type');
     }
@@ -41,7 +45,7 @@ export class AuthService {
   }
 
   verifyRefreshToken(token: string): TokenPayload {
-    const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const payload = jwt.verify(token, _JWT_SECRET) as TokenPayload;
     if (payload.type !== 'refresh') {
       throw new Error('Invalid token type');
     }

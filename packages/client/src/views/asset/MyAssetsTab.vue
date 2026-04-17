@@ -1,19 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
+import { useAuthStore } from '../../stores/auth-store';
 
-const myRulesets = ref([
-  { id: '1', name: '自定义规则', version: '0.1', status: 'draft', updatedAt: '2026-04-10' },
-]);
+const authStore = useAuthStore();
+const myRulesets = ref<any[]>([]);
+const loading = ref(false);
+
+onMounted(async () => {
+  if (!authStore.isLoggedIn) return;
+  loading.value = true;
+  try {
+    const res = await fetch('/api/rulesets', {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) myRulesets.value = await res.json();
+  } catch { /* ignore */ }
+  finally { loading.value = false; }
+});
 </script>
 
 <template>
   <div class="my-assets-tab">
     <h3 class="sub-title">我的规则集</h3>
     <div class="asset-list">
-      <TCard v-for="rs in myRulesets" :key="rs.id" padding="md">
+      <div v-if="loading" class="empty">加载中...</div>
+      <TCard v-else v-for="rs in myRulesets" :key="rs.id" padding="md">
         <div class="asset-row">
           <div>
             <div class="asset-name">{{ rs.name }}</div>
@@ -22,16 +36,14 @@ const myRulesets = ref([
                 {{ rs.status === 'published' ? '已发布' : '草稿' }}
               </TTag>
               <span class="version">v{{ rs.version }}</span>
-              <span class="updated">更新于 {{ rs.updatedAt }}</span>
             </div>
           </div>
           <div class="actions">
             <TButton type="secondary" size="sm">编辑</TButton>
-            <TButton v-if="rs.status === 'draft'" type="primary" size="sm">发布</TButton>
           </div>
         </div>
       </TCard>
-      <div v-if="myRulesets.length === 0" class="empty">暂无规则集，去创作者后台创建吧</div>
+      <div v-if="!loading && myRulesets.length === 0" class="empty">暂无规则集，去创作者后台创建吧</div>
     </div>
   </div>
 </template>
@@ -44,7 +56,6 @@ const myRulesets = ref([
 .asset-name { font-weight: 600; margin-bottom: var(--space-1); }
 .asset-meta { display: flex; align-items: center; gap: var(--space-2); }
 .version { font-size: var(--text-xs); color: var(--color-text-muted); font-family: var(--font-mono); }
-.updated { font-size: var(--text-xs); color: var(--color-text-muted); }
 .actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
 .empty { color: var(--color-text-muted); font-size: var(--text-sm); text-align: center; padding: var(--space-6); }
 </style>

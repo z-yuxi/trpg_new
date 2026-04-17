@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const phone = ref('');
@@ -20,10 +21,28 @@ async function submit() {
   error.value = '';
   loading.value = true;
   try {
-    // TODO: 调用真实 API
-    await new Promise(r => setTimeout(r, 500));
-    authStore.setAuth({ token: 'mock-token', userId: 'uid-1', nickname: nickname.value || '玩家' });
-    const redirect = (router.currentRoute.value.query.redirect as string) || '/';
+    if (isRegister.value) {
+      // 注册
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.value, password: password.value, nickname: nickname.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '注册失败');
+      authStore.setAuth({ token: data.access_token, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+    } else {
+      // 登录
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.value, password: password.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '登录失败');
+      authStore.setAuth({ token: data.access_token, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+    }
+    const redirect = (route.query.redirect as string) || '/';
     router.push(redirect);
   } catch (e: any) {
     error.value = e.message || '操作失败';

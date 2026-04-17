@@ -19,20 +19,20 @@ watch(() => messageStore.currentMessages.length, async () => {
 function handleSend(content: string, messageType: string) {
   const tempId = uuidv4();
   messageStore.addPendingMessage(content, tempId, messageType);
-  socketClient.sendMessage(content, { tempId, messageType });
+  socketClient.sendMessage({ content, message_type: messageType, metadata: { temp_id: tempId } });
 }
 
 function handleCommand(commandStr: string) {
   const tempId = uuidv4();
   messageStore.addPendingMessage(commandStr, tempId, 'narrative');
-  socketClient.sendMessage(commandStr, { tempId });
+  socketClient.sendMessage({ content: commandStr, metadata: { temp_id: tempId } });
 }
 
 function handleRetry(tempId: string) {
   messageStore.retryMessage(tempId);
   const msg = messageStore.currentMessages.find(m => m._tempId === tempId);
   if (msg) {
-    socketClient.sendMessage(msg.content, { tempId, messageType: msg.message_type });
+    socketClient.sendMessage({ content: msg.content, message_type: msg.message_type, metadata: { temp_id: tempId } });
   }
 }
 

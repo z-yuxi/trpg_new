@@ -18,28 +18,75 @@ const authStore = useAuthStore();
 const campaignId = route.params.id as string;
 const showGMConsole = ref(false);
 
-// Mock 数据（实际由 API 填充）
-const mockScenes = ref<any[]>([]);
-const mockCharacters = ref<any[]>([]);
-const mockConnections = ref<any[]>([]);
-const mockPendingMoves = ref<any[]>([]);
-const mockNpcs = ref<any[]>([]);
-const mockCommands = ref([
-  { name: 'roll', description: '投掷骰子，如 /roll 1d20' },
-  { name: 'check', description: '技能检定，如 /check skill=侦查' },
-  { name: 'initiative', description: '先攻掷骰' },
-]);
-const mockDiceHistory = ref<any[]>([]);
-const mockIsGm = ref(false);
-const mockGlobalTime = ref<StoryTime>({ day: 1, hour: 8, minute: 0 });
+const scenes = ref<any[]>([]);
+const npcs = ref<any[]>([]);
+const commands = ref<any[]>([]);
+const diceHistory = ref<any[]>([]);
+const isGm = ref(false);
+const globalTime = ref<StoryTime>({ day: 1, hour: 8, minute: 0 });
+const characterId = ref('');
+const pendingMoves = ref<any[]>([]);
+const connections = ref<any[]>([]);
 
 onMounted(async () => {
   socketClient.setToken(authStore.token);
+
+  try {
+    // 加载战役基础信息
+    const campaignRes = await fetch(`/api/campaigns/${campaignId}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (campaignRes.ok) {
+      const campaign = await campaignRes.json();
+      campaignStore.setCurrentCampaign(campaign);
+      isGm.value = campaign.gm_user_id === authStore.userId;
+
+      if (campaign.global_story_time) {
+        try { globalTime.value = JSON.parse(campaign.global_story_time); } catch {}
+      }
+
+      // 加载规则集指令
+      if (campaign.ruleset_id) {
+        const rulesetRes = await fetch(`/api/rulesets/${campaign.ruleset_id}`).catch(() => null);
+        if (rulesetRes?.ok) {
+          const ruleset = await rulesetRes.json();
+          const cmds = ruleset.commands ?? {};
+          commands.value = Object.entries(cmds).map(([name, desc]: [string, any]) => ({
+            name,
+            description: typeof desc === 'string' ? desc : desc?.description ?? '',
+          }));
+        }
+      }
+    }
+
+    // 加载场景
+    const scenesRes = await fetch(`/api/campaigns/${campaignId}/scenes`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (scenesRes.ok) scenes.value = await scenesRes.json();
+
+    // 加载 NPC
+    const npcsRes = await fetch(`/api/campaigns/${campaignId}/npcs`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (npcsRes.ok) npcs.value = await npcsRes.json();
+
+    // 获取当前用户的角色卡（取第一个绑定到本团的角色）
+    const charsRes = await fetch('/api/characters', {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (charsRes.ok) {
+      const chars = await charsRes.json();
+      characterId.value = chars[0]?.id ?? '';
+    }
+  } catch { /* 静默失败 */ }
+
+  // 连接 Socket
   socketClient.connectRoom();
-  socketClient.joinRoom(campaignId, '');
+  socketClient.joinRoom(campaignId, characterId.value);
 
   socketClient.onTimeAdvanced((data) => {
-    mockGlobalTime.value = data.new_time;
+    globalTime.value = data.new_time;
   });
 });
 
@@ -54,25 +101,25 @@ onUnmounted(() => {
     <div v-if="showGMConsole">
       <GMConsole
         :campaign-id="campaignId"
-        :global-story-time="mockGlobalTime"
-        :pending-moves="mockPendingMoves"
-        :scenes="mockScenes"
-        :npcs="mockNpcs"
+        :global-story-time="globalTime"
+        :pending-moves="pendingMoves"
+        :scenes="scenes"
+        :npcs="npcs"
         :enable-connections="false"
       />
     </div>
     <RoomLayout
       :campaign-name="campaignStore.currentCampaign?.name ?? '加载中...'"
       :room-code="campaignStore.currentCampaign?.room_code"
-      :is-gm="mockIsGm"
+      :is-gm="isGm"
       @toggle-gm-console="showGMConsole = !showGMConsole"
     >
       <template #left-sidebar>
         <LeftSidebar
-          :scenes="mockScenes"
+          :scenes="scenes"
           :current-scene-id="''"
-          :characters="mockCharacters"
-          :connections="mockConnections"
+          :characters="[]"
+          :connections="connections"
           :enable-connections="false"
           @scene-select="() => {}"
         />
@@ -82,9 +129,9 @@ onUnmounted(() => {
       </template>
       <template #right-desk>
         <AssistantDesk
-          :commands="mockCommands"
-          :dice-history="mockDiceHistory"
-          :is-gm="mockIsGm"
+          :commands="commands"
+          :dice-history="diceHistory"
+          :is-gm="isGm"
           @fill-command="() => {}"
           @broadcast="() => {}"
         />

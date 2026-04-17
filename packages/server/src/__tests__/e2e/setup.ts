@@ -4,6 +4,13 @@
 import { vi } from 'vitest';
 import supertest from 'supertest';
 
+// 设置测试所需环境变量（必须在任何模块导入之前）
+process.env.JWT_SECRET = 'test_jwt_secret_for_e2e_testing_only';
+process.env.DB_HOST = '127.0.0.1';
+process.env.DB_USER = 'trpg';
+process.env.DB_PASSWORD = 'trpg_password';
+process.env.DB_NAME = 'trpg_platform';
+
 // Mock Redis（必须在 app 导入之前）
 vi.mock('../../db/redis', () => ({
   redis: {

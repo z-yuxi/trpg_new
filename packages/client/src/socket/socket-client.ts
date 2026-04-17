@@ -43,35 +43,35 @@ export class SocketClient {
     this.roomSocket?.emit('leave_room');
   }
 
-  sendMessage(content: string, options?: {
-    tempId: string;
-    messageType?: string;
-    visibleTo?: string[];
+  sendMessage(payload: {
+    content: string;
+    message_type?: string;
+    visible_to?: string[];
     metadata?: Record<string, unknown>;
   }): void {
     this.roomSocket?.emit('chat_message', {
-      content,
-      temp_id: options?.tempId ?? '',
-      message_type: options?.messageType,
-      visible_to: options?.visibleTo,
-      metadata: options?.metadata,
+      content: payload.content,
+      temp_id: Date.now().toString(),
+      message_type: payload.message_type,
+      visible_to: payload.visible_to,
+      metadata: payload.metadata,
     });
   }
 
-  requestMove(targetSceneId: string, travelMethod?: 'walk' | 'bike' | 'drive'): void {
-    this.roomSocket?.emit('request_move', { target_scene_id: targetSceneId, travel_method: travelMethod });
+  requestMove(toSceneId: string): void {
+    this.roomSocket?.emit('request_move', { target_scene_id: toSceneId });
   }
 
-  gmAdvanceTime(delta?: { days?: number; hours?: number; minutes?: number }, customTime?: any): void {
-    this.roomSocket?.emit('gm_advance_time', { delta, custom_time: customTime });
+  gmAdvanceTime(params: { custom_time?: { day: number; hour: number; minute: number }; delta?: { days?: number; hours?: number; minutes?: number } }): void {
+    this.roomSocket?.emit('gm_advance_time', params);
   }
 
-  gmApproveMove(moveId: string, executeAt?: any): void {
-    this.roomSocket?.emit('gm_approve_move', { move_id: moveId, execute_at: executeAt });
+  gmApproveMove(moveId: string): void {
+    this.roomSocket?.emit('gm_approve_move', { move_id: moveId });
   }
 
-  gmRejectMove(moveId: string, reason?: string): void {
-    this.roomSocket?.emit('gm_reject_move', { move_id: moveId, reason });
+  gmRejectMove(moveId: string): void {
+    this.roomSocket?.emit('gm_reject_move', { move_id: moveId });
   }
 
   onNewMessage(handler: (msg: any) => void): void {

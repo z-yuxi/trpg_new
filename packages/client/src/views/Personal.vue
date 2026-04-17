@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
@@ -15,26 +15,54 @@ const { currentTheme, toggleTheme } = useTheme();
 const editing = ref(false);
 const editNickname = ref('');
 const editAvatar = ref('');
+const userDetail = ref<any>(null);
 
-// Mock 用户数据
-const mockUser = ref({
+const displayUser = computed(() => userDetail.value ?? {
   nickname: authStore.nickname || '游客',
-  uid: 1000001,
-  avatarUrl: authStore.avatarUrl || '',
-  subscription_type: 'free' as 'free' | 'pro' | 'creator',
+  uid: 0,
+  avatar_url: authStore.avatarUrl || '',
+  subscription_type: 'free',
   creator_level: 1,
-  coins: 1024,
+  coins: 0,
+});
+
+onMounted(async () => {
+  if (!authStore.isLoggedIn) return;
+  try {
+    const res = await fetch('/api/users/me', {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) {
+      userDetail.value = await res.json();
+      authStore.setAuth({
+        token: authStore.token,
+        userId: userDetail.value.id,
+        nickname: userDetail.value.nickname,
+        avatarUrl: userDetail.value.avatar_url,
+      });
+    }
+  } catch { /* 静默失败，显示缓存数据 */ }
 });
 
 function startEdit() {
-  editNickname.value = mockUser.value.nickname;
-  editAvatar.value = mockUser.value.avatarUrl;
+  editNickname.value = displayUser.value.nickname;
+  editAvatar.value = displayUser.value.avatar_url;
   editing.value = true;
 }
 
-function saveEdit() {
-  mockUser.value.nickname = editNickname.value;
-  mockUser.value.avatarUrl = editAvatar.value;
+async function saveEdit() {
+  try {
+    const res = await fetch('/api/users/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({ nickname: editNickname.value, avatar_url: editAvatar.value }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      userDetail.value = updated;
+      authStore.setAuth({ token: authStore.token, userId: updated.id, nickname: updated.nickname, avatarUrl: updated.avatar_url });
+    }
+  } catch { /* ignore */ }
   editing.value = false;
 }
 
@@ -43,7 +71,7 @@ function logout() {
   router.push('/login');
 }
 
-const subMap = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
+const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
 </script>
 
 <template>
@@ -51,14 +79,14 @@ const subMap = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
     <!-- 用户信息卡片 -->
     <TCard padding="lg" shadow class="user-card">
       <div class="avatar-wrap">
-        <img v-if="mockUser.avatarUrl" :src="mockUser.avatarUrl" class="avatar" />
-        <div v-else class="avatar-placeholder">{{ mockUser.nickname[0] }}</div>
+        <img v-if="displayUser.avatar_url" :src="displayUser.avatar_url" class="avatar" />
+        <div v-else class="avatar-placeholder">{{ (displayUser.nickname || '?')[0] }}</div>
       </div>
       <div class="user-info">
         <div v-if="!editing">
-          <div class="nickname">{{ mockUser.nickname }}</div>
-          <div class="uid">UID: {{ mockUser.uid }}</div>
-          <div class="sub-type">{{ subMap[mockUser.subscription_type] }}</div>
+          <div class="nickname">{{ displayUser.nickname }}</div>
+          <div class="uid">UID: {{ displayUser.uid || displayUser.id || '-' }}</div>
+          <div class="sub-type">{{ subMap[displayUser.subscription_type] ?? '免费版' }}</div>
         </div>
         <div v-else class="edit-form">
           <TInput v-model="editNickname" placeholder="昵称" />
@@ -74,7 +102,7 @@ const subMap = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
       </div>
       <div class="coins">
         <span class="coins-label">金币</span>
-        <span class="coins-value">{{ mockUser.coins }}</span>
+        <span class="coins-value">{{ displayUser.coins ?? 0 }}</span>
       </div>
     </TCard>
 
@@ -84,7 +112,7 @@ const subMap = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
         <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         <span>{{ currentTheme === 'day' ? '切换深色模式' : '切换浅色模式' }}</span>
       </div>
-      <div class="menu-item" @click="router.push('/creator')" v-if="mockUser.subscription_type === 'creator'">
+      <div class="menu-item" @click="router.push('/creator')" v-if="displayUser.subscription_type === 'creator'">
         <SvgIcon name="icon-workshop" :size="20" />
         <span>创作者后台</span>
       </div>

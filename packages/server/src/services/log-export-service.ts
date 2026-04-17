@@ -1,4 +1,4 @@
-import knex from '../db/knex-config';
+import { db } from '../db';
 import {
   buildILFDocument,
   serializeILF,
@@ -15,36 +15,34 @@ interface ExportOptions {
 }
 
 interface RawMessage {
-  seq: number;
+  id: string;
   scene_id: string;
   scene_name: string;
-  story_time_day: number | null;
-  story_time_hour: number | null;
-  story_time_minute: number | null;
-  speaker: string;
-  msg_type: string;
+  story_time: string | null;
+  sender_nickname: string | null;
+  sender_char_name: string | null;
+  message_type: string;
   content: string;
-  dice_expression: string | null;
-  dice_total: number | null;
-  dice_detail: string | null;
+  metadata: string | null;
 }
 
 /**
  * 验证请求者是否有权限导出指定 campaign 的日志
  */
 async function checkPermission(campaignId: string, userId: string): Promise<boolean> {
-  const campaign = await knex('campaigns')
+  const campaign = await db('campaigns')
     .where({ id: campaignId })
-    .select('created_by')
+    .select('gm_user_id')
     .first();
   if (!campaign) return false;
-  // 创建者（GM）有权限
-  if (campaign.created_by === userId) return true;
-  // 参与者也有权限
-  const member = await knex('campaign_members')
-    .where({ campaign_id: campaignId, user_id: userId })
+  // GM 有权限
+  if (campaign.gm_user_id === userId) return true;
+  // 角色绑定过该团的玩家也有权限
+  const state = await db('character_scene_states')
+    .join('character_sheets as cs', 'cs.id', 'character_scene_states.character_id')
+    .where({ 'character_scene_states.campaign_id': campaignId, 'cs.user_id': userId })
     .first();
-  return !!member;
+  return !!state;
 }
 
 /**
@@ -58,94 +56,96 @@ export async function exportCampaignLog(opts: ExportOptions): Promise<string> {
   if (!allowed) throw Object.assign(new Error('Forbidden'), { status: 403 });
 
   // 获取 campaign 基础信息
-  const campaign = await knex('campaigns')
+  const campaign = await db('campaigns')
     .where({ id: campaign_id })
-    .select('id', 'title', 'ruleset_id', 'created_by')
+    .select('id', 'name', 'ruleset_id', 'gm_user_id')
     .first();
   if (!campaign) throw Object.assign(new Error('Campaign not found'), { status: 404 });
 
-  // 获取参与者列表
-  const members = await knex('campaign_members as cm')
-    .join('character_instances as ci', 'ci.id', 'cm.character_instance_id')
-    .join('character_cards as cc', 'cc.id', 'ci.card_id')
-    .join('users as u', 'u.id', 'cm.user_id')
-    .where('cm.campaign_id', campaign_id)
+  // 获取参与者列表（通过 character_scene_states 关联）
+  const members = await db('character_scene_states as css')
+    .join('character_sheets as cs', 'cs.id', 'css.character_id')
+    .join('users as u', 'u.id', 'cs.user_id')
+    .where('css.campaign_id', campaign_id)
     .select(
-      'ci.id as character_id',
-      'cc.name as character_name',
-      'u.username as player_name',
+      'cs.id as character_id',
+      'cs.name as character_name',
+      'u.nickname as player_name',
     )
     .catch(() => [] as { character_id: string; character_name: string; player_name: string }[]);
 
-  // 获取场景列表
-  let sceneQuery = knex('scenes').where({ campaign_id });
+  // 获取场景列表（scenes 表无 description 字段）
+  let sceneQuery = db('scenes').where({ campaign_id });
   if (scene_ids && scene_ids.length > 0) {
     sceneQuery = sceneQuery.whereIn('id', scene_ids);
   }
-  const scenes = await sceneQuery.select('id', 'name', 'description');
+  const scenes = await sceneQuery.select('id', 'name');
 
-  const sceneObjs: Omit<ILFScene, 'messages'>[] = scenes.map((s: { id: string; name: string; description?: string }) => ({
+  const sceneObjs: Omit<ILFScene, 'messages'>[] = scenes.map((s: { id: string; name: string }) => ({
     id: s.id,
     name: s.name,
-    description: s.description,
   }));
 
-  // 获取消息列表
-  let msgQuery = knex('chat_messages as cm')
+  // 获取消息列表（按雪花 ID 升序，story_time 是 JSON 字段）
+  let msgQuery = db('chat_messages as cm')
     .join('scenes as s', 's.id', 'cm.scene_id')
+    .join('users as u', 'u.id', 'cm.sender_user_id')
+    .leftJoin('character_sheets as cs', 'cs.id', 'cm.sender_character_id')
     .where('s.campaign_id', campaign_id)
-    .orderBy('cm.seq', 'asc')
+    .orderBy('cm.id', 'asc')
     .select(
-      'cm.seq',
+      'cm.id',
       'cm.scene_id',
       's.name as scene_name',
-      'cm.story_time_day',
-      'cm.story_time_hour',
-      'cm.story_time_minute',
-      'cm.speaker',
-      'cm.msg_type',
+      'cm.story_time',
+      'u.nickname as sender_nickname',
+      'cs.name as sender_char_name',
+      'cm.message_type',
       'cm.content',
-      'cm.dice_expression',
-      'cm.dice_total',
-      'cm.dice_detail',
+      'cm.metadata',
     );
   if (scene_ids && scene_ids.length > 0) {
     msgQuery = msgQuery.whereIn('cm.scene_id', scene_ids);
   }
   const rawMessages: RawMessage[] = await msgQuery.catch(() => []);
 
-  const messages: ILFMessage[] = rawMessages.map((m, idx) => ({
-    seq: m.seq ?? idx + 1,
-    scene_id: m.scene_id,
-    scene_name: m.scene_name,
-    story_time:
-      m.story_time_day !== null
-        ? { day: m.story_time_day!, hour: m.story_time_hour!, minute: m.story_time_minute! }
-        : null,
-    speaker: m.speaker,
-    type: (m.msg_type as ILFMessage['type']) ?? 'dialogue',
-    content: m.content,
-    dice_result:
-      m.dice_expression
+  const messages: ILFMessage[] = rawMessages.map((m, idx) => {
+    const storyTime = m.story_time
+      ? (typeof m.story_time === 'string' ? JSON.parse(m.story_time) : m.story_time)
+      : null;
+    const metadata = m.metadata
+      ? (typeof m.metadata === 'string' ? JSON.parse(m.metadata) : m.metadata)
+      : null;
+
+    return {
+      seq: idx + 1,
+      scene_id: m.scene_id,
+      scene_name: m.scene_name,
+      story_time: storyTime,
+      speaker: m.sender_char_name ?? m.sender_nickname ?? 'unknown',
+      type: (m.message_type as ILFMessage['type']) ?? 'narrative',
+      content: m.content,
+      dice_result: metadata?.dice_expression
         ? {
-            expression: m.dice_expression,
-            total: m.dice_total ?? 0,
-            detail: m.dice_detail ?? '',
+            expression: metadata.dice_expression,
+            total: metadata.dice_total ?? 0,
+            detail: metadata.dice_detail ?? '',
           }
         : undefined,
-  }));
+    };
+  });
 
-  // 获取 GM 用户名作为 author
-  const gmUser = await knex('users')
-    .where({ id: campaign.created_by })
-    .select('username')
+  // 获取 GM 昵称作为 author
+  const gmUser = await db('users')
+    .where({ id: campaign.gm_user_id })
+    .select('nickname')
     .first()
-    .catch(() => null as { username: string } | null);
+    .catch(() => null as { nickname: string } | null);
 
   const doc = buildILFDocument({
-    campaignTitle: campaign.title,
+    campaignTitle: campaign.name,
     ruleSystem: campaign.ruleset_id ?? 'Unknown',
-    author: gmUser?.username,
+    author: gmUser?.nickname,
     players: members,
     scenes: sceneObjs,
     messages,

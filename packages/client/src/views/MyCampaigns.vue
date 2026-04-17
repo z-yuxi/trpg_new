@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption } from 'element-plus';
+import { ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElMessage } from 'element-plus';
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
+import { useAuthStore } from '../stores/auth-store';
 
 const router = useRouter();
+const authStore = useAuthStore();
 
-const campaigns = ref([
-  { id: '1', name: '克苏鲁之陟崖', status: 'running', room_code: 'ABC123', role: 'gm' },
-  { id: '2', name: '黑暗幻想纪', status: 'preparing', room_code: 'XYZ789', role: 'player' },
-]);
+const campaigns = ref<any[]>([]);
+const loading = ref(false);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
   running: { label: '进行中', color: 'success' },
@@ -20,25 +20,73 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
   ended: { label: '已结束', color: 'danger' },
 };
 
+async function loadCampaigns() {
+  loading.value = true;
+  try {
+    const res = await fetch('/api/campaigns', {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) campaigns.value = await res.json();
+  } catch { ElMessage.error('加载失败'); }
+  finally { loading.value = false; }
+}
+
+onMounted(loadCampaigns);
+
 const showCreateDialog = ref(false);
 const createForm = ref({ name: '', ruleset_id: '', module_id: '' });
+const createLoading = ref(false);
+
+async function createCampaign() {
+  if (!createForm.value.name || !createForm.value.ruleset_id) return;
+  createLoading.value = true;
+  try {
+    const res = await fetch('/api/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(createForm.value),
+    });
+    if (res.ok) {
+      showCreateDialog.value = false;
+      createForm.value = { name: '', ruleset_id: '', module_id: '' };
+      await loadCampaigns();
+    } else {
+      const data = await res.json();
+      ElMessage.error(data.error || '创建失败');
+    }
+  } catch { ElMessage.error('网络错误'); }
+  finally { createLoading.value = false; }
+}
 
 const showJoinDialog = ref(false);
 const joinCode = ref('');
+const joinLoading = ref(false);
 
-function createCampaign() {
-  // TODO: 调用 API
-  showCreateDialog.value = false;
-}
-
-function joinCampaign() {
-  if (joinCode.value.length !== 6) return;
-  // TODO: 调用 API
-  showJoinDialog.value = false;
+async function joinCampaign() {
+  if (joinCode.value.length < 4) return;
+  joinLoading.value = true;
+  try {
+    const res = await fetch('/api/campaigns/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({ code: joinCode.value }),
+    });
+    if (res.ok) {
+      const campaign = await res.json();
+      showJoinDialog.value = false;
+      joinCode.value = '';
+      router.push(`/room/${campaign.id}`);
+    } else {
+      const data = await res.json();
+      ElMessage.error(data.error || '加入失败，请检查房间码');
+    }
+  } catch { ElMessage.error('网络错误'); }
+  finally { joinLoading.value = false; }
 }
 
 function copyCode(code: string) {
   navigator.clipboard.writeText(code);
+  ElMessage.success('已复制');
 }
 </script>
 

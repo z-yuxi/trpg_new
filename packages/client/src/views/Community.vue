@@ -1,15 +1,37 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { ElTabs, ElTabPane, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption } from 'element-plus';
+import { ElTabs, ElTabPane, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElMessage } from 'element-plus';
 import RecruitmentBoard from './community/RecruitmentBoard.vue';
 import TButton from '../components/base/TButton.vue';
+import { useAuthStore } from '../stores/auth-store';
 
+const authStore = useAuthStore();
 const showPostDialog = ref(false);
 const postForm = ref({ type: 'gm_recruit', title: '', ruleset_id: '', player_count_max: 4 });
+const submitLoading = ref(false);
 
-function submitPost() {
-  // TODO: 调用 API
-  showPostDialog.value = false;
+async function submitPost() {
+  if (!postForm.value.title || !postForm.value.ruleset_id) {
+    ElMessage.warning('请填写标题和规则集');
+    return;
+  }
+  submitLoading.value = true;
+  try {
+    const res = await fetch('/api/recruitment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(postForm.value),
+    });
+    if (res.ok) {
+      ElMessage.success('发布成功');
+      showPostDialog.value = false;
+      postForm.value = { type: 'gm_recruit', title: '', ruleset_id: '', player_count_max: 4 };
+    } else {
+      const data = await res.json();
+      ElMessage.error(data.error || '发布失败');
+    }
+  } catch { ElMessage.error('网络错误'); }
+  finally { submitLoading.value = false; }
 }
 </script>
 

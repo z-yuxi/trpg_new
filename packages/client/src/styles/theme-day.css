@@ -11,4 +11,25 @@
   --el-text-color-regular: #334155;
   --el-border-color: #e5e7eb;
   --el-fill-color-light: #f3f4f6;
+
+  /* 自定义设计 token */
+  --color-primary: #0f172a;
+  --color-primary-light: #dbeafe;
+  --color-accent: #3b82f6;
+  --color-page-bg: #f9fafb;
+  --color-card-bg: #ffffff;
+  --color-card-border: #e5e7eb;
+  --color-input-bg: #ffffff;
+  --color-input-border: #d1d5db;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #64748b;
+  --color-text-muted: #94a3b8;
+  --color-success: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-warning: #a16207;
+  --color-warning-bg: #fef9c3;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fee2e2;
+  --color-tag-default-bg: #f1f5f9;
+  --color-tag-default-text: #475569;
 }

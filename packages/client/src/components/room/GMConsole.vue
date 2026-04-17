@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
+import ClueCard from '../ClueCard.vue';
 import type { StoryTime, ScheduledMove, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
 
@@ -20,29 +21,66 @@ const deltaDay = ref(0);
 const deltaHour = ref(0);
 const deltaMin = ref(0);
 
-function advanceTime(days = 0, hours = 0, minutes = 0) {
-  socketClient.gmAdvanceTime({ days, hours, minutes });
-}
-
-function advance(days: number, hours: number, minutes: number) {
-  socketClient.gmAdvanceTime({ days, hours, minutes });
-}
-
 function applyDelta() {
-  socketClient.gmAdvanceTime({ days: deltaDay.value, hours: deltaHour.value, minutes: deltaMin.value });
+  const base = props.globalStoryTime;
+  let totalMinutes = base.minute + deltaMin.value + (base.hour + deltaHour.value) * 60 + (base.day + deltaDay.value - 1) * 1440;
+  if (deltaDay.value === 0 && deltaHour.value === 0 && deltaMin.value === 0) return;
+  const newDay = Math.floor(totalMinutes / 1440) + 1;
+  const rem = totalMinutes % 1440;
+  const newHour = Math.floor(rem / 60);
+  const newMin = rem % 60;
+  socketClient.gmAdvanceTime({ custom_time: { day: newDay, hour: newHour, minute: newMin } });
+}
+
+function quickAdvance(days: number, hours: number, minutes: number) {
+  const base = props.globalStoryTime;
+  let totalMinutes = base.minute + minutes + (base.hour + hours) * 60 + (base.day + days - 1) * 1440;
+  const newDay = Math.floor(totalMinutes / 1440) + 1;
+  const rem = totalMinutes % 1440;
+  const newHour = Math.floor(rem / 60);
+  const newMin = rem % 60;
+  socketClient.gmAdvanceTime({ custom_time: { day: newDay, hour: newHour, minute: newMin } });
 }
 
 const tabs = [
-  { key: 'time', icon: 'icon-clock', label: '时间' },
-  { key: 'moves', icon: 'icon-list', label: '移动' },
-  { key: 'scenes', icon: 'icon-grid', label: '场' },
+  { key: 'time', icon: 'icon-clock', label: '\u65f6\u95f4' },
+  { key: 'moves', icon: 'icon-list', label: '\u79fb\u52a8' },
+  { key: 'scenes', icon: 'icon-grid', label: '\u573a' },
   { key: 'npcs', icon: 'icon-npc', label: 'NPC' },
-  { key: 'clues', icon: 'icon-scroll', label: '线索' },
+  { key: 'clues', icon: 'icon-scroll', label: '\u7ebf\u7d22' },
 ];
 
 function getSceneName(id: string) { return props.scenes.find(s => s.id === id)?.name ?? id; }
-
 function padZ(n: number) { return String(n).padStart(2, '0'); }
+
+// 线索管理
+const THEMES = ['river', 'blur', 'fragment', 'wave', 'ancient', 'blood', 'ash', 'cyber'] as const;
+type ClueTheme = typeof THEMES[number];
+
+const clueForm = ref({
+  title: '',
+  content: '',
+  theme: 'river' as ClueTheme,
+});
+const localClues = ref<{ id: string; title: string; content: string; theme: ClueTheme }[]>([]);
+
+function sendClue() {
+  if (!clueForm.value.title || !clueForm.value.content) return;
+  const clue = {
+    id: Date.now().toString(),
+    title: clueForm.value.title,
+    content: clueForm.value.content,
+    theme: clueForm.value.theme,
+  };
+  localClues.value.unshift(clue);
+  // 通过 socket 发送 clue_card 消息
+  socketClient.sendMessage({
+    content: clueForm.value.content,
+    message_type: 'clue_card',
+    metadata: { theme: clueForm.value.theme, title: clueForm.value.title },
+  });
+  clueForm.value = { title: '', content: '', theme: 'river' };
+}
 </script>
 
 <template>
@@ -69,11 +107,11 @@ function padZ(n: number) { return String(n).padStart(2, '0'); }
           <span>Day {{ globalStoryTime.day }}, {{ padZ(globalStoryTime.hour) }}:{{ padZ(globalStoryTime.minute) }}</span>
         </div>
         <div class="quick-advance">
-          <button @click="advance(0, 0, 10)">+10分</button>
-          <button @click="advance(0, 0, 30)">+30分</button>
-          <button @click="advance(0, 1, 0)">+1小时</button>
-          <button @click="advance(0, 6, 0)">+6小时</button>
-          <button @click="advance(1, 0, 0)">+1天</button>
+          <button @click="quickAdvance(0, 0, 10)">+10分</button>
+          <button @click="quickAdvance(0, 0, 30)">+30分</button>
+          <button @click="quickAdvance(0, 1, 0)">+1小时</button>
+          <button @click="quickAdvance(0, 6, 0)">+6小时</button>
+          <button @click="quickAdvance(1, 0, 0)">+1天</button>
         </div>
         <div class="custom-advance">
           <p class="label">自定义推进</p>
@@ -127,8 +165,27 @@ function padZ(n: number) { return String(n).padStart(2, '0'); }
       </div>
 
       <!-- 线索库 -->
-      <div v-else-if="activeTab === 'clues'">
-        <div class="empty">线索库（Step 35 完善）</div>
+      <div v-else-if="activeTab === 'clues'" class="clues-panel">
+        <div class="clue-form">
+          <p class="label">创建线索</p>
+          <input v-model="clueForm.title" class="clue-input" placeholder="线索标题" />
+          <textarea v-model="clueForm.content" class="clue-textarea" rows="3" placeholder="线索内容..." />
+          <div class="theme-select">
+            <span class="label">文字风格：</span>
+            <select v-model="clueForm.theme" class="theme-dropdown">
+              <option v-for="t in ['river','blur','fragment','wave','ancient','blood','ash','cyber']" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
+          <button class="apply-btn" @click="sendClue">发送线索</button>
+        </div>
+        <div class="clue-preview" v-if="clueForm.title">
+          <p class="label">预览</p>
+          <ClueCard :title="clueForm.title" :content="clueForm.content || '...'" :theme="clueForm.theme" />
+        </div>
+        <div v-if="localClues.length > 0" class="clue-history">
+          <p class="label">已发送</p>
+          <ClueCard v-for="c in localClues" :key="c.id" :title="c.title" :content="c.content" :theme="c.theme" style="margin-bottom:8px" />
+        </div>
       </div>
     </div>
   </div>
@@ -172,4 +229,28 @@ function padZ(n: number) { return String(n).padStart(2, '0'); }
 .npc-active { font-size: var(--text-xs); color: var(--color-text-muted); }
 .npc-active.active { color: var(--color-success); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-4); }
+
+.clues-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+.clue-form { display: flex; flex-direction: column; gap: var(--space-2); }
+.clue-input, .clue-textarea, .theme-dropdown {
+  width: 100%; padding: var(--space-2); border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.clue-textarea { resize: vertical; font-family: var(--font-sans); }
+.theme-select { display: flex; align-items: center; gap: var(--space-2); }
+.clue-preview { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
+.clue-history { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
+
+.clues-panel { display: flex; flex-direction: column; gap: var(--space-3); }
+.clue-form { display: flex; flex-direction: column; gap: var(--space-2); }
+.clue-input, .clue-textarea, .theme-dropdown {
+  width: 100%; padding: var(--space-2); border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.clue-textarea { resize: vertical; font-family: var(--font-sans); }
+.theme-select { display: flex; align-items: center; gap: var(--space-2); }
+.clue-preview { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
+.clue-history { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
 </style>

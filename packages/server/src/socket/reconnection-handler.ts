@@ -32,7 +32,7 @@ export async function handleReconnection(
     // 缓冲区中找不到，从 MySQL 查询（断线太久的情况）
     const dbMessages = await db('chat_messages')
       .where('campaign_id', campaignId)
-      .where('id', '>', BigInt(lastEventId))
+      .where('id', '>', String(lastEventId))
       .orderBy('id', 'asc')
       .limit(100)
       .select();
@@ -50,17 +50,26 @@ export async function handleReconnection(
     return;
   }
 
-  // 获取当前团状态（角色状态和全局时间）用于 your_state 和 global_time
-  // TODO: 在后续步骤中完善角色状态读取
-  const campaignRow = await db('campaigns').where('id', campaignId).first();
+  // 获取当前团状态：角色状态 + 全局时间
+  const [campaignRow, sceneState] = await Promise.all([
+    db('campaigns').where('id', campaignId).first(),
+    _characterId
+      ? db('character_scene_states')
+          .where({ character_id: _characterId, campaign_id: campaignId })
+          .first()
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const globalTime = campaignRow?.global_story_time
+    ? JSON.parse(campaignRow.global_story_time as string)
+    : { day: 1, hour: 8, minute: 0 };
 
   socket.emit('missed_messages', {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: missedMessages as any[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    your_state: {} as any,  // 后续步骤完善
-    global_time: campaignRow?.global_story_time
-      ? JSON.parse(campaignRow.global_story_time as string)
-      : { day: 1, hour: 8, minute: 0 },
+    your_state: sceneState ?? ({} as any),
+    global_time: globalTime,
   });
 }
