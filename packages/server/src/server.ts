@@ -1,6 +1,6 @@
+import './utils/load-env';
 import { httpServer } from './app';
 
-// 启动前校验必要的环境变量（auth-service 会校验 JWT_SECRET，此处补充数据库和 Redis）
 const requiredEnvVars: string[] = ['JWT_SECRET', 'DB_HOST', 'REDIS_HOST'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {

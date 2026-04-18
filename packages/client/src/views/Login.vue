@@ -30,7 +30,9 @@ async function submit() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '注册失败');
-      authStore.setAuth({ token: data.access_token, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+      const accessToken = data?.tokens?.access_token;
+      if (!accessToken) throw new Error('注册成功但未获取到令牌');
+      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
     } else {
       // 登录
       const res = await fetch('/api/auth/login', {
@@ -40,7 +42,9 @@ async function submit() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '登录失败');
-      authStore.setAuth({ token: data.access_token, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+      const accessToken = data?.tokens?.access_token;
+      if (!accessToken) throw new Error('登录成功但未获取到令牌');
+      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
     }
     const redirect = (route.query.redirect as string) || '/';
     router.push(redirect);

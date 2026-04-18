@@ -1,8 +1,14 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
+function normalizeToken(raw: string | null): string {
+  if (!raw) return '';
+  if (raw === 'undefined' || raw === 'null') return '';
+  return raw;
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string>(localStorage.getItem('token') || '');
+  const token = ref<string>(normalizeToken(localStorage.getItem('token')));
   const userId = ref<string>('');
   const nickname = ref<string>('');
   const avatarUrl = ref<string>('');

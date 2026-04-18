@@ -9,7 +9,7 @@ export async function up(knex: Knex): Promise<void> {
     t.string('password_hash', 255).notNullable();
     t.string('nickname', 64).notNullable();
     t.string('avatar_url', 255).defaultTo('');
-    t.json('user_type').defaultTo('["player"]');
+    t.json('user_type').nullable();
     t.tinyint('creator_level').defaultTo(1);
     t.bigint('coins').unsigned().defaultTo(0);
     t.enu('subscription_type', ['free', 'pro', 'creator']).defaultTo('free');
@@ -24,8 +24,8 @@ export async function up(knex: Knex): Promise<void> {
     t.string('ruleset_id', 64).notNullable();
     t.string('module_id', 64).nullable();
     t.string('gm_user_id', 64).notNullable();
-    t.json('assistant_gm_ids').defaultTo('[]');
-    t.json('global_story_time').defaultTo('{"day":1,"hour":8,"minute":0}');
+    t.json('assistant_gm_ids').nullable();
+    t.json('global_story_time').nullable();
     t.enu('status', ['preparing', 'running', 'paused', 'ended']).defaultTo('preparing');
     t.boolean('allow_ob').defaultTo(false);
     t.boolean('is_listed_publicly').defaultTo(false);
@@ -55,10 +55,10 @@ export async function up(knex: Knex): Promise<void> {
     t.string('name', 64).notNullable();
     t.string('occupation_id', 64).nullable();
     t.string('avatar_url', 255).defaultTo('');
-    t.json('attributes').defaultTo('{}');
-    t.json('skills').defaultTo('{}');
-    t.json('derived_max').defaultTo('{}');
-    t.json('equipment').defaultTo('[]');
+    t.json('attributes').nullable();
+    t.json('skills').nullable();
+    t.json('derived_max').nullable();
+    t.json('equipment').nullable();
     t.text('background');
     t.json('avatar_custom_data').nullable();
     t.json('initial_snapshot').nullable();
@@ -72,7 +72,7 @@ export async function up(knex: Knex): Promise<void> {
     t.string('character_id', 64).notNullable();
     t.string('campaign_id', 64).notNullable();
     t.string('current_spatial_scene_id', 64).nullable();
-    t.json('personal_story_time').defaultTo('{"day":1,"hour":8,"minute":0}');
+    t.json('personal_story_time').nullable();
     t.unique(['character_id', 'campaign_id']);
   });
 
@@ -147,10 +147,10 @@ export async function up(knex: Knex): Promise<void> {
     t.string('name', 128).notNullable();
     t.string('version', 32).notNullable();
     t.string('parent_ruleset_id', 64).nullable();
-    t.json('atoms').defaultTo('{}');
-    t.json('connections').defaultTo('[]');
-    t.json('commands').defaultTo('{}');
-    t.json('character_card_schema').defaultTo('{}');
+    t.json('atoms').nullable();
+    t.json('connections').nullable();
+    t.json('commands').nullable();
+    t.json('character_card_schema').nullable();
     t.enu('status', ['draft', 'published']).defaultTo('draft');
     t.timestamp('created_at').defaultTo(knex.fn.now());
   });
@@ -165,9 +165,9 @@ export async function up(knex: Knex): Promise<void> {
     t.string('avatar_url', 255).defaultTo('');
     t.text('description');
     t.text('voice_tips');
-    t.json('attributes').defaultTo('{}');
-    t.json('skills').defaultTo('{}');
-    t.json('resources').defaultTo('{}');
+    t.json('attributes').nullable();
+    t.json('skills').nullable();
+    t.json('resources').nullable();
     t.boolean('is_temporary').defaultTo(false);
     t.boolean('is_playable').defaultTo(true);
     t.boolean('is_active').defaultTo(true);
@@ -179,7 +179,7 @@ export async function up(knex: Knex): Promise<void> {
   // campaign_round_state
   await knex.schema.createTable('campaign_round_state', (t) => {
     t.string('campaign_id', 64).primary();
-    t.json('turn_order').defaultTo('[]');
+    t.json('turn_order').nullable();
     t.integer('current_index').defaultTo(0);
     t.integer('round_number').defaultTo(1);
     t.timestamp('updated_at').defaultTo(knex.fn.now());

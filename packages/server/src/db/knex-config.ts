@@ -1,5 +1,6 @@
 import knex, { type Knex } from 'knex';
 import path from 'path';
+import '../utils/load-env';
 
 const config: Knex.Config = {
   client: 'mysql2',
@@ -16,7 +17,7 @@ const config: Knex.Config = {
     max: 10,
   },
   migrations: {
-    directory: path.join(__dirname, 'migrations'),
+    directory: path.resolve(process.cwd(), 'src/db/migrations'),
     extension: 'ts',
   },
   acquireConnectionTimeout: 10000,

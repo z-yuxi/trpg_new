@@ -6,7 +6,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
-    "migrate": "knex migrate:latest --knexfile src/db/knex-config.ts"
+    "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
     "@trpg/shared": "workspace:*",
