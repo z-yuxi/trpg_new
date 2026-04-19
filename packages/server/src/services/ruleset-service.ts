@@ -89,6 +89,7 @@ export class RulesetService {
     description?: string;
     author_id: string;
     parent_ruleset_id?: string;
+    character_card_schema?: object;
   }): Promise<Ruleset> {
     const id = generateId();
     await db('rulesets').insert({
@@ -101,7 +102,7 @@ export class RulesetService {
       atoms: JSON.stringify({}),
       connections: JSON.stringify({}),
       commands: JSON.stringify({}),
-      character_card_schema: JSON.stringify({}),
+      character_card_schema: JSON.stringify(params.character_card_schema ?? {}),
       status: 'draft',
     });
     return (await this.findById(id))!;

@@ -18,8 +18,12 @@ const creating = ref(false);
 async function loadRulesets() {
   loading.value = true;
   try {
-    const res = await fetch('/api/rulesets', { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (res.ok) rulesets.value = await res.json();
+    const res = await fetch('/api/rulesets?author_id=' + authStore.userId, { headers: { Authorization: `Bearer ${authStore.token}` } });
+    if (res.ok) {
+      const body = await res.json();
+      // API 返回分页格式 { data: [], total: number }
+      rulesets.value = Array.isArray(body) ? body : (body.data ?? []);
+    }
   } catch { /* ignore */ } finally { loading.value = false; }
 }
 

@@ -37,11 +37,12 @@ router.get('/:id', async (req, res): Promise<void> => {
 // POST /api/rulesets — 创建规则集（需登录）
 router.post('/', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const { name, version, description, parent_ruleset_id } = req.body as {
+    const { name, version, description, parent_ruleset_id, character_card_schema } = req.body as {
       name?: string;
       version?: string;
       description?: string;
       parent_ruleset_id?: string;
+      character_card_schema?: object;
     };
     if (!name || typeof name !== 'string' || name.trim().length < 1) {
       res.status(400).json({ error: 'name is required' });
@@ -53,6 +54,7 @@ router.post('/', authMiddleware, async (req, res): Promise<void> => {
       description: description?.trim(),
       author_id: req.userId!,
       parent_ruleset_id,
+      character_card_schema,
     });
     res.status(201).json(ruleset);
   } catch (err) {
