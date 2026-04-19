@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { ElDialog } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
+import GridMap from './GridMap.vue';
 import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
 import type { CharacterSheet, Scene, StoryTime } from '@trpg/shared';
@@ -11,6 +12,8 @@ const props = defineProps<{
   commands: { name: string; description: string }[];
   scenes: Scene[];
   roomCharacters: Array<{ id: string; name: string; sceneId: string; personalStoryTime?: StoryTime | null }>;
+  currentSceneId: string;
+  npcs: Array<{ id: string; name: string; display_name?: string }>;
   isGm: boolean;
 }>();
 
@@ -95,8 +98,9 @@ function formatStoryTime(storyTime: StoryTime | null | undefined): string {
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────
-type TabKey = 'cmds' | 'dice' | 'secret' | 'broadcast';
+type TabKey = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 const activeTab = ref<TabKey>('cmds');
+const currentScene = computed(() => props.scenes.find((scene) => scene.id === props.currentSceneId) ?? null);
 
 // ── commands ──────────────────────────────────────────────────────────
 function useCommand(cmd: { name: string }) {
@@ -204,6 +208,9 @@ function fmt(d: any): string {
       <button class="desk-tab" :class="{ active: activeTab === 'cmds' }" @click="activeTab = 'cmds'" title="指令">
         <SvgIcon name="icon-list" :size="16" />
       </button>
+      <button class="desk-tab" :class="{ active: activeTab === 'map' }" @click="activeTab = 'map'" title="地图">
+        <SvgIcon name="icon-grid" :size="16" />
+      </button>
       <button class="desk-tab" :class="{ active: activeTab === 'dice' }" @click="activeTab = 'dice'" title="骰子历史">
         <SvgIcon name="icon-history" :size="16" />
       </button>
@@ -230,6 +237,18 @@ function fmt(d: any): string {
           <button class="cmd-use-btn" @click="useCommand(cmd)">使用</button>
         </div>
         <div v-if="commands.length === 0" class="empty-hint">暂无可用指令</div>
+      </div>
+
+      <div v-else-if="activeTab === 'map'" class="map-tab">
+        <GridMap
+          v-if="currentScene"
+          :campaign-id="campaignId"
+          :scene-id="currentScene.id"
+          :is-g-m="false"
+          :characters="roomCharacters.map((character) => ({ id: character.id, name: character.name, sceneId: character.sceneId }))"
+          :npcs="npcs"
+        />
+        <div v-else class="empty-hint">当前没有可查看的场景地图</div>
       </div>
 
       <!-- 骰子历史 -->
@@ -349,6 +368,8 @@ function fmt(d: any): string {
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .cmd-use-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+.map-tab { min-height: 280px; }
 
 /* 筛选栏 */
 .filter-bar { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-2); }

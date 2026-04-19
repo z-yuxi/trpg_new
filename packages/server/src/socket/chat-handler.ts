@@ -367,6 +367,46 @@ export function registerChatHandlers(
       }
     });
 
+    socket.on('grid_token_moved', async (data) => {
+      try {
+        const campaignId = socket.data.campaignId as string;
+        if (!campaignId || campaignId !== data.campaign_id) return;
+
+        const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+        if (!campaign || campaign.gm_user_id !== userId) return;
+
+        const currentMap = await db('campaign_grid_maps')
+          .where({ campaign_id: campaignId, scene_id: data.scene_id })
+          .first();
+
+        const currentTokens = currentMap?.tokens
+          ? (typeof currentMap.tokens === 'string' ? JSON.parse(currentMap.tokens) : currentMap.tokens)
+          : [];
+
+        const nextTokens = Array.isArray(currentTokens)
+          ? currentTokens.map((token) => (token.id === data.token.id ? data.token : token))
+          : [data.token];
+
+        if (!Array.isArray(currentTokens) || !currentTokens.some((token) => token.id === data.token.id)) {
+          nextTokens.push(data.token);
+        }
+
+        if (currentMap) {
+          await db('campaign_grid_maps')
+            .where({ campaign_id: campaignId, scene_id: data.scene_id })
+            .update({ tokens: JSON.stringify(nextTokens), updated_at: db.fn.now() });
+        }
+
+        roomNsp.to(`campaign:${campaignId}`).emit('grid_token_moved', {
+          campaign_id: campaignId,
+          scene_id: data.scene_id,
+          token: data.token,
+        });
+      } catch (err) {
+        console.error('[grid_token_moved] handler error:', err);
+      }
+    });
+
     // 断线
     socket.on('disconnect', async () => {
       try {

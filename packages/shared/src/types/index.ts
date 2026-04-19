@@ -280,6 +280,38 @@ export interface CampaignNpc {
   updated_at: Date;
 }
 
+// ===== 模组与资产库 =====
+export type ModuleStatus = 'draft' | 'public' | 'archived';
+
+export interface Module {
+  id: string;
+  name: string;
+  author_id: string;
+  author_name?: string;
+  ruleset_id: string;
+  ruleset_name?: string;
+  description: string;
+  cover_url: string;
+  status: ModuleStatus;
+  difficulty?: 'easy' | 'normal' | 'hard' | null;
+  min_players?: number | null;
+  max_players?: number | null;
+  style?: string | null;
+  price: number;
+  rating: number;
+  download_count: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ModuleQueryFilter {
+  keyword?: string;
+  ruleset_id?: string;
+  sort?: 'hot' | 'new' | 'rating';
+  page?: number;
+  limit?: number;
+}
+
 // ===== 回合状态 =====
 export interface CampaignRoundState {
   campaign_id: string;
@@ -301,6 +333,29 @@ export interface PositionHistory {
   story_time_left: StoryTime | null;
   move_type: MoveType;
   created_at: Date;
+}
+
+// ===== 网格地图 =====
+export interface GridToken {
+  id: string;
+  entity_type: 'character' | 'npc';
+  entity_id: string;
+  label: string;
+  x: number;
+  y: number;
+  color: string;
+}
+
+export interface GridMap {
+  id: string;
+  campaign_id: string;
+  scene_id: string;
+  cols: number;
+  rows: number;
+  cell_size: number;
+  background_image_url: string | null;
+  tokens: GridToken[];
+  updated_at: Date;
 }
 
 // ===== 规则引擎 =====

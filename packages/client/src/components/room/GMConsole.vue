@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import { ElDialog, ElMessage } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
+import GridMap from './GridMap.vue';
 import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
 import { useAuthStore } from '../../stores/auth-store';
@@ -12,7 +13,7 @@ const props = defineProps<{
   globalStoryTime: StoryTime;
   scenes: Scene[];
   npcs: CampaignNpc[];
-  characters: { id: string; name: string }[];
+  characters: { id: string; name: string; sceneId?: string }[];
 }>();
 
 const emit = defineEmits<{
@@ -23,7 +24,8 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast'>('time');
+const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast' | 'grid'>('time');
+const activeGridSceneId = ref('');
 
 function padZ(n: number) { return String(n).padStart(2, '0'); }
 function formatTime(t: StoryTime) { return `第${t.day}日 ${padZ(t.hour)}:${padZ(t.minute)}`; }
@@ -196,6 +198,9 @@ const showClueTargetDialog = ref(false);
 const clueTargetAll = ref(true);
 const clueTargetCharId = ref('');
 const localClues = ref<{id:string;title:string;content:string;theme:ClueTheme}[]>([]);
+const showEditClueDialog = ref(false);
+const editingClueId = ref('');
+const editClueForm = ref({ title: '', content: '', theme: 'river' as ClueTheme });
 
 async function loadClues() {
   try {
@@ -248,18 +253,71 @@ async function sendClue() {
   }
 }
 
+function openEditClue(clue: { id: string; title: string; content: string; theme: ClueTheme }) {
+  editingClueId.value = clue.id;
+  editClueForm.value = {
+    title: clue.title,
+    content: clue.content,
+    theme: clue.theme,
+  };
+  showEditClueDialog.value = true;
+}
+
+async function saveClueEdit() {
+  if (!editingClueId.value) return;
+  if (!editClueForm.value.title.trim() || !editClueForm.value.content.trim()) {
+    ElMessage.warning('标题和内容不能为空');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/clues/${editingClueId.value}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({
+        title: editClueForm.value.title,
+        content: editClueForm.value.content,
+        theme: editClueForm.value.theme,
+      }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '更新失败');
+
+    const updated = await res.json() as { id: string; title: string; content: string; theme: ClueTheme };
+    localClues.value = localClues.value.map((clue) => (clue.id === updated.id ? updated : clue));
+    showEditClueDialog.value = false;
+    editingClueId.value = '';
+    ElMessage.success('线索已更新');
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '更新失败');
+  }
+}
+
 const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatial' || s.type === 'lobby'));
+
+const gridCharacters = computed(() => props.characters.map((character) => ({
+  id: character.id,
+  name: character.name,
+  sceneId: character.sceneId,
+})));
+
+const activeGridScene = computed(() => {
+  const current = spatialScenes.value.find((scene) => scene.id === activeGridSceneId.value);
+  return current ?? spatialScenes.value[0] ?? null;
+});
 
 onMounted(() => {
   loadClues();
   loadPendingScheduledMoves();
+  if (!activeGridSceneId.value && spatialScenes.value[0]?.id) {
+    activeGridSceneId.value = spatialScenes.value[0].id;
+  }
 });
 </script>
 
 <template>
   <div class="gm-console">
     <div class="console-tabs">
-      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
+      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
         <SvgIcon :name="tab.icon" :size="14" /><span>{{tab.label}}</span>
       </button>
     </div>
@@ -321,6 +379,23 @@ onMounted(() => {
         </div>
         <div v-if="npcs.length===0" class="empty-hint">暂无NPC</div>
       </div>
+      <div v-else-if="activeTab==='grid'" class="tab-pane grid-pane">
+        <div class="pane-header">
+          <span class="pane-count">网格地图 V1</span>
+          <select v-model="activeGridSceneId" class="field-input grid-scene-select">
+            <option v-for="scene in spatialScenes" :key="scene.id" :value="scene.id">{{ scene.name }}</option>
+          </select>
+        </div>
+        <GridMap
+          v-if="activeGridScene"
+          :campaign-id="campaignId"
+          :scene-id="activeGridScene.id"
+          :is-g-m="true"
+          :characters="gridCharacters"
+          :npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, display_name: npc.display_name }))"
+        />
+        <div v-else class="empty-hint">请先创建空间场景后再使用地图</div>
+      </div>
       <!-- Tab 4: 广播 -->
       <div v-else-if="activeTab==='broadcast'" class="tab-pane broadcast-pane">
         <div class="section-label">全员广播</div>
@@ -342,7 +417,13 @@ onMounted(() => {
           <button class="sm-btn accent" @click="prepareClue" style="margin-left:auto">发放线索</button>
         </div>
         <div v-if="clueForm.title" class="clue-preview-wrap"><ClueCard :title="clueForm.title" :content="clueForm.content||'...'" :theme="clueForm.theme"/></div>
-        <div v-if="localClues.length>0" style="margin-top:8px"><div class="section-label">已发放</div><ClueCard v-for="c in localClues" :key="c.id" :title="c.title" :content="c.content" :theme="c.theme" style="margin-bottom:6px"/></div>
+        <div v-if="localClues.length>0" style="margin-top:8px">
+          <div class="section-label">已发放</div>
+          <div v-for="c in localClues" :key="c.id" class="clue-item">
+            <ClueCard :title="c.title" :content="c.content" :theme="c.theme" />
+            <button class="sm-btn" @click="openEditClue(c)">编辑</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -418,6 +499,20 @@ onMounted(() => {
     </div>
     <template #footer><button class="dlg-btn" @click="showClueTargetDialog=false">取消</button><button class="dlg-btn accent" @click="sendClue">确认发放</button></template>
   </ElDialog>
+  <ElDialog v-model="showEditClueDialog" title="编辑线索" width="420px">
+    <div class="form-body">
+      <label class="form-label">线索标题 *</label><input v-model="editClueForm.title" class="field-input" placeholder="线索标题"/>
+      <label class="form-label" style="margin-top:12px">线索内容 *</label><textarea v-model="editClueForm.content" class="field-input" rows="3" style="resize:vertical" placeholder="线索内容"/>
+      <label class="form-label" style="margin-top:12px">文字主题</label>
+      <div class="theme-grid">
+        <div v-for="t in THEMES" :key="`edit-${t}`" class="theme-card" :class="{ selected: editClueForm.theme === t }" @click="editClueForm.theme = t">
+          <span class="theme-preview" :class="`text-art-${t}`">示例</span>
+          <div class="theme-card-name">{{ t }}</div>
+        </div>
+      </div>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showEditClueDialog=false">取消</button><button class="dlg-btn accent" @click="saveClueEdit">保存</button></template>
+  </ElDialog>
 </template>
 
 <style scoped>
@@ -451,6 +546,8 @@ onMounted(() => {
 .type-tag.lobby { background: #f0fdf4; color: #15803d; }
 .npc-cards { display: flex; flex-direction: column; gap: var(--space-2); }
 .npc-card { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-card-border); border-radius: var(--radius-md); }
+.grid-pane { min-height: 320px; }
+.grid-scene-select { width: 180px; }
 .npc-avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: var(--color-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); font-weight: 600; flex-shrink: 0; }
 .npc-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .npc-info { flex: 1; min-width: 0; }
@@ -460,6 +557,8 @@ onMounted(() => {
 .section-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 1px; }
 .broadcast-row { display: flex; gap: var(--space-2); align-items: flex-end; }
 .broadcast-input { flex: 1; padding: var(--space-2); border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); resize: none; }
+.clue-item { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: 6px; }
+.clue-item :deep(.clue-card) { flex: 1; }
 .clue-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
 .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
 .theme-card { border: 1px solid var(--color-card-border); border-radius: var(--radius-md); padding: 6px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: border-color var(--transition-fast); }

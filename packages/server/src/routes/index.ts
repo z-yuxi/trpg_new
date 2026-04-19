@@ -8,6 +8,7 @@ import recruitmentRoutes from './recruitment';
 import logRoutes from './logs';
 import notificationRoutes from './notifications';
 import forumRoutes from './forum';
+import moduleRoutes from './modules';
 
 const router: IRouter = Router();
 
@@ -23,5 +24,6 @@ router.use('/recruitment', recruitmentRoutes);
 router.use('/logs', logRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/forum', forumRoutes);
+router.use('/modules', moduleRoutes);
 
 export default router;

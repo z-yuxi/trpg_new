@@ -78,6 +78,14 @@ export class SocketClient {
     this.roomSocket?.emit('gm_reject_move', { move_id: moveId });
   }
 
+  moveGridToken(campaignId: string, sceneId: string, token: { id: string; entity_type: 'character' | 'npc'; entity_id: string; label: string; x: number; y: number; color: string }): void {
+    this.roomSocket?.emit('grid_token_moved', {
+      campaign_id: campaignId,
+      scene_id: sceneId,
+      token,
+    });
+  }
+
   onNewMessage(handler: (msg: any) => void): void {
     this.roomSocket?.on('new_message', handler);
   }
@@ -116,6 +124,10 @@ export class SocketClient {
 
   onUnreadCountChanged(handler: (data: { count: number }) => void): void {
     this.userSocket?.on('unread_count_changed', handler);
+  }
+
+  onGridTokenMoved(handler: (data: { campaign_id: string; scene_id: string; token: { id: string; entity_type: 'character' | 'npc'; entity_id: string; label: string; x: number; y: number; color: string } }) => void): void {
+    this.roomSocket?.on('grid_token_moved', handler);
   }
 
   disconnect(): void {

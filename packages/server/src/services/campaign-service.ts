@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
-import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, ScheduledMove, StoryTime } from '@trpg/shared';
+import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, ScheduledMove, StoryTime } from '@trpg/shared';
 
 function rowToCampaign(row: Record<string, unknown>): Campaign {
   return {
@@ -36,6 +36,22 @@ function rowToScene(row: Record<string, unknown>): Scene {
     history_visibility: row['history_visibility'] as HistoryVisibility,
     visible_history_count: row['visible_history_count'] as number,
     created_at: row['created_at'] as Date,
+  };
+}
+
+function rowToGridMap(row: Record<string, unknown>): GridMap {
+  return {
+    id: row['id'] as string,
+    campaign_id: row['campaign_id'] as string,
+    scene_id: row['scene_id'] as string,
+    cols: Number(row['cols'] ?? 12),
+    rows: Number(row['rows'] ?? 10),
+    cell_size: Number(row['cell_size'] ?? 48),
+    background_image_url: (row['background_image_url'] as string) ?? null,
+    tokens: typeof row['tokens'] === 'string'
+      ? JSON.parse(row['tokens'] as string)
+      : (row['tokens'] as GridToken[]),
+    updated_at: row['updated_at'] as Date,
   };
 }
 
@@ -142,6 +158,48 @@ export class CampaignService {
   async listScenes(campaign_id: string): Promise<Scene[]> {
     const rows = await db('scenes').where({ campaign_id });
     return rows.map(rowToScene);
+  }
+
+  async getGridMap(campaign_id: string, scene_id: string): Promise<GridMap> {
+    const existing = await db('campaign_grid_maps').where({ campaign_id, scene_id }).first();
+    if (existing) return rowToGridMap(existing);
+
+    const id = generateId();
+    await db('campaign_grid_maps').insert({
+      id,
+      campaign_id,
+      scene_id,
+      cols: 12,
+      rows: 10,
+      cell_size: 48,
+      background_image_url: null,
+      tokens: JSON.stringify([]),
+    });
+
+    const created = await db('campaign_grid_maps').where({ id }).first();
+    return rowToGridMap(created);
+  }
+
+  async updateGridMap(
+    campaign_id: string,
+    scene_id: string,
+    updates: Partial<Pick<GridMap, 'cols' | 'rows' | 'cell_size' | 'background_image_url' | 'tokens'>>
+  ): Promise<GridMap> {
+    const current = await this.getGridMap(campaign_id, scene_id);
+
+    await db('campaign_grid_maps')
+      .where({ campaign_id, scene_id })
+      .update({
+        cols: updates.cols ?? current.cols,
+        rows: updates.rows ?? current.rows,
+        cell_size: updates.cell_size ?? current.cell_size,
+        background_image_url: updates.background_image_url ?? current.background_image_url,
+        tokens: JSON.stringify(updates.tokens ?? current.tokens),
+        updated_at: db.fn.now(),
+      });
+
+    const row = await db('campaign_grid_maps').where({ campaign_id, scene_id }).first();
+    return rowToGridMap(row);
   }
 
   private async generateUniqueRoomCode(): Promise<string> {

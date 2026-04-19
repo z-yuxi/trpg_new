@@ -1,4 +1,4 @@
-import type { ChatMessage, StoryTime, CharacterInstance, SnowflakeId } from './index';
+import type { ChatMessage, StoryTime, CharacterInstance, GridToken, SnowflakeId } from './index';
 
 // ===== 通知类型 =====
 export type NotificationType = 'system' | 'transaction' | 'social' | 'audit';
@@ -39,6 +39,7 @@ export interface ServerToClientEvents {
   }) => void;
   notification_new: (notification: UserNotification) => void;
   unread_count_changed: (data: { count: number }) => void;
+  grid_token_moved: (data: { campaign_id: string; scene_id: string; token: GridToken }) => void;
 }
 
 // ===== Client → Server 事件 =====
@@ -72,5 +73,10 @@ export interface ClientToServerEvents {
   gm_advance_time: (data: {
     delta?: { days?: number; hours?: number; minutes?: number };
     custom_time?: StoryTime;
+  }) => void;
+  grid_token_moved: (data: {
+    campaign_id: string;
+    scene_id: string;
+    token: GridToken;
   }) => void;
 }

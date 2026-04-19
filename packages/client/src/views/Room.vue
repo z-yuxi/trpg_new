@@ -76,6 +76,15 @@ function handleFillCommand(cmd: string) {
   setTimeout(() => { prefillCommand.value = ''; }, 50);
 }
 
+function handleAssistantBroadcast(content: string) {
+  const text = content.trim();
+  if (!text) return;
+  socketClient.sendMessage({
+    content: `[GM公告] ${text}`,
+    message_type: 'announcement',
+  });
+}
+
 function normalizeRulesetCommands(raw: unknown): Array<{ name: string; description: string }> {
   const mapped = new Map<string, { name: string; description: string }>();
 
@@ -281,16 +290,6 @@ onUnmounted(() => {
 
 <template>
   <div style="height:100vh;overflow:hidden">
-    <div v-if="showGMConsole">
-      <GMConsole
-        :campaign-id="campaignId"
-        :global-story-time="globalTime"
-        :pending-moves="pendingMoves"
-        :scenes="scenes"
-        :npcs="npcs"
-        :enable-connections="false"
-      />
-    </div>
     <RoomLayout
       :campaign-name="campaignStore.currentCampaign?.name ?? '加载中...'"
       :room-code="campaignStore.currentCampaign?.room_code"
@@ -306,7 +305,7 @@ onUnmounted(() => {
             :global-story-time="globalTime"
             :scenes="scenes"
             :npcs="npcs"
-            :characters="roomCharacters.map(c => ({ id: c.id, name: c.name }))"
+            :characters="roomCharacters.map(c => ({ id: c.id, name: c.name, sceneId: c.sceneId }))"
             @scene-created="handleSceneCreated"
             @npc-created="(n) => npcs.push(n)"
             @play-as-npc="(id) => { selectedSenderIdentity = `npc:${id}`; showGMConsole = false; }"
@@ -348,9 +347,11 @@ onUnmounted(() => {
           :commands="commands"
           :scenes="scenes"
           :room-characters="roomCharacters"
+          :current-scene-id="currentSceneId"
+          :npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, display_name: npc.display_name }))"
           :is-gm="isGm"
           @fill-command="handleFillCommand"
-          @broadcast="() => {}"
+          @broadcast="handleAssistantBroadcast"
         />
       </template>
     </RoomLayout>

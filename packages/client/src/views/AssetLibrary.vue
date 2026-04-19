@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue';
 import TTag from '../components/base/TTag.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
+import { api } from '../utils/api';
+import { useAuthStore } from '../stores/auth-store';
 
 /* ========== 类型 ========== */
 interface Ruleset {
@@ -10,6 +12,7 @@ interface Ruleset {
   name: string;
   version?: string;
   author?: string;
+  author_id?: string;
   base_ruleset?: string;
   status?: string;
   description?: string;
@@ -31,11 +34,15 @@ interface Module {
 }
 
 /* ========== 状态 ========== */
-const activeTab = ref<'modules' | 'rulesets'>('modules');
+const authStore = useAuthStore();
+
+const activeTab = ref<'modules' | 'rulesets' | 'assets'>('modules');
 const search = ref('');
 const loading = ref(false);
 const rulesets = ref<Ruleset[]>([]);
 const modules = ref<Module[]>([]);
+const myModules = ref<Module[]>([]);
+const myRulesets = ref<Ruleset[]>([]);
 
 /* 筛选条件 */
 const filterRuleset  = ref('');
@@ -50,11 +57,21 @@ onMounted(async () => {
   loading.value = true;
   try {
     const [rsRes, modRes] = await Promise.allSettled([
-      fetch('/api/rulesets?status=published').then(r => r.ok ? r.json() : []),
-      fetch('/api/modules').then(r => r.ok ? r.json() : []),
+      api.get<{ data: Ruleset[]; total: number }>('/rulesets?status=published&limit=50'),
+      api.get<{ data: Module[]; total: number }>('/modules?limit=50'),
     ]);
-    if (rsRes.status === 'fulfilled') rulesets.value = rsRes.value ?? [];
-    if (modRes.status === 'fulfilled') modules.value = modRes.value ?? [];
+
+    if (rsRes.status === 'fulfilled') rulesets.value = rsRes.value.data ?? [];
+    if (modRes.status === 'fulfilled') modules.value = modRes.value.data ?? [];
+
+    if (authStore.token) {
+      const [mineModulesRes, mineRulesetsRes] = await Promise.allSettled([
+        api.get<Module[]>('/modules/mine'),
+        api.get<{ data: Ruleset[]; total: number }>(`/rulesets?author_id=${authStore.userId}&limit=50`),
+      ]);
+      if (mineModulesRes.status === 'fulfilled') myModules.value = mineModulesRes.value ?? [];
+      if (mineRulesetsRes.status === 'fulfilled') myRulesets.value = mineRulesetsRes.value.data ?? [];
+    }
   } finally {
     loading.value = false;
   }
@@ -113,6 +130,9 @@ function ratingLabel(r?: number) {
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'rulesets' }" @click="activeTab = 'rulesets'">
         规则集市
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'assets' }" @click="activeTab = 'assets'">
+        我的资产
       </button>
     </div>
 
@@ -195,7 +215,7 @@ function ratingLabel(r?: number) {
     </template>
 
     <!-- 规则集市 -->
-    <template v-else>
+    <template v-else-if="activeTab === 'rulesets'">
       <div v-if="filteredRulesets.length === 0" class="empty-state">
         <p>暂无已发布规则集</p>
       </div>
@@ -216,6 +236,43 @@ function ratingLabel(r?: number) {
           </div>
           <p class="ruleset-desc">{{ rs.description || '暂无描述' }}</p>
           <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
+        </div>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="assets-section">
+        <div class="asset-column">
+          <div class="section-head">
+            <h2>我的模组</h2>
+            <span>{{ myModules.length }} 个</span>
+          </div>
+          <div v-if="myModules.length === 0" class="empty-state asset-empty">暂无模组资产</div>
+          <div v-else class="asset-list">
+            <div v-for="moduleItem in myModules" :key="moduleItem.id" class="asset-item">
+              <div>
+                <div class="asset-name">{{ moduleItem.title ?? moduleItem.name }}</div>
+                <div class="asset-meta">{{ moduleItem.ruleset_name ?? '未绑定规则集' }} · {{ priceLabel(moduleItem.price) }}</div>
+              </div>
+              <TTag size="sm" :color="moduleItem.price === 0 ? 'success' : 'default'">{{ moduleItem.price === 0 ? '免费' : '已拥有' }}</TTag>
+            </div>
+          </div>
+        </div>
+        <div class="asset-column">
+          <div class="section-head">
+            <h2>我的规则集</h2>
+            <span>{{ myRulesets.length }} 个</span>
+          </div>
+          <div v-if="myRulesets.length === 0" class="empty-state asset-empty">暂无已创建规则集</div>
+          <div v-else class="asset-list">
+            <div v-for="ruleset in myRulesets" :key="ruleset.id" class="asset-item">
+              <div>
+                <div class="asset-name">{{ ruleset.name }}</div>
+                <div class="asset-meta">v{{ ruleset.version ?? '—' }} · {{ ruleset.status ?? 'draft' }}</div>
+              </div>
+              <TButton type="secondary" size="sm">查看</TButton>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -372,4 +429,61 @@ function ratingLabel(r?: number) {
 .ruleset-meta { display: flex; gap: var(--space-3); }
 .ruleset-base { font-size: var(--text-xs); color: var(--text-secondary); }
 .ruleset-desc { font-size: var(--text-xs); color: var(--text-secondary); line-height: var(--leading-relaxed); }
+
+.assets-section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.asset-column {
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.section-head h2 {
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.asset-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+}
+.asset-name {
+  color: var(--text-primary);
+  font-weight: var(--font-semibold);
+}
+.asset-meta {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
+}
+.asset-empty {
+  padding: var(--space-6);
+}
+@media (max-width: 900px) {
+  .assets-section {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

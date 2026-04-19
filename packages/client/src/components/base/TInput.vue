@@ -30,26 +30,30 @@ defineProps<{
 .t-input {
   height: 36px;
   padding: 0 var(--space-3);
-  background: var(--surface-page);
+  background: var(--surface-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
   outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
 }
 
-.t-input::placeholder { color: var(--text-muted); }
+.t-input::placeholder { color: color-mix(in srgb, var(--text-muted) 88%, transparent); }
 
 .t-input:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
+.t-input:hover:not(:disabled):not(:focus) {
+  border-color: var(--border-hover);
+}
+
 /* 夜间模式：输入框背景用卡片色，与页面背景区分 */
 :root[data-theme='night'] .t-input {
-  background: var(--surface-card);
+  background: var(--surface-elevated);
 }
 
 .t-input:disabled { opacity: 0.5; cursor: not-allowed; }

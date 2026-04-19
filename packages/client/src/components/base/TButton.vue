@@ -30,11 +30,12 @@ defineProps<{
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+  box-shadow: var(--shadow-xs);
+  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast);
 }
 .t-btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
-.t-btn:not(:disabled):hover { transform: translateY(-1px); }
-.t-btn:not(:disabled):active { transform: scale(0.98); }
+.t-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.t-btn:not(:disabled):active { transform: scale(0.98); box-shadow: var(--shadow-xs); }
 
 /* 尺寸 — 附录 B 3.1 */
 .t-btn--sm { height: 28px; padding: 0 var(--space-3); font-size: var(--text-xs); }
@@ -45,8 +46,9 @@ defineProps<{
 .t-btn--primary {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
+  box-shadow: var(--shadow-sm);
 }
-.t-btn--primary:not(:disabled):hover { background: var(--btn-primary-hover); }
+.t-btn--primary:not(:disabled):hover { background: var(--btn-primary-hover); box-shadow: var(--shadow-md); }
 .t-btn--primary:not(:disabled):active { background: var(--color-primary-active); }
 
 /* secondary */
@@ -54,6 +56,7 @@ defineProps<{
   background: var(--btn-secondary-bg);
   color: var(--btn-secondary-text);
   border: 1px solid var(--btn-secondary-border);
+  box-shadow: none;
 }
 .t-btn--secondary:not(:disabled):hover {
   background: var(--surface-hover);
@@ -65,6 +68,7 @@ defineProps<{
   background: var(--color-danger);
   color: var(--text-inverse);
   border: none;
+  box-shadow: var(--shadow-sm);
 }
 .t-btn--danger:not(:disabled):hover { background: var(--red-700); }
 
@@ -73,6 +77,7 @@ defineProps<{
   background: transparent;
   color: var(--text-body);
   border: 1px solid var(--border-default);
+  box-shadow: none;
 }
 .t-btn--ghost:not(:disabled):hover {
   background: var(--color-primary-light);
