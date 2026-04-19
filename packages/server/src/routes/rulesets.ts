@@ -1,9 +1,20 @@
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { rulesetService } from '../services/ruleset-service';
-import type { RulesetStatus } from '@trpg/shared';
+import type { ExecuteRequest, RulesetStatus } from '@trpg/shared';
 
 const router: IRouter = Router();
+
+// GET /api/rulesets/mine — 当前用户的所有规则集（含草稿，需登录）
+// ⚠️ 必须在 /:id 之前注册，否则 "mine" 会被当作 id 参数匹配
+router.get('/mine', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const rulesets = await rulesetService.listMine(req.userId!);
+    res.json({ data: rulesets, total: rulesets.length });
+  } catch {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /api/rulesets — 公开规则集列表（无需认证）
 router.get('/', async (req, res): Promise<void> => {
@@ -93,29 +104,136 @@ router.post('/:id/publish', authMiddleware, async (req, res): Promise<void> => {
 // POST /api/rulesets/:id/execute — 执行规则命令
 router.post('/:id/execute', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const { command, params, context } = req.body as {
-      command?: string;
-      params?: Record<string, unknown>;
-      context?: { character_id: string; campaign_id: string; scene_id?: string };
-    };
-    if (!command || typeof command !== 'string') {
+    const body = req.body as ExecuteRequest;
+    if (!body.command || typeof body.command !== 'string') {
       res.status(400).json({ error: 'command is required' });
       return;
     }
-    if (!context?.character_id || !context?.campaign_id) {
-      res.status(400).json({ error: 'context.character_id and context.campaign_id are required' });
+    // context 和 mock_context 二选一，两者都缺时返回 400
+    if (!body.mock_context && (!body.context?.character_id || !body.context?.campaign_id)) {
+      res.status(400).json({
+        error: 'Either mock_context or context (with character_id and campaign_id) is required',
+      });
       return;
     }
-    const result = await rulesetService.executeCommand({
-      ruleset_id: req.params['id']!,
-      command,
-      params: params ?? {},
-      context,
-    });
+    const result = await rulesetService.executeCommand(req.params['id']!, body);
     res.json(result);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
     if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 版本控制端点 ──────────────────────────────────────────────────────────
+
+// GET /api/rulesets/:id/versions — 版本历史
+router.get('/:id/versions', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const versions = await rulesetService.listVersions(req.params['id']!);
+    res.json({ data: versions, total: versions.length });
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/versions — 手动保存版本快照
+router.post('/:id/versions', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const { changelog } = req.body as { changelog?: string };
+    const version = await rulesetService.saveVersion(req.params['id']!, changelog ?? '', req.userId!);
+    res.status(201).json(version);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/versions/:vid/rollback — 回滚到指定版本
+router.post('/:id/versions/:vid/rollback', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.rollbackToVersion(req.params['id']!, req.params['vid']!, req.userId!);
+    res.json(ruleset);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/rulesets/:id/versions/compare?a=vid1&b=vid2 — 对比版本
+router.get('/:id/versions/compare', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const a = req.query['a'] as string;
+    const b = req.query['b'] as string;
+    if (!a || !b) { res.status(400).json({ error: 'a and b version IDs are required' }); return; }
+    const diff = await rulesetService.compareVersions(a, b);
+    res.json(diff);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── 发布状态机端点 ────────────────────────────────────────────────────────
+
+// POST /api/rulesets/:id/submit-review — draft → published（V1.0 自动审核）
+router.post('/:id/submit-review', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.submitForReview(req.params['id']!, req.userId!);
+    res.json(ruleset);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/deprecate — published → deprecated
+router.post('/:id/deprecate', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.deprecate(req.params['id']!, req.userId!);
+    res.json(ruleset);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/fork — Fork 规则集
+router.post('/:id/fork', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const result = await rulesetService.forkRuleset(req.params['id']!, req.userId!);
+    res.status(201).json(result);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/merge-from-parent — 从上游 parent 合并变更
+router.post('/:id/merge-from-parent', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const result = await rulesetService.mergeFromParent(req.params['id']!, req.userId!);
+    res.json(result);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

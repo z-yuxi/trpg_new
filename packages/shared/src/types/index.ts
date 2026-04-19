@@ -212,7 +212,7 @@ export interface RecruitmentComment {
 }
 
 // ===== 规则集 =====
-export type RulesetStatus = 'draft' | 'published';
+export type RulesetStatus = 'draft' | 'reviewing' | 'published' | 'deprecated';
 
 /** 命令图节点输入源 */
 export type CommandInputSource =
@@ -241,8 +241,72 @@ export interface RulesetCommand {
 }
 
 /** 平台预置命令名称列表 */
-export const PLATFORM_PRESET_COMMAND_NAMES = ['roll', 'check', 'initiative'] as const;
+export const PLATFORM_PRESET_COMMAND_NAMES = [
+  'roll', 'check', 'initiative',
+  'r', 'rh', 'nn',
+  'ra', 'rc', 'sc', 'en', 'ti', 'li', 'init', 'ds',
+] as const;
 export type PlatformPresetCommandName = typeof PLATFORM_PRESET_COMMAND_NAMES[number];
+
+/** 平台预置命令枚举 */
+export enum PlatformPresetCommand {
+  /** 通用掷骰（/r 2d6） */
+  r = 'r',
+  /** 暗骰，结果仅 GM 可见 */
+  rh = 'rh',
+  /** 旁白（系统消息） */
+  nn = 'nn',
+  /** 投掷骰子 */
+  roll = 'roll',
+  /** 技能检定（通用） */
+  check = 'check',
+  /** 先攻 */
+  initiative = 'initiative',
+  /** 属性检定（1d100 ≤ 属性值） */
+  ra = 'ra',
+  /** 标准检定（1d100 ≤ 技能值） */
+  rc = 'rc',
+  /** 理智检定 */
+  sc = 'sc',
+  /** 成长检定 */
+  en = 'en',
+  /** 临时疯狂 */
+  ti = 'ti',
+  /** 长期疯狂 */
+  li = 'li',
+  /** 先攻（短别名） */
+  init = 'init',
+  /** 死亡豁免 */
+  ds = 'ds',
+}
+
+/** 自定义命令参数映射项 */
+export interface CustomCommandParamMapping {
+  /** 参数名 */
+  param_name: string;
+  /** 来源类型 */
+  source: 'user_input' | 'character_attribute' | 'character_skill' | 'fixed_value';
+  /** 固定值（source=fixed_value 时使用） */
+  fixed_value?: unknown;
+  /** 关联的属性/技能名（source=character_* 时使用） */
+  field_name?: string;
+}
+
+/** 自定义命令定义 */
+export interface CustomCommand {
+  /** 触发词 */
+  trigger: string;
+  /** 描述 */
+  description: string;
+  /** 别名列表 */
+  aliases: string[];
+  /** 是否仅 GM 可用 */
+  gm_only: boolean;
+  /** 参数映射表 */
+  input_mapping: CustomCommandParamMapping[];
+  /** 命令绑定的执行图 */
+  graph: CommandGraph;
+}
 
 export interface Ruleset {
   id: string;
@@ -251,12 +315,64 @@ export interface Ruleset {
   version: string;
   description: string;
   parent_ruleset_id: string | null;
+  /** 继承来源（批次4新增，等同 parent_ruleset_id，取 parent_id 字段） */
+  parent_id?: string | null;
+  /** 被 fork 次数 */
+  fork_count?: number;
+  /** 乐观锁版本号 */
+  lock_version?: number;
   atoms: object;
   connections: object;
   commands: object;
   character_card_schema: object;
   status: RulesetStatus;
   created_at: Date;
+}
+
+/** 规则集版本快照 */
+export interface RulesetVersion {
+  id: string;
+  ruleset_id: string;
+  version_number: string;
+  snapshot: {
+    atoms: object;
+    connections: object;
+    commands: object;
+    character_card_schema: object;
+  };
+  changelog: string;
+  created_at: Date;
+}
+
+/** 两个版本之间的 diff */
+export interface RulesetVersionDiff {
+  added_nodes: string[];    // node_id 列表
+  removed_nodes: string[];
+  modified_nodes: string[];
+  added_connections: string[];
+  removed_connections: string[];
+}
+
+/** fork 操作结果 */
+export interface ForkResult {
+  new_ruleset: Ruleset;
+  source_fork_count: number;
+}
+
+/** mergeFromParent 合并结果 */
+export interface MergeConflict {
+  node_id: string;
+  type: 'modified_both' | 'deleted_ours' | 'deleted_theirs';
+  our_node?: object;
+  their_node?: object;
+}
+
+export interface MergeResult {
+  merged_graph: {
+    atoms: object[];
+    connections: object[];
+  };
+  conflicts: MergeConflict[];
 }
 
 // ===== 团 NPC =====
@@ -359,15 +475,34 @@ export interface GridMap {
 }
 
 // ===== 规则引擎 =====
+
+/**
+ * 预览执行时传入的模拟角色上下文。
+ * key = 属性/技能名，value = 数值
+ */
+export interface MockContext {
+  attributes: Record<string, number>;   // e.g. { "力量": 60, "体质": 55 }
+  skills: Record<string, number>;       // e.g. { "侦查": 70, "图书馆": 40 }
+  resources: Record<string, { current: number; max: number }>;  // e.g. { "HP": { current: 10, max: 14 } }
+}
+
+/**
+ * execute 端点请求体（ruleset_id 已由路径参数 :id 承担，不出现在请求体）。
+ * context 与 mock_context 二选一；两者同时存在时优先 mock_context。
+ */
 export interface ExecuteRequest {
-  ruleset_id: string;
+  /** 完整命令字符串，e.g. "/rc 侦查 60" */
   command: string;
-  params: Record<string, unknown>;
-  context: {
+  /** 命令参数（命令字符串无法解析时的备用，键名需与图节点输入键匹配） */
+  params?: Record<string, unknown>;
+  /** 真实角色上下文 */
+  context?: {
     character_id: string;
     campaign_id: string;
     scene_id?: string;
   };
+  /** 编辑器预览时使用的模拟角色数据，不需要真实角色/团 */
+  mock_context?: MockContext;
 }
 
 export interface NodeExecutionLog {
@@ -378,10 +513,19 @@ export interface NodeExecutionLog {
   duration_ms: number;
 }
 
+/** execute 端点返回体 */
 export interface ExecuteResponse {
   success: boolean;
-  output: unknown;
-  logs: NodeExecutionLog[];
+  /** 可读的最终结果描述 */
+  result: string;
+  dice_rolls: Array<{ expression: string; value: number; detail: string }>;
+  logs: Array<{
+    node_id: string;
+    atom_type: string;
+    inputs: Record<string, unknown>;
+    output: unknown;
+    duration_ms: number;
+  }>;
   error?: string;
 }
 

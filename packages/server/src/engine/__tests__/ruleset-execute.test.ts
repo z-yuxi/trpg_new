@@ -58,33 +58,36 @@ describe('RulesetService.executeCommand — 集成测试', () => {
   });
 
   it('测试1: 平台预置 roll 命令 — 骰子表达式执行', async () => {
-    const result = await service.executeCommand({
-      ruleset_id: 'rs-test-001',
-      command: 'roll',
+    const result = await service.executeCommand('rs-test-001', {
+      command: '/roll',
       params: { expression: '1d6' },
-      context: { character_id: 'char-001', campaign_id: 'camp-001' },
+      mock_context: {
+        attributes: {},
+        skills: {},
+        resources: {},
+      },
     });
 
     expect(result.success).toBe(true);
     expect(result.logs).toBeInstanceOf(Array);
     expect(result.logs.length).toBeGreaterThan(0);
-    // result_collector 节点返回收集结果
-    expect(result.output).toBeDefined();
+    expect(result.dice_rolls).toBeInstanceOf(Array);
+    // result 字段为可读描述字符串
+    expect(typeof result.result).toBe('string');
   });
 
   it('测试2: 平台预置 check 命令 — 1d100 检定与阈值比较', async () => {
-    const result = await service.executeCommand({
-      ruleset_id: 'rs-test-001',
-      command: 'check',
+    const result = await service.executeCommand('rs-test-001', {
+      command: '/check',
       params: { threshold: 55 },
-      context: { character_id: 'char-001', campaign_id: 'camp-001' },
+      mock_context: { attributes: {}, skills: {}, resources: {} },
     });
 
     expect(result.success).toBe(true);
-    // 至少包含 dice_roll, threshold_compare, result_collector 三个节点日志
+    // 至少包含 dice_roll, threshold_compare 两个节点日志
     expect(result.logs.length).toBeGreaterThanOrEqual(2);
-    // 日志中包含 dice_roll 节点
-    const diceLog = result.logs.find((l: { node_type: string }) => l.node_type === 'dice_roll');
+    // 日志中包含 dice_roll 节点（atom_type 字段）
+    const diceLog = result.logs.find((l) => l.atom_type === 'dice_roll');
     expect(diceLog).toBeDefined();
     const rollOutput = diceLog!.output as { total: number };
     expect(typeof rollOutput.total).toBe('number');
@@ -116,15 +119,13 @@ describe('RulesetService.executeCommand — 集成测试', () => {
     };
 
     try {
-      const result = await service.executeCommand({
-        ruleset_id: 'rs-test-001',
-        command: 'custom_check',
-        params: {},
-        context: { character_id: 'char-001', campaign_id: 'camp-001' },
+      const result = await service.executeCommand('rs-test-001', {
+        command: '/custom_check',
+        mock_context: { attributes: {}, skills: {}, resources: {} },
       });
 
       expect(result.success).toBe(true);
-      const branchLog = result.logs.find((l: { node_type: string }) => l.node_type === 'if_else');
+      const branchLog = result.logs.find((l) => l.atom_type === 'if_else');
       expect(branchLog).toBeDefined();
       const branchOutput = branchLog!.output as { value: string; branch: string };
       // condition=true → 走 then 分支 → value='成功'
@@ -137,11 +138,9 @@ describe('RulesetService.executeCommand — 集成测试', () => {
 
   it('测试4: 未知命令 — 应抛出 NOT_FOUND 错误', async () => {
     await expect(
-      service.executeCommand({
-        ruleset_id: 'rs-test-001',
-        command: 'nonexistent_command_xyz',
-        params: {},
-        context: { character_id: 'char-001', campaign_id: 'camp-001' },
+      service.executeCommand('rs-test-001', {
+        command: '/nonexistent_command_xyz',
+        mock_context: { attributes: {}, skills: {}, resources: {} },
       })
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });

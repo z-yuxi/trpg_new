@@ -7,7 +7,7 @@ import { useAuthStore } from '../../stores/auth-store';
 const router = useRouter();
 const authStore = useAuthStore();
 
-interface RulesetItem { id: string; name: string; version: string; status: string; }
+interface RulesetItem { id: string; name: string; version: string; status: string; fork_count?: number; parent_id?: string | null; }
 
 const rulesets = ref<RulesetItem[]>([]);
 const loading = ref(false);
@@ -18,7 +18,7 @@ const creating = ref(false);
 async function loadRulesets() {
   loading.value = true;
   try {
-    const res = await fetch('/api/rulesets?author_id=' + authStore.userId, { headers: { Authorization: `Bearer ${authStore.token}` } });
+    const res = await fetch('/api/rulesets/mine', { headers: { Authorization: `Bearer ${authStore.token}` } });
     if (res.ok) {
       const body = await res.json();
       // API 返回分页格式 { data: [], total: number }
@@ -55,6 +55,26 @@ async function createRuleset() {
 }
 
 onMounted(loadRulesets);
+
+const forking = ref<string | null>(null);
+async function forkRuleset(rs: RulesetItem) {
+  if (!confirm(`Fork「${rs.name}」？将创建一份属于你的私有副本。`)) return;
+  forking.value = rs.id;
+  try {
+    const res = await fetch(`/api/rulesets/${rs.id}/fork`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      ElMessage.success('Fork 成功，已创建副本');
+      router.push(`/creator/workshop/${data.new_ruleset.id}/edit`);
+    } else {
+      const data = await res.json();
+      ElMessage.error(data.error ?? 'Fork 失败');
+    }
+  } catch { ElMessage.error('网络错误'); } finally { forking.value = null; }
+}
 </script>
 
 <template>
@@ -77,11 +97,12 @@ onMounted(loadRulesets);
       <div v-for="rs in rulesets" :key="rs.id" class="rs-card">
         <div class="rs-card-top">
           <span class="rs-name">{{ rs.name }}</span>
-          <span class="rs-status" :class="rs.status">{{ rs.status === 'published' ? '已发布' : '草稿' }}</span>
+          <span class="rs-status" :class="rs.status">{{ { published: '已发布', draft: '草稿', reviewing: '审核中', deprecated: '已弃用' }[rs.status] ?? rs.status }}</span>
         </div>
         <div class="rs-version">v{{ rs.version }}</div>
         <div class="rs-actions">
           <button class="edit-btn" @click="router.push(`/creator/workshop/${rs.id}/edit`)">编辑</button>
+          <button v-if="rs.status === 'published'" class="fork-btn" :disabled="forking === rs.id" @click.stop="forkRuleset(rs)">{{ forking === rs.id ? 'Fork中…' : 'Fork' }}</button>
         </div>
       </div>
     </div>
@@ -127,14 +148,23 @@ onMounted(loadRulesets);
 .rs-status { font-size: var(--text-xs); padding: 1px 8px; border-radius: 100px; flex-shrink: 0; }
 .rs-status.draft { background: color-mix(in srgb, var(--text-muted) 15%, transparent); color: var(--text-muted); }
 .rs-status.published { background: color-mix(in srgb, #22c55e 15%, transparent); color: #16a34a; }
+.rs-status.reviewing { background: color-mix(in srgb, #f5a623 15%, transparent); color: #d97706; }
+.rs-status.deprecated { background: color-mix(in srgb, #e74c3c 15%, transparent); color: #e74c3c; }
 .rs-version { font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); }
-.rs-actions { margin-top: auto; }
 .edit-btn {
-  width: 100%; padding: var(--space-1) 0; border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+  flex: 1; padding: var(--space-1) 0; border: 1px solid var(--border-default); border-radius: var(--radius-sm);
   background: none; cursor: pointer; font-size: var(--text-sm); color: var(--text-primary);
   transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 .edit-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.fork-btn {
+  padding: var(--space-1) var(--space-2); border: 1px solid #7b68ee; border-radius: var(--radius-sm);
+  background: none; cursor: pointer; font-size: var(--text-xs); color: #7b68ee;
+  transition: background var(--transition-fast);
+}
+.fork-btn:hover { background: color-mix(in srgb, #7b68ee 10%, transparent); }
+.fork-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rs-actions { margin-top: auto; display: flex; gap: var(--space-2); }
 .form-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .form-label { font-size: var(--text-sm); font-weight: 500; color: var(--text-secondary); }
 .field-input {

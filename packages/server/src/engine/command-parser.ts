@@ -53,23 +53,25 @@ export function parseCommand(input: string): ParsedCommand {
       }
     }
   } else if (restParts.length > 0) {
-    // Positional: treat all rest as "expression" for roll-like commands
+    // Positional: treat all rest as "expression" for roll-like commands (backward compat)
     params['expression'] = restParts.join(' ');
+    // Also provide individual positional args (arg0, arg1, ...) for commands that need them
+    restParts.forEach((part, i) => {
+      params[`arg${i}`] = part;
+    });
   }
 
   return { command, params, raw: input };
 }
 
 /**
- * 将解析后的命令 + 上下文组装为 ExecuteRequest
+ * 将解析后的命令 + 上下文组装为 ExecuteRequest（新格式，不含 ruleset_id）
  */
 export function buildExecuteRequest(
   parsed: ParsedCommand,
-  ruleset_id: string,
   context: { character_id: string; campaign_id: string; scene_id?: string }
 ): ExecuteRequest {
   return {
-    ruleset_id,
     command: parsed.command,
     params: parsed.params,
     context,
