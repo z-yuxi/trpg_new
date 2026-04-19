@@ -70,6 +70,9 @@ router.get('/:id', async (req, res) => {
 // PUT /api/campaigns/:id
 router.put('/:id', async (req, res) => {
   try {
+    const campaign = await campaignService.findById(req.params.id);
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update campaign' }); return; }
     const updated = await campaignService.update(req.params.id, req.body);
     res.json(updated);
   } catch (err: any) {
@@ -90,6 +93,9 @@ router.get('/:id/scenes', async (req, res) => {
 // POST /api/campaigns/:id/scenes
 router.post('/:id/scenes', async (req, res) => {
   try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scenes' }); return; }
     const id = generateId();
     await db('scenes').insert({ id, campaign_id: req.params.id, ...req.body });
     const scene = await db('scenes').where({ id }).first();
@@ -102,6 +108,9 @@ router.post('/:id/scenes', async (req, res) => {
 // POST /api/campaigns/:id/scenes/connections
 router.post('/:id/scenes/connections', async (req, res) => {
   try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scene connections' }); return; }
     const id = generateId();
     await db('scene_connections').insert({ id, campaign_id: req.params.id, created_by: req.user!.id, ...req.body });
     const conn = await db('scene_connections').where({ id }).first();
@@ -124,6 +133,9 @@ router.get('/:id/scenes/connections', async (req, res) => {
 // POST /api/campaigns/:id/npcs
 router.post('/:id/npcs', async (req, res) => {
   try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create NPCs' }); return; }
     const id = generateId();
     await db('campaign_npcs').insert({ id, campaign_id: req.params.id, created_by: req.user!.id, ...req.body });
     const npc = await db('campaign_npcs').where({ id }).first();
@@ -146,6 +158,9 @@ router.get('/:id/npcs', async (req, res) => {
 // PUT /api/campaigns/:id/npcs/:npcId
 router.put('/:id/npcs/:npcId', async (req, res) => {
   try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update NPCs' }); return; }
     await db('campaign_npcs').where({ id: req.params.npcId, campaign_id: req.params.id }).update(req.body);
     const npc = await db('campaign_npcs').where({ id: req.params.npcId }).first();
     res.json(npc ?? { error: 'Not found' });

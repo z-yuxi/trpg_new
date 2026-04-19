@@ -22,27 +22,35 @@ export function registerChatHandlers(
 
     // join_room 事件
     socket.on('join_room', async (data) => {
-      const { campaign_id, character_id, last_event_id } = data;
-      socket.data.campaignId = campaign_id;
-      socket.data.characterId = character_id;
-      socket.join(`campaign:${campaign_id}`);
+      try {
+        const { campaign_id, character_id, last_event_id } = data;
+        socket.data.campaignId = campaign_id;
+        socket.data.characterId = character_id;
+        socket.join(`campaign:${campaign_id}`);
 
-      await redis.sadd(RedisKeys.campaignOnline(campaign_id), userId);
-      await redis.set(RedisKeys.userSocket(userId), socket.id);
+        await redis.sadd(RedisKeys.campaignOnline(campaign_id), userId);
+        await redis.set(RedisKeys.userSocket(userId), socket.id);
 
-      if (last_event_id) {
-        const { handleReconnection } = await import('./reconnection-handler.js');
-        await handleReconnection(socket, campaign_id, character_id, last_event_id);
+        if (last_event_id) {
+          const { handleReconnection } = await import('./reconnection-handler.js');
+          await handleReconnection(socket, campaign_id, character_id, last_event_id);
+        }
+      } catch (err) {
+        console.error('[join_room] handler error:', err);
       }
     });
 
     // leave_room 事件
     socket.on('leave_room', async () => {
-      const campaignId = socket.data.campaignId as string;
-      if (campaignId) {
-        socket.leave(`campaign:${campaignId}`);
-        await redis.srem(RedisKeys.campaignOnline(campaignId), userId);
-        await redis.del(RedisKeys.userSocket(userId));
+      try {
+        const campaignId = socket.data.campaignId as string;
+        if (campaignId) {
+          socket.leave(`campaign:${campaignId}`);
+          await redis.srem(RedisKeys.campaignOnline(campaignId), userId);
+          await redis.del(RedisKeys.userSocket(userId));
+        }
+      } catch (err) {
+        console.error('[leave_room] handler error:', err);
       }
     });
 
@@ -53,6 +61,7 @@ export function registerChatHandlers(
 
     // chat_message 事件
     socket.on('chat_message', async (data) => {
+      try {
       const campaignId = socket.data.campaignId as string;
       const characterId = socket.data.characterId as string;
 
@@ -131,10 +140,14 @@ export function registerChatHandlers(
       await redis.ltrim(RedisKeys.messageBuffer(campaignId), 0, 199);
 
       roomNsp.to(`campaign:${campaignId}`).emit('new_message', message);
+      } catch (err) {
+        console.error('[chat_message] handler error:', err);
+      }
     });
 
     // GM 推进时间
     socket.on('gm_advance_time', async (data) => {
+      try {
       const campaignId = socket.data.campaignId as string;
       if (!campaignId) return;
 
@@ -214,10 +227,14 @@ export function registerChatHandlers(
         new_time: newTime,
         triggered_moves: triggeredMoves,
       });
+      } catch (err) {
+        console.error('[gm_advance_time] handler error:', err);
+      }
     });
 
     // 请求移动
     socket.on('request_move', async (data) => {
+      try {
       const { target_scene_id } = data;
       const campaignId = socket.data.campaignId as string;
       const characterId = socket.data.characterId as string;
@@ -250,10 +267,14 @@ export function registerChatHandlers(
           });
         }
       }
+      } catch (err) {
+        console.error('[request_move] handler error:', err);
+      }
     });
 
     // GM 审批移动
     socket.on('gm_approve_move', async (data) => {
+      try {
       const { move_id } = data;
       const move = await db('scheduled_moves').where({ id: move_id }).first();
       if (!move) return;
@@ -270,10 +291,14 @@ export function registerChatHandlers(
           roomNsp.to(playerSocketId).emit('move_approved', { move_id, execute_at: executeAt });
         }
       }
+      } catch (err) {
+        console.error('[gm_approve_move] handler error:', err);
+      }
     });
 
     // GM 拒绝移动
     socket.on('gm_reject_move', async (data) => {
+      try {
       const { move_id } = data;
       const move = await db('scheduled_moves').where({ id: move_id }).first();
       if (!move) return;
@@ -287,14 +312,21 @@ export function registerChatHandlers(
           roomNsp.to(playerSocketId).emit('move_rejected', { move_id });
         }
       }
+      } catch (err) {
+        console.error('[gm_reject_move] handler error:', err);
+      }
     });
 
     // 断线
     socket.on('disconnect', async () => {
-      const campaignId = socket.data.campaignId as string;
-      if (campaignId) {
-        await redis.srem(RedisKeys.campaignOnline(campaignId), userId);
-        await redis.del(RedisKeys.userSocket(userId));
+      try {
+        const campaignId = socket.data.campaignId as string;
+        if (campaignId) {
+          await redis.srem(RedisKeys.campaignOnline(campaignId), userId);
+          await redis.del(RedisKeys.userSocket(userId));
+        }
+      } catch (err) {
+        console.error('[disconnect] handler error:', err);
       }
     });
   });

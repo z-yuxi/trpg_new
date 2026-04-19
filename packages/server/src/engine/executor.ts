@@ -135,22 +135,7 @@ export class GraphExecutor {
       deps.set(node.node_id, nodeDeps);
     }
 
-    // Kahn's algorithm
-    const inDegree = new Map<string, number>();
-    for (const id of nodeIds) inDegree.set(id, 0);
-    for (const [, nodeDeps] of deps) {
-      for (const dep of nodeDeps) {
-        inDegree.set(dep, (inDegree.get(dep) ?? 0));
-      }
-    }
-    // Count how many nodes depend on each node
-    for (const [nodeId, nodeDeps] of deps) {
-      for (const dep of nodeDeps) {
-        void dep; void nodeId;
-      }
-    }
-
-    // Actually: in-degree = number of nodes that this depends on
+    // Kahn's algorithm: remaining 记录每个节点还剩哪些依赖未处理
     const sorted: string[] = [];
     const queue: string[] = [];
 
