@@ -1,5 +1,19 @@
 import type { ChatMessage, StoryTime, CharacterInstance, SnowflakeId } from './index';
 
+// ===== 通知类型 =====
+export type NotificationType = 'system' | 'transaction' | 'social' | 'audit';
+
+export interface UserNotification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+  is_read: boolean;
+  created_at: Date;
+}
+
 // ===== Server → Client 事件 =====
 export interface ServerToClientEvents {
   new_message: (message: ChatMessage) => void;
@@ -23,6 +37,8 @@ export interface ServerToClientEvents {
     your_state: CharacterInstance;
     global_time: StoryTime;
   }) => void;
+  notification_new: (notification: UserNotification) => void;
+  unread_count_changed: (data: { count: number }) => void;
 }
 
 // ===== Client → Server 事件 =====

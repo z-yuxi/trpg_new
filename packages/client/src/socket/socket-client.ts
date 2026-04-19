@@ -110,6 +110,14 @@ export class SocketClient {
     this.roomSocket?.on('missed_messages', handler);
   }
 
+  onNotificationNew(handler: (notification: any) => void): void {
+    this.userSocket?.on('notification_new', handler);
+  }
+
+  onUnreadCountChanged(handler: (data: { count: number }) => void): void {
+    this.userSocket?.on('unread_count_changed', handler);
+  }
+
   disconnect(): void {
     this.roomSocket?.disconnect();
     this.userSocket?.disconnect();

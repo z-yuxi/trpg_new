@@ -2,6 +2,8 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { RecruitmentService } from '../services/recruitment-service';
+import { notificationService } from '../services/notification-service';
+import { db } from '../db';
 
 const router: IRouter = Router();
 const recruitmentService = new RecruitmentService();
@@ -107,6 +109,17 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
       user_id: req.user!.id,
       content: parsed.data.content,
     });
+    // 通知帖主（非本人评论才通知）
+    const post = await db('recruitment_posts').where({ id: req.params.id }).select('poster_id', 'title').first();
+    if (post && post['poster_id'] !== req.user!.id) {
+      notificationService.createNotification({
+        userId: post['poster_id'] as string,
+        type: 'social',
+        title: '你的招募帖有新评论',
+        content: `有人评论了你的招募帖《${post['title']}》。`,
+        metadata: { post_id: req.params.id },
+      }).catch(() => {});
+    }
     res.status(201).json(comment);
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Comment failed' });
@@ -128,6 +141,20 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, async (re
       owner_id: req.user!.id,
       action: parsed.data.action,
     });
+    // 通知申请者
+    const applicantUserId = (result as Record<string, unknown>)['applicant_user_id'] as string | undefined;
+    if (applicantUserId) {
+      const isApprove = parsed.data.action === 'approve';
+      notificationService.createNotification({
+        userId: applicantUserId,
+        type: 'audit',
+        title: isApprove ? '招募申请已通过' : '招募申请已拒绝',
+        content: isApprove
+          ? '你的招募申请已被GM批准，等待成团通知。'
+          : '你的招募申请未获批准，可继续寻找其他团。',
+        metadata: { post_id: req.params.id, application_id: req.params.applicationId },
+      }).catch(() => {/* 通知失败不影响主流程 */});
+    }
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Review failed' });

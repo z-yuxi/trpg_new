@@ -4,6 +4,7 @@ import { snowflake, generateId } from '@trpg/shared';
 import { redis, RedisKeys } from '../db/redis';
 import { db } from '../db';
 import { computeVisibleTo, characterIdsToUserIds } from '../services/visibility';
+import { notificationService } from '../services/notification-service';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -325,6 +326,13 @@ export function registerChatHandlers(
             : { day: 1, hour: 8, minute: 0 };
           roomNsp.to(playerSocketId).emit('move_approved', { move_id, execute_at: executeAt });
         }
+        notificationService.createNotification({
+          userId: charSheet.user_id as string,
+          type: 'system',
+          title: '移动请求已批准',
+          content: 'GM已批准你的移动请求。',
+          metadata: { move_id },
+        }).catch(() => {});
       }
       } catch (err) {
         console.error('[gm_approve_move] handler error:', err);
@@ -346,6 +354,13 @@ export function registerChatHandlers(
         if (playerSocketId) {
           roomNsp.to(playerSocketId).emit('move_rejected', { move_id });
         }
+        notificationService.createNotification({
+          userId: charSheet.user_id as string,
+          type: 'system',
+          title: '移动请求已拒绝',
+          content: 'GM拒绝了你的移动请求。',
+          metadata: { move_id },
+        }).catch(() => {});
       }
       } catch (err) {
         console.error('[gm_reject_move] handler error:', err);

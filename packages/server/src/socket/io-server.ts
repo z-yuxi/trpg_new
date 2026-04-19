@@ -2,6 +2,7 @@ import type { Server as HttpServer } from 'http';
 import { Server } from 'socket.io';
 import type { ServerToClientEvents, ClientToServerEvents } from '@trpg/shared';
 import { authService } from '../services/auth-service';
+import { setupUserHandler } from './user-handler';
 
 export type TypedIO = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -25,7 +26,8 @@ export function createSocketServer(httpServer: HttpServer): TypedIO {
     }
   });
 
-  io.of('/user').use(async (socket, next) => {
+  const userNsp = io.of('/user');
+  userNsp.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token as string;
       if (!token) throw new Error('Missing auth token');
@@ -36,6 +38,7 @@ export function createSocketServer(httpServer: HttpServer): TypedIO {
       next(new Error('Authentication failed'));
     }
   });
+  setupUserHandler(userNsp as Parameters<typeof setupUserHandler>[0]);
 
   return io;
 }
