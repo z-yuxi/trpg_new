@@ -6,9 +6,21 @@ const routes = [
     component: () => import('../layouts/MainLayout.vue'),
     children: [
       { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页' } },
-      { path: 'assets', name: 'AssetLibrary', component: () => import('../views/AssetLibrary.vue'), meta: { title: '素材广场' } },
+      { path: 'assets', name: 'AssetLibrary', component: () => import('../views/AssetLibrary.vue'), meta: { title: '广场' } },
       { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的战役' } },
-      { path: 'community', name: 'Community', component: () => import('../views/Community.vue'), meta: { title: '社区' } },
+      {
+        path: 'community',
+        name: 'Community',
+        component: () => import('../views/Community.vue'),
+        meta: { title: '社区' },
+        children: [
+          { path: '', redirect: { path: '/community/recruit' } },
+          { path: 'recruit', name: 'CommunityRecruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '组团招募' } },
+          { path: 'forum/:board', name: 'ForumBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
+          { path: 'activity', name: 'CommunityActivity', component: () => import('../views/community/MyActivity.vue'), meta: { title: '我的动态' } },
+        ],
+      },
+      { path: 'community/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
       { path: 'community/:id', name: 'CommunityRecruitmentDetail', component: () => import('../views/community/RecruitmentDetail.vue'), meta: { title: '招募详情' } },
       { path: 'personal', name: 'Personal', component: () => import('../views/Personal.vue'), meta: { title: '我的' } },
       { path: 'personal/characters', name: 'PersonalCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '我的角色卡' } },

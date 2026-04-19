@@ -1,220 +1,132 @@
-<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import {
-  ElTabs,
-  ElTabPane,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElSelect,
-  ElOption,
-  ElInputNumber,
-  ElMessage,
-  ElCheckboxGroup,
-  ElCheckbox,
-} from 'element-plus';
-import RecruitmentBoard from './community/RecruitmentBoard.vue';
-import TButton from '../components/base/TButton.vue';
-import { useAuthStore } from '../stores/auth-store';
-import { api } from '../utils/api';
+﻿<script setup lang="ts">
+import { useRoute } from 'vue-router';
 
-interface RulesetOption {
-  id: string;
-  name: string;
+const route = useRoute();
+
+const BOARD_ITEMS = [
+  { key: 'rules',      label: '规则问答' },
+  { key: 'creation',   label: '模组创作' },
+  { key: 'experience', label: '游玩体验' },
+  { key: 'newbie',     label: '新人求助' },
+  { key: 'lounge',     label: '水区' },
+];
+
+function isRecruitActive() {
+  return route.path.startsWith('/community/recruit') || route.path === '/community';
 }
-
-const authStore = useAuthStore();
-const activeTab = ref<'gm_recruit' | 'player_seek'>('gm_recruit');
-const boardVersion = ref(1);
-
-const showPostDialog = ref(false);
-const submitLoading = ref(false);
-const rulesets = ref<RulesetOption[]>([]);
-
-const tagOptions = ['新手友好', '长期团', '单发团', '语音团', '文字团'];
-
-const postForm = ref({
-  type: 'gm_recruit' as 'gm_recruit' | 'player_seek',
-  title: '',
-  ruleset_id: '',
-  module_name: '',
-  player_count_max: 4,
-  schedule_text: '',
-  description: '',
-  tags: [] as string[],
-});
-
-const titleLeft = computed(() => 50 - postForm.value.title.length);
-const descLeft = computed(() => 2000 - postForm.value.description.length);
-
-async function loadRulesets() {
-  try {
-    const result = await api.get<Array<{ id: string; name: string }>>('/rulesets');
-    if (Array.isArray(result) && result.length > 0) {
-      rulesets.value = result.map((item) => ({ id: item.id, name: item.name }));
-    }
-  } catch {
-    // ignore
-  }
-
-  if (rulesets.value.length === 0) {
-    rulesets.value = [
-      { id: 'coc', name: '克苏鲁神话' },
-      { id: 'dnd5e', name: 'D&D 5e' },
-    ];
-  }
+function isBoardActive(key: string) {
+  return route.params.board === key;
 }
-
-function resetPostForm() {
-  postForm.value = {
-    type: activeTab.value,
-    title: '',
-    ruleset_id: '',
-    module_name: '',
-    player_count_max: 4,
-    schedule_text: '',
-    description: '',
-    tags: [],
-  };
-}
-
-function openPostDialog() {
-  resetPostForm();
-  showPostDialog.value = true;
-}
-
-async function submitPost() {
-  if (!authStore.token) {
-    ElMessage.warning('请先登录后再发布');
-    return;
-  }
-
-  const title = postForm.value.title.trim();
-  if (!title || title.length > 50) {
-    ElMessage.warning('标题必填且不超过 50 字');
-    return;
-  }
-
-  if (!postForm.value.ruleset_id) {
-    ElMessage.warning('请选择规则包');
-    return;
-  }
-
-  submitLoading.value = true;
-  try {
-    await api.post('/recruitment', {
-      title,
-      type: postForm.value.type,
-      ruleset_id: postForm.value.ruleset_id,
-      module_name: postForm.value.module_name.trim() || null,
-      player_count_max: postForm.value.player_count_max,
-      schedule_text: postForm.value.schedule_text.trim() || null,
-      description: postForm.value.description.trim() || null,
-      tags: postForm.value.tags,
-    });
-
-    ElMessage.success('发布成功');
-    showPostDialog.value = false;
-    boardVersion.value += 1;
-  } catch (err: any) {
-    ElMessage.error(err?.message ?? '发布失败');
-  } finally {
-    submitLoading.value = false;
-  }
-}
-
-onMounted(loadRulesets);
 </script>
 
 <template>
-  <div class="community">
-    <div class="page-header">
-      <h1 class="page-title">社区招募</h1>
-      <TButton type="primary" @click="openPostDialog">+ 发布招募帖</TButton>
+  <div class="community-layout">
+    <!-- 左侧导航 -->
+    <aside class="community-sidebar">
+      <nav>
+        <div class="nav-section">
+          <div class="section-label">招募板</div>
+          <router-link to="/community/recruit" class="nav-link" :class="{ active: isRecruitActive() }">
+            组团招募
+          </router-link>
+        </div>
+
+        <div class="nav-section">
+          <div class="section-label">讨论区</div>
+          <router-link
+            v-for="board in BOARD_ITEMS"
+            :key="board.key"
+            :to="`/community/forum/${board.key}`"
+            class="nav-link"
+            :class="{ active: isBoardActive(board.key) }"
+          >
+            {{ board.label }}
+          </router-link>
+        </div>
+
+        <div class="nav-section">
+          <router-link to="/community/activity" class="nav-link" active-class="active">
+            我的动态
+          </router-link>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- 右侧内容区 -->
+    <div class="community-content">
+      <router-view />
     </div>
-
-    <ElTabs v-model="activeTab">
-      <ElTabPane label="GM 招玩家" name="gm_recruit">
-        <RecruitmentBoard :key="`gm-${boardVersion}`" type="gm_recruit" :rulesets="rulesets" />
-      </ElTabPane>
-      <ElTabPane label="玩家求组" name="player_seek">
-        <RecruitmentBoard :key="`player-${boardVersion}`" type="player_seek" :rulesets="rulesets" />
-      </ElTabPane>
-    </ElTabs>
-
-    <ElDialog v-model="showPostDialog" title="发布招募帖" width="680px" destroy-on-close>
-      <ElForm :model="postForm" label-position="top">
-        <ElFormItem label="标题（必填，最多 50 字）" required>
-          <ElInput v-model="postForm.title" maxlength="50" show-word-limit />
-          <div class="hint">剩余 {{ titleLeft }} 字</div>
-        </ElFormItem>
-
-        <ElFormItem label="招募类型" required>
-          <ElSelect v-model="postForm.type" style="width:100%">
-            <ElOption label="GM 招玩家" value="gm_recruit" />
-            <ElOption label="玩家求组" value="player_seek" />
-          </ElSelect>
-        </ElFormItem>
-
-        <div class="grid-row">
-          <ElFormItem label="规则包" required>
-            <ElSelect v-model="postForm.ruleset_id" filterable style="width:100%">
-              <ElOption v-for="item in rulesets" :key="item.id" :label="item.name" :value="item.id" />
-            </ElSelect>
-          </ElFormItem>
-
-          <ElFormItem label="模组（可选，可填“待定”）">
-            <ElInput v-model="postForm.module_name" maxlength="100" placeholder="例如：待定" />
-          </ElFormItem>
-        </div>
-
-        <div class="grid-row">
-          <ElFormItem label="需求人数" required>
-            <ElInputNumber v-model="postForm.player_count_max" :min="1" :max="20" controls-position="right" />
-          </ElFormItem>
-
-          <ElFormItem label="时间安排">
-            <ElInput v-model="postForm.schedule_text" maxlength="255" placeholder="例如：每周六晚 8-11 点" />
-          </ElFormItem>
-        </div>
-
-        <ElFormItem label="描述（Markdown 文本，最多 2000 字）">
-          <ElInput v-model="postForm.description" type="textarea" :rows="6" maxlength="2000" show-word-limit />
-          <div class="hint">剩余 {{ descLeft }} 字</div>
-        </ElFormItem>
-
-        <ElFormItem label="标签（可多选）">
-          <ElCheckboxGroup v-model="postForm.tags">
-            <ElCheckbox v-for="tag in tagOptions" :key="tag" :label="tag">{{ tag }}</ElCheckbox>
-          </ElCheckboxGroup>
-        </ElFormItem>
-      </ElForm>
-
-      <template #footer>
-        <TButton type="secondary" @click="showPostDialog = false">取消</TButton>
-        <TButton type="primary" :loading="submitLoading" @click="submitPost">发布</TButton>
-      </template>
-    </ElDialog>
   </div>
 </template>
 
 <style scoped>
-.community { max-width: 980px; margin: 0 auto; }
-.page-header {
+.community-layout {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-4);
+  min-height: calc(100vh - var(--navbar-height, 56px) - 56px);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  gap: var(--space-5);
 }
-.page-title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); }
-.grid-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
+
+/* 左侧导航 */
+.community-sidebar {
+  width: 200px;
+  flex-shrink: 0;
 }
-.hint { margin-top: 4px; font-size: var(--text-xs); color: var(--color-text-muted); }
+
+nav {
+  position: sticky;
+  top: calc(var(--navbar-height, 56px) + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: var(--space-3);
+}
+.nav-section:last-child { border-bottom: none; margin-bottom: 0; }
+
+.section-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.nav-link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.nav-link:hover { background: var(--surface-hover); color: var(--text-primary); }
+.nav-link.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: var(--font-medium); }
+
+/* 右侧内容 */
+.community-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 响应式：手机折叠侧边栏 */
 @media (max-width: 768px) {
-  .grid-row { grid-template-columns: 1fr; }
+  .community-layout { flex-direction: column; padding: var(--space-3); }
+  .community-sidebar { width: 100%; }
+  nav { position: static; flex-direction: row; flex-wrap: wrap; gap: var(--space-1); }
+  .nav-section { flex-direction: row; border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex-wrap: wrap; align-items: center; }
+  .section-label { display: none; }
 }
 </style>
