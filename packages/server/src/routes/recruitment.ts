@@ -1,60 +1,174 @@
 import { Router, type IRouter } from 'express';
-import { authMiddleware } from '../middleware/auth';
+import { z } from 'zod';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { RecruitmentService } from '../services/recruitment-service';
 
 const router: IRouter = Router();
 const recruitmentService = new RecruitmentService();
 
-// POST /api/recruitment - 发布招募帖（需要认证）
+const createSchema = z.object({
+  title: z.string().min(1).max(50),
+  type: z.enum(['gm_recruit', 'player_seek']),
+  ruleset_id: z.string().min(1),
+  module_name: z.string().max(100).optional().nullable(),
+  player_count_max: z.number().int().min(1).max(20),
+  schedule_text: z.string().max(255).optional().nullable(),
+  description: z.string().max(2000).optional().nullable(),
+  tags: z.array(z.string().min(1).max(20)).max(10).optional(),
+});
+
 router.post('/', authMiddleware, async (req, res) => {
+  const parsed = createSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
   try {
-    const post = await recruitmentService.create({ ...req.body, poster_id: req.user!.id });
+    const post = await recruitmentService.create({
+      ...parsed.data,
+      poster_id: req.user!.id,
+    });
     res.status(201).json(post);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Create failed' });
   }
 });
 
-// GET /api/recruitment - 招募帖列表（公开）
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-    const filters = {
-      status: req.query.status as string | undefined,
-      type: req.query.type as string | undefined,
-    };
-    const posts = await recruitmentService.list(filters);
-    // 手动分页
-    const start = (page - 1) * limit;
-    res.json({
-      data: posts.slice(start, start + limit),
-      total: posts.length,
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 10);
+
+    const result = await recruitmentService.list({
       page,
       limit,
+      sort: req.query.sort === 'oldest' ? 'oldest' : 'latest',
+      keyword: typeof req.query.keyword === 'string' ? req.query.keyword.trim() : undefined,
+      type: req.query.type as 'gm_recruit' | 'player_seek' | undefined,
+      ruleset_id: typeof req.query.ruleset_id === 'string' ? req.query.ruleset_id : undefined,
+      status: req.query.status as 'open' | 'full' | 'grouped' | 'closed' | undefined,
     });
+
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }
 });
 
-// GET /api/recruitment/:id - 招募帖详情（公开）
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuthMiddleware, async (req, res) => {
   try {
-    const post = await recruitmentService.findById(req.params.id);
-    if (!post) { res.status(404).json({ error: 'Not found' }); return; }
-    res.json(post);
+    const detail = await recruitmentService.getDetail(req.params.id, req.user?.id);
+    if (!detail) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json(detail);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }
 });
 
-// PUT /api/recruitment/:id - 更新招募帖（需要认证，验证所有权）
+router.post('/:id/apply', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    character_id: z.string().optional().nullable(),
+    message: z.string().min(1).max(500),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const application = await recruitmentService.createApplication({
+      post_id: req.params.id,
+      applicant_user_id: req.user!.id,
+      character_id: parsed.data.character_id,
+      message: parsed.data.message,
+    });
+    res.status(201).json(application);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Apply failed' });
+  }
+});
+
+router.post('/:id/comments', authMiddleware, async (req, res) => {
+  const schema = z.object({ content: z.string().min(1).max(1000) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const comment = await recruitmentService.createComment({
+      post_id: req.params.id,
+      user_id: req.user!.id,
+      content: parsed.data.content,
+    });
+    res.status(201).json(comment);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Comment failed' });
+  }
+});
+
+router.post('/:id/applications/:applicationId/review', authMiddleware, async (req, res) => {
+  const schema = z.object({ action: z.enum(['approve', 'reject']) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const result = await recruitmentService.reviewApplication({
+      post_id: req.params.id,
+      application_id: req.params.applicationId,
+      owner_id: req.user!.id,
+      action: parsed.data.action,
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Review failed' });
+  }
+});
+
+router.post('/:id/form-group', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    selected_application_ids: z.array(z.string()).min(1),
+    module_name: z.string().max(100).optional().nullable(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const result = await recruitmentService.formGroup({
+      post_id: req.params.id,
+      owner_id: req.user!.id,
+      selected_application_ids: parsed.data.selected_application_ids,
+      module_name: parsed.data.module_name,
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Group formation failed' });
+  }
+});
+
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const post = await recruitmentService.findById(req.params.id);
-    if (!post) { res.status(404).json({ error: 'Not found' }); return; }
-    if (post.poster_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (!post) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (post.poster_id !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
     const updated = await recruitmentService.update(req.params.id, req.body);
     res.json(updated);
   } catch (err: any) {

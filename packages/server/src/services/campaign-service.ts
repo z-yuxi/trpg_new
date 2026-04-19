@@ -89,10 +89,28 @@ export class CampaignService {
   }
 
   async findByUserId(user_id: string): Promise<Campaign[]> {
-    const rows = await db('campaigns')
-      .where({ gm_user_id: user_id })
+    const gmQuery = db('campaigns')
+      .select('campaigns.*', db.raw("'gm' as role"))
+      .where({ gm_user_id: user_id });
+
+    const playerQuery = db('campaigns as c')
+      .join('character_scene_states as css', 'css.campaign_id', 'c.id')
+      .join('character_sheets as cs', 'cs.id', 'css.character_id')
+      .where('cs.user_id', user_id)
+      .andWhereNot('c.gm_user_id', user_id)
+      .select('c.*', db.raw("'player' as role"));
+
+    const rows = await gmQuery
+      .union(playerQuery)
       .orderBy('created_at', 'desc');
-    return rows.map(rowToCampaign);
+
+    return rows.map((row: Record<string, unknown>) => {
+      const campaign = rowToCampaign(row);
+      return {
+        ...campaign,
+        role: row['role'] as string,
+      };
+    }) as Campaign[];
   }
 
   async update(id: string, updates: Partial<Pick<Campaign, 'name' | 'status' | 'allow_ob' | 'is_listed_publicly'>>): Promise<Campaign> {

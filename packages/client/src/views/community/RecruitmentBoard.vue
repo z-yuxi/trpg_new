@@ -1,76 +1,183 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElInput, ElSelect, ElOption, ElPagination, ElMessage } from 'element-plus';
 import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
+import { api } from '../../utils/api';
 
-const filterStatus = ref<'all' | 'open' | 'full'>('all');
-const posts = ref<any[]>([]);
+interface RulesetOption {
+  id: string;
+  name: string;
+}
+
+interface RecruitmentPostVM {
+  id: string;
+  title: string;
+  type: 'gm_recruit' | 'player_seek';
+  status: 'open' | 'full' | 'closed';
+  status_view: 'open' | 'full' | 'grouped' | 'closed';
+  poster_nickname: string;
+  ruleset_id: string;
+  ruleset_name: string;
+  module_name?: string | null;
+  player_count_max: number;
+  player_count_joined: number;
+  created_at: string;
+}
+
+const props = defineProps<{
+  type: 'gm_recruit' | 'player_seek';
+  rulesets: RulesetOption[];
+}>();
+
+const router = useRouter();
 const loading = ref(false);
+const posts = ref<RecruitmentPostVM[]>([]);
+const total = ref(0);
+const page = ref(1);
+const limit = ref(8);
 
-const filtered = computed(() =>
-  posts.value.filter(p => filterStatus.value === 'all' || p.status === filterStatus.value)
-);
+const filterStatus = ref<'all' | 'open' | 'full' | 'grouped' | 'closed'>('all');
+const filterRuleset = ref('all');
+const sort = ref<'latest' | 'oldest'>('latest');
+const keyword = ref('');
 
-const statusMap: Record<string, { label: string; color: 'success' | 'default' | 'danger' }> = {
+const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'danger' | 'default' }> = {
   open: { label: '招募中', color: 'success' },
+  full: { label: '已满员', color: 'warning' },
+  grouped: { label: '已成团', color: 'danger' },
   closed: { label: '已关闭', color: 'default' },
-  full: { label: '已满员', color: 'danger' },
 };
 
-onMounted(async () => {
+const rulesetOptions = computed(() => [{ id: 'all', name: '全部规则包' }, ...props.rulesets]);
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
+
+async function loadPosts() {
   loading.value = true;
   try {
-    const res = await fetch('/api/recruitment');
-    if (res.ok) {
-      const data = await res.json();
-      posts.value = data.data ?? data;
-    }
-  } catch { /* ignore */ }
-  finally { loading.value = false; }
+    const query = new URLSearchParams({
+      page: String(page.value),
+      limit: String(limit.value),
+      type: props.type,
+      sort: sort.value,
+    });
+
+    if (filterStatus.value !== 'all') query.set('status', filterStatus.value);
+    if (filterRuleset.value !== 'all') query.set('ruleset_id', filterRuleset.value);
+    if (keyword.value.trim()) query.set('keyword', keyword.value.trim());
+
+    const result = await api.get<{ data: RecruitmentPostVM[]; total: number }>(`/recruitment?${query.toString()}`);
+    posts.value = result.data ?? [];
+    total.value = result.total ?? 0;
+  } catch (err: any) {
+    ElMessage.error(err?.message ?? '加载招募帖失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+function goDetail(id: string) {
+  router.push(`/community/${id}`);
+}
+
+function resetPageAndReload() {
+  page.value = 1;
+  loadPosts();
+}
+
+watch(() => props.type, resetPageAndReload);
+watch([filterStatus, filterRuleset, sort], resetPageAndReload);
+watch(keyword, () => {
+  page.value = 1;
 });
+
+onMounted(loadPosts);
 </script>
 
 <template>
   <div class="board">
-    <div class="filter-bar">
-      <button :class="{ active: filterStatus === 'all' }" @click="filterStatus = 'all'">全部</button>
-      <button :class="{ active: filterStatus === 'open' }" @click="filterStatus = 'open'">招募中</button>
-      <button :class="{ active: filterStatus === 'full' }" @click="filterStatus = 'full'">已满员</button>
+    <div class="toolbar">
+      <ElInput v-model="keyword" placeholder="按标题关键词搜索" clearable @keyup.enter="resetPageAndReload" @clear="resetPageAndReload" />
+      <ElSelect v-model="filterRuleset" @change="resetPageAndReload">
+        <ElOption v-for="item in rulesetOptions" :key="item.id" :label="item.name" :value="item.id" />
+      </ElSelect>
+      <ElSelect v-model="filterStatus" @change="resetPageAndReload">
+        <ElOption label="全部状态" value="all" />
+        <ElOption label="招募中" value="open" />
+        <ElOption label="已满员" value="full" />
+        <ElOption label="已成团" value="grouped" />
+        <ElOption label="已关闭" value="closed" />
+      </ElSelect>
+      <ElSelect v-model="sort" @change="resetPageAndReload">
+        <ElOption label="最新发布" value="latest" />
+        <ElOption label="最早发布" value="oldest" />
+      </ElSelect>
     </div>
+
     <div v-if="loading" class="empty">加载中...</div>
-    <div v-else-if="filtered.length === 0" class="empty">暂无招募帖</div>
+    <div v-else-if="posts.length === 0" class="empty">暂无符合条件的招募帖</div>
     <div v-else class="post-list">
-      <TCard v-for="p in filtered" :key="p.id" padding="md" hoverable>
-        <div class="post-title">{{ p.title }}</div>
-        <div class="post-meta">
-          <TTag :color="statusMap[p.status]?.color" size="sm">
-            {{ statusMap[p.status]?.label }}
-          </TTag>
-          <span class="ruleset">{{ p.ruleset_id }}</span>
-          <span class="players">{{ p.player_count_max }}人</span>
+      <TCard v-for="p in posts" :key="p.id" padding="md" hoverable class="post-card" @click="goDetail(p.id)">
+        <div class="post-top">
+          <h3 class="post-title">{{ p.title }}</h3>
+          <TTag :color="statusMap[p.status_view]?.color" size="sm">{{ statusMap[p.status_view]?.label }}</TTag>
         </div>
-        <div class="post-footer">
-          <span class="poster">{{ p.poster_id }}</span>
+
+        <div class="post-line">
+          <span>GM：{{ p.poster_nickname }}</span>
+          <span>规则包：{{ p.ruleset_name || p.ruleset_id }}</span>
         </div>
+        <div class="post-line">
+          <span>模组：{{ p.module_name || '待定' }}</span>
+          <span>人数：{{ p.player_count_joined }}/{{ p.player_count_max }}</span>
+        </div>
+        <div class="post-time">发布时间：{{ formatDate(p.created_at) }}</div>
       </TCard>
+    </div>
+
+    <div class="pager">
+      <ElPagination
+        v-model:current-page="page"
+        v-model:page-size="limit"
+        layout="prev, pager, next, jumper, total"
+        :total="total"
+        :page-sizes="[8, 12, 20]"
+        @current-change="loadPosts"
+        @size-change="resetPageAndReload"
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
 .board { display: flex; flex-direction: column; gap: var(--space-4); }
-.filter-bar { display: flex; gap: var(--space-2); }
-.filter-bar button {
-  padding: 4px 12px; border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-full); background: none; cursor: pointer;
-  font-size: var(--text-sm); color: var(--color-text-secondary);
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(130px, 180px));
+  gap: var(--space-2);
 }
-.filter-bar button.active { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
 .post-list { display: flex; flex-direction: column; gap: var(--space-3); }
-.post-title { font-weight: 600; margin-bottom: var(--space-2); }
-.post-meta { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
-.ruleset { font-size: var(--text-xs); color: var(--color-text-secondary); }
-.players { font-size: var(--text-xs); color: var(--color-text-muted); }
-.post-footer { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--color-text-muted); }
+.post-card { cursor: pointer; }
+.post-top { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.post-title { margin: 0; font-size: var(--text-lg); font-weight: 700; color: var(--color-text-primary); }
+.post-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-2);
+}
+.post-time { margin-top: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
+.pager { display: flex; justify-content: center; margin-top: var(--space-2); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6); }
+@media (max-width: 768px) {
+  .toolbar { grid-template-columns: 1fr; }
+}
 </style>

@@ -179,8 +179,34 @@ export interface RecruitmentPost {
   title: string;
   campaign_id: string | null;
   ruleset_id: string;
+  module_name?: string | null;
   player_count_max: number;
+  player_count_joined?: number;
+  schedule_text?: string | null;
+  description?: string | null;
+  tags?: string[];
   status: RecruitmentStatus;
+  created_at: Date;
+}
+
+export type RecruitmentApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RecruitmentApplication {
+  id: string;
+  post_id: string;
+  applicant_user_id: string;
+  character_id: string | null;
+  message: string;
+  status: RecruitmentApplicationStatus;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface RecruitmentComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  content: string;
   created_at: Date;
 }
 

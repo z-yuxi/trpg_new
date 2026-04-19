@@ -9,6 +9,7 @@ const routes = [
       { path: 'assets', name: 'AssetLibrary', component: () => import('../views/AssetLibrary.vue'), meta: { title: '素材广场' } },
       { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的战役' } },
       { path: 'community', name: 'Community', component: () => import('../views/Community.vue'), meta: { title: '社区' } },
+      { path: 'community/:id', name: 'CommunityRecruitmentDetail', component: () => import('../views/community/RecruitmentDetail.vue'), meta: { title: '招募详情' } },
       { path: 'personal', name: 'Personal', component: () => import('../views/Personal.vue'), meta: { title: '我的' } },
       { path: 'personal/characters', name: 'PersonalCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '我的角色卡' } },
       { path: 'personal/security', name: 'PersonalSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
