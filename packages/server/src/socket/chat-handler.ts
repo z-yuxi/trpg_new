@@ -3,6 +3,7 @@ import type { ServerToClientEvents, ClientToServerEvents, ChatMessage, StoryTime
 import { snowflake, generateId } from '@trpg/shared';
 import { redis, RedisKeys } from '../db/redis';
 import { db } from '../db';
+import { computeVisibleTo, characterIdsToUserIds } from '../services/visibility';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -121,6 +122,11 @@ export function registerChatHandlers(
         metadata: data.metadata || null,
       };
 
+      // 自动计算 visible_to（若客户端未显式指定）
+      if (!data.visible_to) {
+        message.visible_to = await computeVisibleTo(sceneId, campaignId).catch(() => null);
+      }
+
       await db('chat_messages').insert({
         id: BigInt(message.id),
         scene_id: message.scene_id,
@@ -139,7 +145,36 @@ export function registerChatHandlers(
       await redis.lpush(RedisKeys.messageBuffer(campaignId), JSON.stringify(message));
       await redis.ltrim(RedisKeys.messageBuffer(campaignId), 0, 199);
 
-      roomNsp.to(`campaign:${campaignId}`).emit('new_message', message);
+      // 定向广播：visible_to 为 null → 全体广播；否则只发给可见用户
+      if (message.visible_to === null) {
+        roomNsp.to(`campaign:${campaignId}`).emit('new_message', message);
+      } else {
+        // 获取团的 GM 用户 ID
+        const campaignRow = await db('campaigns')
+          .where({ id: campaignId })
+          .select('gm_user_id')
+          .first()
+          .catch(() => null);
+        const gmUserId = campaignRow?.gm_user_id as string | undefined;
+
+        // 将角色 ID 列表转换为用户 ID 列表（含 GM）
+        const visibleUserIds = await characterIdsToUserIds(
+          message.visible_to,
+          gmUserId ?? userId
+        );
+        // 发送者也一定能看到自己的消息
+        if (!visibleUserIds.includes(userId)) visibleUserIds.push(userId);
+
+        // 向每个可见用户的 socket 发送消息
+        await Promise.all(
+          visibleUserIds.map(async (uid) => {
+            const socketId = await redis.get(RedisKeys.userSocket(uid));
+            if (socketId) {
+              roomNsp.to(socketId).emit('new_message', message);
+            }
+          })
+        );
+      }
       } catch (err) {
         console.error('[chat_message] handler error:', err);
       }

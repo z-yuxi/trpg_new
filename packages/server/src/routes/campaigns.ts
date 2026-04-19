@@ -172,8 +172,26 @@ router.put('/:id/npcs/:npcId', async (req, res) => {
 // GET /api/campaigns/:id/messages
 router.get('/:id/messages', async (req, res) => {
   try {
+    const campaignId = req.params.id!;
+    const userId = req.user!.id;
+
+    // 查询团信息（判断 GM 身份）
+    const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+    const isGm = campaign?.gm_user_id === userId;
+
+    // 查询当前用户在本团内的角色 ID 列表
+    let userCharIds: string[] = [];
+    if (!isGm) {
+      const charRows = await db('character_sheets')
+        .where({ user_id: userId })
+        .join('character_scene_states', 'character_sheets.id', 'character_scene_states.character_id')
+        .where('character_scene_states.campaign_id', campaignId)
+        .select('character_sheets.id as char_id');
+      userCharIds = (charRows as { char_id: string }[]).map((r) => r.char_id);
+    }
+
     let query = db('chat_messages')
-      .where({ campaign_id: req.params.id })
+      .where({ campaign_id: campaignId })
       .orderBy('id', 'asc')
       .limit(50);
     if (req.query.after_id) {
@@ -183,13 +201,28 @@ router.get('/:id/messages', async (req, res) => {
       query = query.where({ scene_id: req.query.scene_id });
     }
     const messages = await query;
-    res.json(messages.map((m: Record<string, unknown>) => ({
+
+    // 序列化并按可见性过滤
+    const serialized = messages.map((m: Record<string, unknown>) => ({
       ...m,
-      id: m.id?.toString(),
-      visible_to: m.visible_to ? JSON.parse(m.visible_to as string) : null,
-      story_time: m.story_time ? JSON.parse(m.story_time as string) : null,
-      metadata: m.metadata ? JSON.parse(m.metadata as string) : null,
-    })));
+      id: m['id']?.toString(),
+      visible_to: m['visible_to'] ? JSON.parse(m['visible_to'] as string) : null,
+      story_time: m['story_time'] ? JSON.parse(m['story_time'] as string) : null,
+      metadata: m['metadata'] ? JSON.parse(m['metadata'] as string) : null,
+    }));
+
+    // GM 可查看所有消息；普通玩家只能看 visible_to=null 或包含自己角色 ID 的消息
+    const filtered = isGm
+      ? serialized
+      : serialized.filter((msg) => {
+          if ((msg as Record<string, unknown>)['sender_user_id'] === userId) return true;
+          const msgType = (msg as Record<string, unknown>)['message_type'] as string;
+          if (msgType === 'system' || msgType === 'announcement') return true;
+          if (msg['visible_to'] === null) return true;
+          return (msg['visible_to'] as string[]).some((cid) => userCharIds.includes(cid));
+        });
+
+    res.json(filtered);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }

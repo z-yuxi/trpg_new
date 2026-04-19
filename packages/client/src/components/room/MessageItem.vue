@@ -59,7 +59,10 @@ function parseClue(metadata: any) {
   <div v-else class="msg-bubble-row" :class="{ own: isOwn }">
     <div class="msg-avatar">{{ (message.sender_character_id ?? message.sender_user_id ?? '?')[0] }}</div>
     <div class="msg-bubble-wrap">
-      <div class="msg-bubble" :class="{ 'own-bubble': isOwn, 'failed': message._sendStatus === 'failed' }">
+      <div class="msg-bubble" :class="{ 'own-bubble': isOwn, 'failed': message._sendStatus === 'failed', 'private': message.visible_to !== null }">
+        <span v-if="message.visible_to !== null" class="private-badge" title="私密消息（仅部分人可见）">
+          <SvgIcon name="icon-lock" :size="12" />
+        </span>
         {{ message.content }}
         <span v-if="message._sendStatus === 'pending'" class="send-status pending" title="发送中">·</span>
         <span
@@ -236,6 +239,20 @@ function parseClue(metadata: any) {
 
 /* 发送失败 */
 .msg-bubble.failed { border-color: var(--color-danger); }
+
+/* 私密消息 */
+.msg-bubble.private {
+  border-style: dashed;
+  border-color: var(--color-warning);
+  opacity: 0.9;
+}
+.private-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--color-warning);
+  vertical-align: middle;
+}
 
 /* 时间戳 */
 .msg-time {
