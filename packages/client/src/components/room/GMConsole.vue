@@ -4,7 +4,9 @@ import { ElDialog, ElMessage } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
 import GridMap from './GridMap.vue';
-import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
+import TrajectoryMatrix from './TrajectoryMatrix.vue';
+import SceneRoadmap from './SceneRoadmap.vue';
+import type { StoryTime, Scene, CampaignNpc, PositionHistory } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -24,7 +26,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast' | 'grid'>('time');
+const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast' | 'grid' | 'trajectory'>('time');
 const activeGridSceneId = ref('');
 
 function padZ(n: number) { return String(n).padStart(2, '0'); }
@@ -305,6 +307,21 @@ const activeGridScene = computed(() => {
   return current ?? spatialScenes.value[0] ?? null;
 });
 
+// ─── Tab 5: 轨迹矩阵 ─────────────────────────────────────────────────────────
+const trajectoryHistory = ref<PositionHistory[]>([]);
+const trajectoryLoading = ref(false);
+
+async function loadTrajectoryHistory() {
+  trajectoryLoading.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/position-history`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) trajectoryHistory.value = await res.json();
+  } catch { /* ignore */ }
+  finally { trajectoryLoading.value = false; }
+}
+
 onMounted(() => {
   loadClues();
   loadPendingScheduledMoves();
@@ -317,7 +334,7 @@ onMounted(() => {
 <template>
   <div class="gm-console">
     <div class="console-tabs">
-      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
+      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'trajectory',icon:'icon-history',label:'轨迹'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
         <SvgIcon :name="tab.icon" :size="14" /><span>{{tab.label}}</span>
       </button>
     </div>
@@ -363,6 +380,7 @@ onMounted(() => {
           <tbody><tr v-for="s in scenes" :key="s.id"><td class="td-name">{{s.name}}</td><td><span class="type-tag" :class="s.type">{{typeLabel[s.type]??s.type}}</span></td><td class="td-desc">{{s.description||'—'}}</td></tr></tbody>
         </table>
         <div v-if="scenes.length===0" class="empty-hint">暂无场景</div>
+        <SceneRoadmap :campaign-id="campaignId" :scenes="scenes" :is-gm="true" style="margin-top:var(--space-3)" />
       </div>
       <!-- Tab 3: NPC -->
       <div v-else-if="activeTab==='npcs'" class="tab-pane">
@@ -396,7 +414,24 @@ onMounted(() => {
         />
         <div v-else class="empty-hint">请先创建空间场景后再使用地图</div>
       </div>
-      <!-- Tab 4: 广播 -->
+      <!-- Tab 5: 轨迹矩阵 -->
+      <div v-else-if="activeTab==='trajectory'" class="tab-pane">
+        <div class="pane-header">
+          <span class="pane-count">角色轨迹历史</span>
+          <button class="sm-btn" @click="loadTrajectoryHistory" :disabled="trajectoryLoading">
+            {{ trajectoryLoading ? '加载中...' : '刷新' }}
+          </button>
+        </div>
+        <div v-if="trajectoryHistory.length === 0 && !trajectoryLoading" class="empty-hint">暂无轨迹数据，点击刷新加载</div>
+        <TrajectoryMatrix
+          v-else
+          :position-history="trajectoryHistory"
+          :scenes="scenes"
+          :characters="characters"
+          :current-time="globalStoryTime"
+        />
+      </div>
+      <!-- Tab 6: 广播 -->
       <div v-else-if="activeTab==='broadcast'" class="tab-pane broadcast-pane">
         <div class="section-label">全员广播</div>
         <div class="broadcast-row">

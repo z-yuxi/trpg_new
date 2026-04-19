@@ -94,7 +94,7 @@ onMounted(scrollToHash);
 }
 
 .hero-card {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 12%, #ffffff) 0%, var(--surface-card) 72%);
+  background: var(--surface-card);
 }
 
 .eyebrow {
@@ -128,7 +128,7 @@ onMounted(scrollToHash);
   font-family: var(--font-mono);
   font-size: 28px;
   font-weight: 700;
-  color: var(--color-accent);
+  color: var(--text-muted);
 }
 
 .step-body {
@@ -154,8 +154,8 @@ onMounted(scrollToHash);
 
 .primary-btn {
   border: none;
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
 }
 
 .ghost-btn {

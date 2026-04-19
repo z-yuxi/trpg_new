@@ -4,9 +4,9 @@ import EmptyState from '../components/base/EmptyState.vue';
 
 <template>
   <EmptyState
-    icon-name="state-404"
-    title="页面不存在"
-    description="你访问的页面已被移走，或者从未存在过。"
+    icon-name="state-error"
+    title="服务器错误"
+    description="服务器出现了一些问题，请稍后重试。"
     action-text="返回首页"
     action-route="/"
   />

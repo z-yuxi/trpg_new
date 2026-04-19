@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElCheckbox } from 'element-plus';
+import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const route = useRoute();
@@ -146,7 +147,7 @@ onMounted(() => {
         <div class="mode-options">
           <label class="format-option" :class="{ active: mode === 'player' }">
             <input v-model="mode" type="radio" value="player" />
-            <span class="format-icon">👤</span>
+            <span class="format-icon"><SvgIcon name="icon-npc" :size="18" /></span>
             <div>
               <div class="format-name">我的故事</div>
               <div class="format-desc">按当前玩家可见内容导出</div>
@@ -154,7 +155,7 @@ onMounted(() => {
           </label>
           <label class="format-option" :class="{ active: mode === 'full', disabled: !isGm }">
             <input v-model="mode" type="radio" value="full" :disabled="!isGm" />
-            <span class="format-icon">🎭</span>
+            <span class="format-icon"><SvgIcon name="icon-highlight" :size="18" /></span>
             <div>
               <div class="format-name">完整剧本</div>
               <div class="format-desc">仅 GM 可导出全量消息</div>
@@ -169,7 +170,7 @@ onMounted(() => {
         <div class="format-options">
           <label class="format-option" :class="{ active: format === 'markdown' }">
             <input v-model="format" type="radio" value="markdown" />
-            <span class="format-icon">📝</span>
+            <span class="format-icon"><SvgIcon name="icon-scroll" :size="18" /></span>
             <div>
               <div class="format-name">Markdown</div>
               <div class="format-desc">适合阅读与存档</div>
@@ -177,7 +178,7 @@ onMounted(() => {
           </label>
           <label class="format-option" :class="{ active: format === 'json' }">
             <input v-model="format" type="radio" value="json" />
-            <span class="format-icon">⚙️</span>
+            <span class="format-icon"><SvgIcon name="icon-settings" :size="18" /></span>
             <div>
               <div class="format-name">JSON</div>
               <div class="format-desc">适合数据处理</div>
@@ -185,7 +186,7 @@ onMounted(() => {
           </label>
           <label class="format-option" :class="{ active: format === 'text' }">
             <input v-model="format" type="radio" value="text" />
-            <span class="format-icon">📄</span>
+            <span class="format-icon"><SvgIcon name="icon-list" :size="18" /></span>
             <div>
               <div class="format-name">纯文本</div>
               <div class="format-desc">适合快速复制与分享</div>
@@ -377,8 +378,8 @@ onMounted(() => {
 .actions { display: flex; justify-content: flex-end; }
 .btn-export {
   padding: var(--space-2) var(--space-6);
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);

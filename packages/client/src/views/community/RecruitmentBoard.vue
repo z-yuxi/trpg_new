@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import { ElInput, ElSelect, ElOption, ElPagination, ElMessage } from 'element-plus';
 import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
+import TSkeleton from '../../components/base/TSkeleton.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
 
 interface RulesetOption {
@@ -120,8 +122,15 @@ onMounted(loadPosts);
       </ElSelect>
     </div>
 
-    <div v-if="loading" class="empty">加载中...</div>
-    <div v-else-if="posts.length === 0" class="empty">暂无符合条件的招募帖</div>
+    <div v-if="loading" class="sk-list">
+      <TSkeleton type="list" :rows="1" v-for="i in 5" :key="i" />
+    </div>
+    <EmptyState
+      v-else-if="posts.length === 0"
+      icon-name="state-empty"
+      title="暂无招募帖"
+      description="暂无符合条件的招募帖，换个筛选条件试试。"
+    />
     <div v-else class="post-list">
       <TCard v-for="p in posts" :key="p.id" padding="md" hoverable class="post-card" @click="goDetail(p.id)">
         <div class="post-top">
@@ -177,6 +186,7 @@ onMounted(loadPosts);
 .post-time { margin-top: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
 .pager { display: flex; justify-content: center; margin-top: var(--space-2); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6); }
+.sk-list { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) 0; }
 @media (max-width: 768px) {
   .toolbar { grid-template-columns: 1fr; }
 }

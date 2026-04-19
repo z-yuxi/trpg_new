@@ -1,6 +1,7 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
   icon?: string;
+  iconName?: string;
   title: string;
   description?: string;
   actionText?: string;
@@ -14,7 +15,10 @@ const emit = defineEmits<{ action: [] }>();
 
 <template>
   <div class="empty-state">
-    <div class="empty-icon">{{ icon }}</div>
+    <div class="empty-icon">
+      <svg v-if="iconName" class="state-svg" aria-hidden="true"><use :href="`#${iconName}`" /></svg>
+      <template v-else>{{ icon }}</template>
+    </div>
     <div class="empty-title">{{ title }}</div>
     <div v-if="description" class="empty-desc">{{ description }}</div>
     <router-link
@@ -40,7 +44,8 @@ const emit = defineEmits<{ action: [] }>();
   text-align: center;
   gap: var(--space-3);
 }
-.empty-icon { font-size: 48px; line-height: 1; }
+.empty-icon { font-size: 48px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.state-svg { width: 64px; height: 64px; color: var(--text-muted); }
 .empty-title {
   font-size: var(--text-lg);
   font-weight: 600;
@@ -56,8 +61,8 @@ const emit = defineEmits<{ action: [] }>();
   display: inline-flex;
   align-items: center;
   padding: var(--space-2) var(--space-5);
-  background: var(--color-accent);
-  color: #fff;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-sm);

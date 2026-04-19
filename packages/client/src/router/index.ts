@@ -78,6 +78,18 @@ const routes = [
     meta: { title: '无权访问' },
   },
   {
+    path: '/500',
+    name: 'ServerError',
+    component: () => import('../views/ServerError.vue'),
+    meta: { title: '服务器错误' },
+  },
+  {
+    path: '/offline',
+    name: 'NetworkError',
+    component: () => import('../views/NetworkError.vue'),
+    meta: { title: '网络错误' },
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('../views/NotFound.vue'),

@@ -3,6 +3,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
+import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const authStore = useAuthStore();
@@ -125,10 +126,15 @@ onMounted(async () => {
             <h2 class="section-title">为你推荐</h2>
             <button class="see-all" @click="router.push('/assets')">查看广场 ›</button>
           </div>
-          <div v-if="mixedRecommendations.length === 0" class="hint-text">暂无推荐内容</div>
+          <div v-if="loading" class="ruleset-grid">
+            <TSkeleton type="card" v-for="i in 6" :key="i" />
+          </div>
+          <div v-else-if="mixedRecommendations.length === 0" class="hint-text">暂无推荐内容</div>
           <div v-else class="ruleset-grid">
             <div v-for="item in mixedRecommendations" :key="item.id" class="ruleset-card" @click="router.push(item.type === 'recruitment' ? '/community/recruit' : '/assets')">
-              <div class="ruleset-icon">{{ item.type === 'module' ? '🧩' : item.type === 'ruleset' ? '📘' : '📣' }}</div>
+              <div class="ruleset-icon">
+                <SvgIcon :name="item.type === 'module' ? 'icon-market' : item.type === 'ruleset' ? 'icon-ruleset' : 'icon-recruit'" :size="20" />
+              </div>
               <div class="ruleset-body">
                 <div class="ruleset-name">{{ item.title }}</div>
                 <div class="ruleset-version">{{ item.subtitle }}</div>
@@ -174,11 +180,11 @@ onMounted(async () => {
 
 <style scoped>
 .home-page { max-width: 1100px; margin: 0 auto; padding: 0 var(--space-4) var(--space-8); }
-.banner { background: linear-gradient(135deg, var(--color-accent) 0%, color-mix(in srgb, var(--color-accent) 60%, #7c3aed) 100%); border-radius: var(--radius-lg); padding: var(--space-8) var(--space-6); margin-bottom: var(--space-6); color: #fff; }
+.banner { background: var(--slate-900); border-radius: var(--radius-lg); padding: var(--space-8) var(--space-6); margin-bottom: var(--space-6); color: #fff; }
 .banner-title { font-size: 32px; font-weight: 800; margin: 0 0 var(--space-2); }
 .banner-sub { font-size: var(--text-base); opacity: 0.88; margin: 0 0 var(--space-5); }
 .banner-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
-.btn-primary { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: #fff; color: var(--color-accent); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
+.btn-primary { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: #fff; color: var(--slate-900); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .btn-ghost { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: 2px solid rgba(255,255,255,0.6); background: none; color: #fff; font-size: var(--text-sm); cursor: pointer; }
 .content-layout { display: grid; grid-template-columns: 1fr 280px; gap: var(--space-6); align-items: start; }
 .main-col { min-width: 0; }
@@ -195,9 +201,9 @@ onMounted(async () => {
 .link { color: var(--color-accent); cursor: pointer; }
 .campaign-scroll { display: flex; gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-2); scrollbar-width: none; }
 .campaign-scroll::-webkit-scrollbar { display: none; }
-.campaign-card { min-width: 180px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; flex-shrink: 0; transition: transform var(--transition-fast); }
-.campaign-card:hover { transform: translateY(-2px); }
-.campaign-cover { height: 80px; background: linear-gradient(135deg, var(--color-accent), color-mix(in srgb, var(--color-accent) 50%, #7c3aed)); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: rgba(255,255,255,0.7); }
+.campaign-card { min-width: 180px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; flex-shrink: 0; transition: border-color var(--transition-fast); }
+.campaign-card:hover { border-color: var(--border-hover); }
+.campaign-cover { height: 80px; background: var(--slate-800); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: rgba(255,255,255,0.7); }
 .campaign-info { padding: var(--space-3); }
 .campaign-name { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); margin-bottom: var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .campaign-meta { display: flex; align-items: center; gap: var(--space-2); }
@@ -205,11 +211,11 @@ onMounted(async () => {
 .cta-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-6); text-align: center; }
 .cta-card h3 { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0 0 var(--space-2); }
 .cta-card p { font-size: var(--text-sm); color: var(--text-secondary); margin: 0 0 var(--space-4); }
-.btn-accent { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: var(--color-accent); color: #fff; font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
+.btn-accent { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: var(--btn-primary-bg); color: var(--btn-primary-text); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .ruleset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
 .ruleset-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-4); cursor: pointer; transition: border-color var(--transition-fast); display: flex; gap: var(--space-3); }
-.ruleset-card:hover { border-color: var(--color-accent); }
-.ruleset-icon { font-size: 24px; flex-shrink: 0; }
+.ruleset-card:hover { border-color: var(--border-hover); }
+.ruleset-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--text-muted); display: flex; align-items: center; }
 .ruleset-body { min-width: 0; }
 .ruleset-name { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ruleset-version { font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); margin: 2px 0 var(--space-1); }

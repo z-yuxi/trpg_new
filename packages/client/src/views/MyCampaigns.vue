@@ -6,6 +6,7 @@ import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const router = useRouter();
@@ -101,11 +102,19 @@ function copyCode(code: string) {
       </div>
     </div>
 
-    <div class="campaigns-grid">
-      <template v-if="loading">
-        <TSkeleton type="card" v-for="i in 4" :key="i" />
-      </template>
-      <TCard v-else v-for="c in campaigns" :key="c.id" padding="md" hoverable>
+    <div v-if="loading" class="campaigns-grid">
+      <TSkeleton type="card" v-for="i in 4" :key="i" />
+    </div>
+    <EmptyState
+      v-else-if="campaigns.length === 0"
+      icon-name="state-empty"
+      title="还没有战役"
+      description="创建或加入一个团，开始你的冒险旅程。"
+      action-text="创建战役"
+      @action="showCreateDialog = true"
+    />
+    <div v-else class="campaigns-grid">
+      <TCard v-for="c in campaigns" :key="c.id" padding="md" hoverable>
         <div class="c-header">
           <span class="c-name">{{ c.name }}</span>
           <TTag :color="(statusMap[c.status]?.color as any)" size="sm">{{ statusMap[c.status]?.label }}</TTag>

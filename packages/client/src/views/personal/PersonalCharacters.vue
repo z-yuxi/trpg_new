@@ -6,6 +6,7 @@ import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 
 const router = useRouter();
@@ -58,7 +59,14 @@ onMounted(loadCharacters);
     <div v-if="loading" class="cards-grid">
       <TSkeleton type="list" :rows="1" v-for="i in 4" :key="i" />
     </div>
-    <div v-else-if="normalizedCards.length === 0" class="empty">还没有角色卡，点击右上角创建第一张吧。</div>
+    <EmptyState
+      v-else-if="normalizedCards.length === 0"
+      icon-name="state-empty"
+      title="还没有角色卡"
+      description="点击右上角创建你的第一个角色。"
+      action-text="新建角色"
+      @action="router.push('/character/editor')"
+    />
 
     <div v-else class="cards-grid">
       <TCard
