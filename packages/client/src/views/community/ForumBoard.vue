@@ -5,6 +5,7 @@ import { ElMessage, ElDialog, ElForm, ElFormItem, ElInput, ElButton as ElBtn } f
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface Thread {
   id: string;
@@ -49,13 +50,11 @@ async function fetchThreads() {
   loading.value = true;
   try {
     const params = new URLSearchParams({ sort: sort.value, page: String(page.value), limit: String(pageSize) });
-    const res = await fetch(`/api/forum/boards/${board.value}/threads?${params}`);
-    if (!res.ok) throw new Error();
-    const body = await res.json() as { data: Thread[]; total: number };
+    const body = await api.get<{ data: Thread[]; total: number }>(`/forum/boards/${board.value}/threads?${params}`);
     threads.value = body.data;
     total.value = body.total;
-  } catch {
-    ElMessage.error('加载失败');
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '加载失败');
   } finally {
     loading.value = false;
   }
@@ -68,13 +67,11 @@ async function submitPost() {
   }
   posting.value = true;
   try {
-    const res = await fetch('/api/forum/threads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({ board: board.value, title: newTitle.value, content: newContent.value }),
+    const thread = await api.post<Thread>('/forum/threads', {
+      board: board.value,
+      title: newTitle.value,
+      content: newContent.value,
     });
-    if (!res.ok) throw new Error((await res.json()).error);
-    const thread = await res.json() as Thread;
     ElMessage.success('发帖成功');
     showPostDialog.value = false;
     newTitle.value = '';

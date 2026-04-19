@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TTag from '../../components/base/TTag.vue';
 import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface ForumThread { id: string; title: string; reply_count: number; created_at: string; }
 interface ForumPost { id: string; thread_id: string; content: string; floor_number: number; created_at: string; thread_title: string; }
@@ -19,15 +20,11 @@ async function fetchActivity() {
   if (!authStore.isLoggedIn) return;
   loading.value = true;
   try {
-    const res = await fetch('/api/users/me/activity', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error();
-    const body = await res.json() as { threads: ForumThread[]; posts: ForumPost[] };
+    const body = await api.get<{ threads: ForumThread[]; posts: ForumPost[] }>('/users/me/activity');
     threads.value = body.threads;
     posts.value = body.posts;
-  } catch {
-    ElMessage.error('加载动态失败');
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '加载动态失败');
   } finally {
     loading.value = false;
   }

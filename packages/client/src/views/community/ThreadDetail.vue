@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface Post {
   id: string;
@@ -51,15 +52,13 @@ async function fetchThread(page = 1, append = false) {
   loading.value = true;
   try {
     const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
-    const res = await fetch(`/api/forum/threads/${threadId}?${params}`);
-    if (!res.ok) throw new Error();
-    const body = await res.json() as ThreadResponse;
+    const body = await api.get<ThreadResponse>(`/forum/threads/${threadId}?${params}`);
     thread.value = body.thread;
     posts.value = append ? posts.value.concat(body.posts) : body.posts;
     currentPage.value = body.page;
     hasMore.value = body.has_more;
-  } catch {
-    ElMessage.error('加载失败');
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '加载失败');
   } finally {
     loading.value = false;
   }
@@ -81,13 +80,7 @@ async function submitReply() {
   try {
     const body: Record<string, string> = { content: text };
     if (replyToId.value) body['reply_to_post_id'] = replyToId.value;
-    const res = await fetch(`/api/forum/threads/${threadId}/posts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
-    const post = await res.json() as Post;
+    const post = await api.post<Post>(`/forum/threads/${threadId}/posts`, body);
     posts.value.push(post);
     if (thread.value) thread.value.reply_count += 1;
     replyContent.value = '';
