@@ -112,6 +112,7 @@ import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDia
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
 import { api } from '../../utils/api';
 import { extractOutline } from '../../utils/outline-extractor';
+import { getToken } from '../../utils/api';
 import type { Module, ModuleOutlineItem } from '@trpg/shared';
 
 const router = useRouter();
@@ -172,10 +173,6 @@ async function manualSave() {
   await autoSave();
 }
 
-function getAuthToken(): string {
-  return localStorage.getItem('token') ?? '';
-}
-
 function triggerImport() {
   if (module.value?.status !== 'draft' || importBusy.value) return;
   importInput.value?.click();
@@ -194,7 +191,7 @@ async function handleImportFileChange(event: Event) {
   try {
     const res = await fetch(`/api/modules/${moduleId.value}/import`, {
       method: 'POST',
-      headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : undefined,
+      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : undefined,
       body,
     });
 
@@ -242,7 +239,7 @@ async function handleExportPdf() {
   try {
     const res = await fetch(`/api/modules/${moduleId.value}/export/pdf`, {
       method: 'POST',
-      headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : undefined,
+      headers: getToken() ? { Authorization: `Bearer ${getToken()}` } : undefined,
     });
 
     if (!res.ok) {

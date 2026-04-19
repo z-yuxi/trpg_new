@@ -19,6 +19,9 @@ export interface ModulePdfSource {
 
 const TXT_EXTENSIONS = new Set(['.txt', '.md']);
 const DOCX_EXTENSIONS = new Set(['.docx']);
+/** A4 宽度下每行最大汉字数（11pt 字体，约 34 字适合 507pt 正文宽度） */
+const PDF_CHARS_PER_LINE = 34;
+
 const WINDOWS_CJK_FONT_CANDIDATES = [
   'C:/Windows/Fonts/simhei.ttf',
   'C:/Windows/Fonts/msyh.ttf',
@@ -235,7 +238,7 @@ export async function createModulePdfBuffer(moduleSource: ModulePdfSource): Prom
   const plainText = extractPlainTextFromModuleContent(moduleSource.content);
   const bodyLines = wrapText(
     [moduleSource.description?.trim() ?? '', plainText].filter(Boolean).join('\n\n'),
-    34,
+    PDF_CHARS_PER_LINE,
   );
 
   let y = 800;

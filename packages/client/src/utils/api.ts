@@ -1,6 +1,7 @@
 const BASE = '/api';
 
-function getToken(): string {
+/** 读取当前登录 token（供 multipart 等无法走 api 工具的 fetch 调用） */
+export function getToken(): string {
   return localStorage.getItem('token') ?? '';
 }
 
