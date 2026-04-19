@@ -63,7 +63,7 @@ describe('Command Parser', () => {
     expect(req.command).toBe('roll');
     expect(req.context?.character_id).toBe('char-001');
     // 新格式：不含 ruleset_id
-    expect((req as Record<string, unknown>)['ruleset_id']).toBeUndefined();
+    expect((req as unknown as Record<string, unknown>)['ruleset_id']).toBeUndefined();
   });
 });
 

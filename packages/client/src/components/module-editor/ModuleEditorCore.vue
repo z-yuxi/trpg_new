@@ -182,7 +182,8 @@ const filteredSlashItems = computed(() => {
 
 function insertBlock(type: string) {
   if (!editor.value) return;
-  editor.value.chain().focus().insertContent({ type, content: [] }).run();
+  const id = Math.random().toString(36).slice(2, 10);
+  editor.value.chain().focus().insertContent({ type, attrs: { id }, content: [] }).run();
 }
 
 function applySlashItem(item: SlashItem | undefined) {

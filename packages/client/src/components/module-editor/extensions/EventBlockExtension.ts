@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import EventBlockView from '../blocks/EventBlockView.vue';
 
 export const EventBlockExtension = Node.create({
@@ -13,10 +12,16 @@ export const EventBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      event_name: { default: '' },
-      trigger: { default: '' },
-      outcome: { default: '' },
+      id:                         { default: '' },
+      collapsed:                  { default: false },
+      event_name:                 { default: '' },
+      trigger:                    { default: '' },
+      difficulty:                 { default: 'normal' },
+      description:                { default: '' },
+      associated_check_block_id:  { default: null },
+      forced_movement:            { default: null },
+      time_effect:                { default: null },
+      branches:                   { default: [] },
     };
   },
 

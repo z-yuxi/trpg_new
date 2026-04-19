@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import DialogBlockView from '../blocks/DialogBlockView.vue';
 
 export const DialogBlockExtension = Node.create({
@@ -13,10 +12,12 @@ export const DialogBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      speaker: { default: '' },
-      tone: { default: 'neutral' },
-      gm_only: { default: false },
+      id:                 { default: '' },
+      collapsed:          { default: false },
+      dialog_title:       { default: '' },
+      participants:       { default: [] },
+      lines:              { default: [] },
+      trigger_condition:  { default: null },
     };
   },
 
@@ -32,3 +33,4 @@ export const DialogBlockExtension = Node.create({
     return VueNodeViewRenderer(DialogBlockView);
   },
 });
+

@@ -22,6 +22,9 @@ function rowToModule(row: Record<string, unknown>, includeContent = false): Modu
     download_count: Number(row['download_count'] ?? 0),
     word_count: Number(row['word_count'] ?? 0),
     auto_saved_at: row['auto_saved_at'] ? (row['auto_saved_at'] as Date) : null,
+    submitted_at: row['submitted_at'] ? (row['submitted_at'] as Date) : null,
+    public_notice_end_at: row['public_notice_end_at'] ? (row['public_notice_end_at'] as Date) : null,
+    suspended_reason: (row['suspended_reason'] as string) ?? null,
     created_at: row['created_at'] as Date,
     updated_at: row['updated_at'] as Date,
   };
@@ -36,6 +39,14 @@ function rowToModule(row: Record<string, unknown>, includeContent = false): Modu
       }
     } else {
       m.outline = null;
+    }
+    const metadataRaw = row['metadata'];
+    if (metadataRaw) {
+      try {
+        m.metadata = typeof metadataRaw === 'string' ? JSON.parse(metadataRaw) : metadataRaw;
+      } catch {
+        m.metadata = undefined;
+      }
     }
   }
   return m;
@@ -154,12 +165,186 @@ export class ModuleService {
     return true;
   }
 
+  async applyImportedContent(
+    id: string,
+    userId: string,
+    data: { name?: string; description?: string; content: string; word_count?: number },
+  ): Promise<Module | null> {
+    const existing = await db('modules').where({ id, author_id: userId }).first();
+    if (!existing) return null;
+
+    const updates: Record<string, unknown> = {
+      content: data.content,
+      word_count: data.word_count ?? 0,
+      auto_saved_at: new Date(),
+      updated_at: new Date(),
+    };
+
+    if (data.name !== undefined) updates['name'] = data.name;
+    if (data.description !== undefined) updates['description'] = data.description;
+
+    await db('modules').where({ id }).update(updates);
+    return this.getById(id);
+  }
+
   async delete(id: string, userId: string): Promise<boolean> {
     const existing = await db('modules').where({ id, author_id: userId, status: 'draft' }).first();
     if (!existing) return false;
     await db('modules').where({ id }).delete();
     return true;
   }
+
+  /**
+   * 提交发布审核：draft → reviewing，同时创建内容快照
+   */
+  async submitForReview(id: string, userId: string): Promise<Module | null> {
+    const m = await db('modules').where({ id, author_id: userId, status: 'draft' }).first();
+    if (!m) return null;
+
+    // 内容快照
+    const snapshot = m.content ? JSON.stringify({ content: m.content, atoms: [] }) : null;
+    const now = new Date();
+
+    await db('modules').where({ id }).update({
+      status: 'reviewing',
+      review_snapshot: snapshot,
+      submitted_at: now,
+    });
+
+    // 审计日志
+    await db('module_status_logs').insert({
+      id: generateId(),
+      module_id: id,
+      from_status: 'draft',
+      to_status: 'reviewing',
+      operator_user_id: userId,
+      reason: null,
+      created_at: now,
+    });
+
+    // V1.0 直接过审，转为公示状态
+    await this.startPublicNotice(id);
+
+    return this.getById(id);
+  }
+
+  /**
+   * 开始公示期（reviewing → public_notice，公示 7 天）
+   */
+  async startPublicNotice(id: string): Promise<void> {
+    const m = await db('modules').where({ id }).first();
+    if (!m) return;
+
+    const now = new Date();
+    const endAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 天
+
+    await db('modules').where({ id }).update({
+      status: 'public_notice',
+      public_notice_end_at: endAt,
+    });
+
+    await db('module_status_logs').insert({
+      id: generateId(),
+      module_id: id,
+      from_status: m.status,
+      to_status: 'public_notice',
+      operator_user_id: null, // 系统自动
+      reason: null,
+      created_at: now,
+    });
+  }
+
+  /**
+   * 公示期完成（public_notice → published），由定时任务或手动调用
+   */
+  async completePublicNotice(id: string): Promise<void> {
+    const m = await db('modules').where({ id }).first();
+    if (!m || m.status !== 'public_notice') return;
+
+    const now = new Date();
+    await db('modules').where({ id }).update({
+      status: 'public',
+      updated_at: now,
+    });
+
+    await db('module_status_logs').insert({
+      id: generateId(),
+      module_id: id,
+      from_status: 'public_notice',
+      to_status: 'public',
+      operator_user_id: null,
+      reason: null,
+      created_at: now,
+    });
+  }
+
+  /**
+   * 完成所有过期公示期的模组
+   */
+  async completeExpiredPublicNotices(): Promise<void> {
+    const expired = await db('modules')
+      .where({ status: 'public_notice' })
+      .where('public_notice_end_at', '<=', new Date());
+
+    for (const m of expired) {
+      await this.completePublicNotice(m.id);
+    }
+  }
+
+  /**
+   * 撤回模组（reviewing/public_notice → draft）
+   */
+  async withdraw(id: string, userId: string): Promise<Module | null> {
+    const m = await db('modules').where({ id, author_id: userId }).first();
+    if (!m || !['reviewing', 'public_notice'].includes(m.status)) return null;
+
+    const fromStatus = m.status;
+    const now = new Date();
+
+    await db('modules').where({ id }).update({
+      status: 'draft',
+      review_snapshot: null,
+      submitted_at: null,
+      public_notice_end_at: null,
+    });
+
+    await db('module_status_logs').insert({
+      id: generateId(),
+      module_id: id,
+      from_status: fromStatus,
+      to_status: 'draft',
+      operator_user_id: userId,
+      reason: '作者撤回',
+      created_at: now,
+    });
+
+    return this.getById(id);
+  }
+
+  /**
+   * 下架模组（任何状态 → suspended）
+   */
+  async suspend(id: string, reason: string): Promise<void> {
+    const m = await db('modules').where({ id }).first();
+    if (!m) return;
+
+    const now = new Date();
+    await db('modules').where({ id }).update({
+      status: 'suspended',
+      suspended_reason: reason,
+    });
+
+    await db('module_status_logs').insert({
+      id: generateId(),
+      module_id: id,
+      from_status: m.status,
+      to_status: 'suspended',
+      operator_user_id: null, // 系统操作
+      reason,
+      created_at: now,
+    });
+  }
+
 
   async seedIfEmpty(authorId: string): Promise<void> {
     const existing = await db('modules').first();

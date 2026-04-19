@@ -1,5 +1,13 @@
 <template>
   <div class="module-editor-page">
+    <input
+      ref="importInput"
+      class="visually-hidden"
+      type="file"
+      accept=".txt,.md,.docx"
+      @change="handleImportFileChange"
+    />
+
     <!-- 顶部栏 -->
     <header class="module-header">
       <div class="header-left">
@@ -16,8 +24,34 @@
       </div>
       <div class="header-right">
         <span class="save-indicator" :class="saveIndicatorClass">{{ saveIndicatorText }}</span>
+        <button class="btn btn--secondary" :disabled="module?.status !== 'draft' || importBusy" @click="triggerImport">
+          {{ importBusy ? '解析中...' : '导入文档' }}
+        </button>
+        <button class="btn btn--secondary" :disabled="exportBusy || !moduleId" @click="handleExportPdf">
+          {{ exportBusy ? '导出中...' : '导出 PDF' }}
+        </button>
         <button class="btn btn--secondary" @click="manualSave">保存</button>
-        <button class="btn btn--primary" :disabled="!canPublish" @click="handlePublish">发布</button>
+        <button
+          v-if="module?.status === 'draft'"
+          class="btn btn--primary"
+          :disabled="!canPublish"
+          @click="handlePublish"
+        >
+          发布
+        </button>
+        <button
+          v-else-if="['reviewing', 'public_notice'].includes(module?.status ?? '')"
+          class="btn btn--danger"
+          @click="handleWithdraw"
+        >
+          撤回
+        </button>
+        <div v-if="module?.status === 'public_notice'" class="public-notice-info">
+          🔔 公示期: {{ noticeCountdown }} 天
+        </div>
+        <div v-if="module?.status === 'suspended'" class="suspended-info">
+          ⚠️ 已暂停: {{ module?.suspended_reason ?? '未指定原因' }}
+        </div>
       </div>
     </header>
 
@@ -60,14 +94,24 @@
         <div class="props-placeholder">选中业务块后此处将显示属性编辑表单</div>
       </aside>
     </div>
+
+    <ImportConfirmDialog
+      :open="!!importPreview"
+      :preview="importPreview"
+      :busy="importBusy"
+      @close="closeImportDialog"
+      @confirm="confirmImport"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDialog.vue';
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
 import { api } from '../../utils/api';
+import { extractOutline } from '../../utils/outline-extractor';
 import type { Module, ModuleOutlineItem } from '@trpg/shared';
 
 const router = useRouter();
@@ -81,6 +125,19 @@ const moduleTitle = ref('');
 const editorContent = ref<string | null>(null);
 const editorReady = ref(false);
 const wordCount = ref(0);
+const importInput = ref<HTMLInputElement | null>(null);
+const importBusy = ref(false);
+const exportBusy = ref(false);
+
+interface ImportPreview {
+  name: string;
+  description: string;
+  content: string;
+  plain_text: string;
+  word_count: number;
+}
+
+const importPreview = ref<ImportPreview | null>(null);
 
 // 保存状态: 'saved' | 'saving' | 'unsaved'
 const saveState = ref<'saved' | 'saving' | 'unsaved'>('saved');
@@ -115,6 +172,101 @@ async function manualSave() {
   await autoSave();
 }
 
+function getAuthToken(): string {
+  return localStorage.getItem('token') ?? '';
+}
+
+function triggerImport() {
+  if (module.value?.status !== 'draft' || importBusy.value) return;
+  importInput.value?.click();
+}
+
+async function handleImportFileChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  target.value = '';
+  if (!file || !moduleId.value) return;
+
+  const body = new FormData();
+  body.append('file', file);
+
+  importBusy.value = true;
+  try {
+    const res = await fetch(`/api/modules/${moduleId.value}/import`, {
+      method: 'POST',
+      headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : undefined,
+      body,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: '导入失败' }));
+      throw new Error(err.error ?? '导入失败');
+    }
+
+    importPreview.value = await res.json() as ImportPreview;
+  } catch (err) {
+    console.error('导入失败', err);
+    alert(err instanceof Error ? err.message : '导入失败');
+  } finally {
+    importBusy.value = false;
+  }
+}
+
+function closeImportDialog() {
+  if (importBusy.value) return;
+  importPreview.value = null;
+}
+
+async function confirmImport(payload: { name: string; description: string; content: string; word_count: number }) {
+  if (!moduleId.value) return;
+  importBusy.value = true;
+  try {
+    const updated = await api.post<Module>(`/api/modules/${moduleId.value}/import/confirm`, payload);
+    module.value = updated;
+    moduleTitle.value = updated.name;
+    editorContent.value = updated.content ?? null;
+    wordCount.value = payload.word_count;
+    saveState.value = 'saved';
+    importPreview.value = null;
+  } catch (err) {
+    console.error('确认导入失败', err);
+    alert(err instanceof Error ? err.message : '确认导入失败');
+  } finally {
+    importBusy.value = false;
+  }
+}
+
+async function handleExportPdf() {
+  if (!moduleId.value || exportBusy.value) return;
+  exportBusy.value = true;
+  try {
+    const res = await fetch(`/api/modules/${moduleId.value}/export/pdf`, {
+      method: 'POST',
+      headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : undefined,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: '导出失败' }));
+      throw new Error(err.error ?? '导出失败');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${moduleTitle.value || 'module'}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('导出失败', err);
+    alert(err instanceof Error ? err.message : '导出失败');
+  } finally {
+    exportBusy.value = false;
+  }
+}
+
 function onWordCount(count: number) {
   wordCount.value = count;
 }
@@ -135,14 +287,44 @@ const statusLabel = computed(() => ({
   draft: '草稿',
   public: '已发布',
   archived: '已归档',
+  reviewing: '审核中',
+  public_notice: '公示中',
+  suspended: '已暂停',
 }[module.value?.status ?? 'draft']));
 
 async function handlePublish() {
-  // V1.0 直接设为 public（发布状态机后续实现）
+  // Batch 4: 提交发布审核（draft → public_notice）
   if (!moduleId.value) return;
-  await api.put(`/api/modules/${moduleId.value}`, { status: 'public' });
-  if (module.value) module.value.status = 'public';
+  try {
+    const res = await api.post(`/api/modules/${moduleId.value}/submit`);
+    if (module.value) {
+      module.value.status = res.status;
+      module.value.public_notice_end_at = res.public_notice_end_at;
+    }
+  } catch (err) {
+    console.error('提交失败', err);
+  }
 }
+
+// 撤回模组
+async function handleWithdraw() {
+  if (!moduleId.value) return;
+  try {
+    const res = await api.post(`/api/modules/${moduleId.value}/withdraw`);
+    if (module.value) module.value.status = res.status;
+  } catch (err) {
+    console.error('撤回失败', err);
+  }
+}
+
+// 计算公示期剩余天数
+const noticeCountdown = computed(() => {
+  if (!module.value?.public_notice_end_at) return '-';
+  const endAt = new Date(module.value.public_notice_end_at);
+  const now = new Date();
+  const daysDiff = Math.ceil((endAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  return Math.max(0, daysDiff);
+});
 
 // ── 大纲 ─────────────────────────────────────────────────
 const outlineItems = ref<ModuleOutlineItem[]>([]);
@@ -153,27 +335,6 @@ function outlineItemIcon(type: ModuleOutlineItem['type']) {
 
 function scrollToBlock(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-}
-
-// 从 TipTap JSON 内容中提取大纲
-function extractOutline(contentJson: string | null): ModuleOutlineItem[] {
-  if (!contentJson) return [];
-  try {
-    const doc = JSON.parse(contentJson);
-    const items: ModuleOutlineItem[] = [];
-    for (const node of doc.content ?? []) {
-      if (node.type === 'heading') {
-        const text = (node.content ?? []).map((c: any) => c.text ?? '').join('');
-        if (text) items.push({ id: `heading-${items.length}`, type: 'heading', label: text, level: node.attrs?.level ?? 1 });
-      } else if (['scene_block', 'npc_block', 'event_block', 'clue_block', 'check_block', 'dialog_block'].includes(node.type)) {
-        const blockType = node.type.replace('_block', '') as ModuleOutlineItem['type'];
-        const nameKey = { scene_block: 'scene_name', npc_block: 'npc_name', event_block: 'event_name', clue_block: 'clue_name', check_block: 'check_name', dialog_block: 'speaker' }[node.type] ?? 'name';
-        const label = node.attrs?.[nameKey] || `未命名${blockType}`;
-        items.push({ id: node.attrs?.id ?? `block-${items.length}`, type: blockType, label });
-      }
-    }
-    return items;
-  } catch { return []; }
 }
 
 watch(editorContent, (val) => {
@@ -238,6 +399,18 @@ function goBack() {
   background: var(--color-background, #f5f5f5);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* 顶部栏 */
 .module-header {
   display: flex;
@@ -255,6 +428,11 @@ function goBack() {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.header-right {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .back-btn {
@@ -290,6 +468,30 @@ function goBack() {
 .status-badge--draft { background: #fff3e0; color: #e65100; }
 .status-badge--public { background: #e8f5e9; color: #2e7d32; }
 .status-badge--archived { background: #f3e5f5; color: #6a1b9a; }
+.status-badge--reviewing { background: #e1f5fe; color: #0277bd; }
+.status-badge--public_notice { background: #fff9c4; color: #f57f17; }
+.status-badge--suspended { background: #ffebee; color: #c62828; }
+
+.public-notice-info {
+  font-size: 13px;
+  color: var(--color-warning, #ff9800);
+  padding: 4px 8px;
+  background: rgba(255, 152, 0, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.suspended-info {
+  font-size: 13px;
+  color: var(--color-danger, #f44336);
+  padding: 4px 8px;
+  background: rgba(244, 67, 54, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .save-indicator { font-size: 12px; }
 .indicator--saved { color: var(--color-success, #4caf50); }
@@ -310,6 +512,9 @@ function goBack() {
 .btn--primary:disabled { background: var(--color-disabled, #bdbdbd); cursor: not-allowed; }
 .btn--secondary { background: var(--color-hover, #f5f5f5); color: var(--color-text, #333); }
 .btn--secondary:hover { background: var(--color-border, #e0e0e0); }
+.btn--danger { background: var(--color-danger, #dc2626); color: #fff; }
+.btn--danger:hover { background: #b91c1c; }
+.btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
 /* 布局 */
 .module-layout {

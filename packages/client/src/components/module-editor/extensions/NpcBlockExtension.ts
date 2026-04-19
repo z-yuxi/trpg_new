@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import NpcBlockView from '../blocks/NpcBlockView.vue';
 
 export const NpcBlockExtension = Node.create({
@@ -13,11 +12,18 @@ export const NpcBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      npc_name: { default: '' },
-      appearance: { default: '' },
-      personality: { default: '' },
-      background: { default: '' },
+      id:                       { default: '' },
+      collapsed:                { default: false },
+      npc_name:                 { default: '' },
+      appearance:               { default: '' },
+      personality:              { default: '' },
+      background:               { default: '' },
+      attributes:               { default: {} },
+      skills:                   { default: {} },
+      resources:                { default: {} },
+      combat_data:              { default: null },
+      location_scene_block_id:  { default: null },
+      relationships:            { default: [] },
     };
   },
 

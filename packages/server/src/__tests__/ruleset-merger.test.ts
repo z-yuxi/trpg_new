@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeRulesetGraphs } from '../../../shared/src/utils/ruleset-merger';
+import { mergeRulesetGraphs } from '@trpg/shared';
 
 const node = (id: string, extra: object = {}) => ({ node_id: id, type: 'dice_roll', ...extra });
 

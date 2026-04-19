@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import CheckBlockView from '../blocks/CheckBlockView.vue';
 
 export const CheckBlockExtension = Node.create({
@@ -13,11 +12,18 @@ export const CheckBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      check_name: { default: '' },
-      skill: { default: '' },
-      difficulty: { default: 'normal' },
-      gm_only: { default: false },
+      id:                   { default: '' },
+      collapsed:            { default: false },
+      check_name:           { default: '' },
+      description:          { default: '' },
+      check_type:           { default: '' },
+      skill_or_attribute:   { default: '' },
+      difficulty_override:  { default: null },
+      success_effect:       { default: '' },
+      failure_effect:       { default: '' },
+      critical_effect:      { default: '' },
+      fumble_effect:        { default: '' },
+      ruleset_command:      { default: '' },
     };
   },
 

@@ -109,4 +109,204 @@ describe('E2E - 模组 CRUD', () => {
       .send({});
     expect(res.status).toBe(400);
   });
+
+  // ── 发布流程：draft → reviewing → public_notice ────────────────────────
+
+  it('POST /api/modules/:id/submit — 提交发布审核', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/submit`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    // V1.0 直接进入公示状态
+    expect(res.body.status).toBe('public_notice');
+    expect(res.body.public_notice_end_at).toBeDefined();
+  });
+
+  it('GET /api/modules/:id/public-notice — 获取公示期信息', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .get(`/api/modules/${moduleId}/public-notice`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.is_in_notice).toBe(true);
+    expect(res.body.end_at).toBeDefined();
+    expect(res.body.remaining_ms).toBeGreaterThan(0);
+  });
+
+  it('POST /api/modules/:id/withdraw — 撤回模组', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/withdraw`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('draft');
+  });
+
+  it('POST /api/modules/:id/report — 举报模组', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/report`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ report_type: 'violation', description: '测试举报' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+  });
+
+  it('POST /api/modules/:id/report — 缺少参数应返回 400', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/report`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ report_type: 'violation' });
+
+    expect(res.status).toBe(400);
+  });
 });
+
+// ── 批次 5：导入 / 导出 ────────────────────────────────────────────────────
+
+describe('E2E - 模组导入与导出（Batch 5）', () => {
+  let token: string;
+  let moduleId: string;
+
+  beforeAll(async () => {
+    token = await registerAndLogin();
+
+    // 先创建一个规则集（允许失败，使用 fallback）
+    const rsRes = await request
+      .post('/api/rulesets')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: '导入导出测试规则集', version: '0.1.0' });
+    const rulesetId = rsRes.status === 201 ? rsRes.body.id : 'fallback-ruleset';
+
+    // 创建模组
+    const modRes = await request
+      .post('/api/modules')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: '导入导出测试模组', ruleset_id: rulesetId, description: '测试' });
+
+    moduleId = modRes.body.id;
+  });
+
+  // ── POST /:id/import ────────────────────────────────────────────────
+
+  it('POST /api/modules/:id/import — TXT 文件返回导入预览', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const txtContent = '# 序章\n\n雾气笼罩着港口。一艘陌生的船靠岸了。';
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/import`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', Buffer.from(txtContent, 'utf8'), {
+        filename: 'test-chapter.txt',
+        contentType: 'text/plain',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('序章');
+    expect(res.body.content).toBeDefined();
+    expect(res.body.word_count).toBeGreaterThan(0);
+
+    const doc = JSON.parse(res.body.content);
+    expect(doc.type).toBe('doc');
+    expect(doc.content[0]).toMatchObject({ type: 'heading' });
+  });
+
+  it('POST /api/modules/:id/import — 未上传文件应返回 400', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/import`)
+      .set('Authorization', `Bearer ${token}`);
+      // 不 attach 文件
+
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/modules/:id/import — 未登录应返回 401', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/import`)
+      .attach('file', Buffer.from('hello', 'utf8'), {
+        filename: 'hello.txt', contentType: 'text/plain',
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  // ── POST /:id/import/confirm ────────────────────────────────────────
+
+  it('POST /api/modules/:id/import/confirm — 合法 payload 写回数据库', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const content = JSON.stringify({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '导入正文' }] }],
+    });
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/import/confirm`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: '重命名模组', description: '新描述', content, word_count: 3 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('重命名模组');
+    expect(res.body.content).toBe(content);
+  });
+
+  it('POST /api/modules/:id/import/confirm — 缺少 content 应返回 400', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/import/confirm`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: '只有名字' });
+
+    expect(res.status).toBe(400);
+  });
+
+  // ── POST /:id/export/pdf ────────────────────────────────────────────
+
+  it('POST /api/modules/:id/export/pdf — 返回合法 PDF（以 %PDF 开头）', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request
+      .post(`/api/modules/${moduleId}/export/pdf`)
+      .set('Authorization', `Bearer ${token}`)
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.headers['content-disposition']).toContain('.pdf');
+    // PDF 魔术字节
+    const bodyBuf = res.body as Buffer;
+    expect(bodyBuf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+  });
+
+  it('POST /api/modules/:id/export/pdf — 未登录应返回 401', async () => {
+    if (!moduleId) { console.warn('skip: no moduleId'); return; }
+
+    const res = await request.post(`/api/modules/${moduleId}/export/pdf`);
+    expect(res.status).toBe(401);
+  });
+});
+

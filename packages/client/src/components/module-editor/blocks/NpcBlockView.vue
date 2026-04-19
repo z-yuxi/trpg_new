@@ -1,14 +1,47 @@
 <template>
   <node-view-wrapper class="block-view block-view--npc">
-    <div class="block-header" @click="toggleCollapse">
+    <div class="block-header" @click.prevent="toggleCollapse">
       <span class="block-icon">🧑</span>
       <span class="block-title">{{ attrs.npc_name || '未命名 NPC' }}</span>
       <span class="block-tag">NPC</span>
-      <span class="collapse-btn">{{ isCollapsed ? '▶' : '▼' }}</span>
+      <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
+      <span class="block-chevron">{{ isCollapsed ? '▶' : '▼' }}</span>
     </div>
-    <div v-if="!isCollapsed" class="block-body">
-      <node-view-content class="block-content" />
-    </div>
+    <Transition name="blk">
+      <div v-if="!isCollapsed" class="block-body">
+        <div class="form-row">
+          <label class="form-lbl">NPC 名称</label>
+          <input class="form-inp" :value="attrs.npc_name" placeholder="输入 NPC 名称"
+            @input="ua({ npc_name: iv($event) })" />
+        </div>
+        <div class="form-row">
+          <label class="form-lbl">外貌描述</label>
+          <textarea class="form-ta" rows="2" :value="attrs.appearance"
+            placeholder="外貌、体态、着装等…"
+            @input="ua({ appearance: tv($event) })" />
+        </div>
+        <div class="form-row">
+          <label class="form-lbl">性格特征</label>
+          <textarea class="form-ta" rows="2" :value="attrs.personality"
+            placeholder="性格、口癖、行为习惯…"
+            @input="ua({ personality: tv($event) })" />
+        </div>
+        <div class="form-row">
+          <label class="form-lbl">背景故事</label>
+          <textarea class="form-ta" rows="3" :value="attrs.background"
+            placeholder="来历、动机、秘密…"
+            @input="ua({ background: tv($event) })" />
+        </div>
+        <div class="form-row">
+          <label class="form-lbl">属性/技能（JSON 格式）</label>
+          <textarea class="form-ta form-ta--code" rows="3"
+            :value="attrsJson" placeholder='{"力量": 60, "侦查": 70}'
+            @input="updateJsonAttrs(tv($event))" />
+        </div>
+        <div class="content-sep">扩展描述</div>
+        <node-view-content class="block-content" />
+      </div>
+    </Transition>
   </node-view-wrapper>
 </template>
 
@@ -16,12 +49,57 @@
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
 
-const props = defineProps<{ node: any; updateAttributes: (a: Record<string, unknown>) => void }>();
-const attrs = computed(() => props.node.attrs as Record<string, unknown>);
+const props = defineProps<{
+  node: any;
+  updateAttributes: (attrs: Record<string, unknown>) => void;
+  deleteNode: () => void;
+}>();
+
+const attrs = computed(() => props.node.attrs as Record<string, any>);
 const isCollapsed = computed(() => !!attrs.value['collapsed']);
+
 function toggleCollapse() { props.updateAttributes({ collapsed: !isCollapsed.value }); }
+function ua(patch: Record<string, unknown>) { props.updateAttributes(patch); }
+function iv(e: Event) { return (e.target as HTMLInputElement).value; }
+function tv(e: Event) { return (e.target as HTMLTextAreaElement).value; }
+
+const attrsJson = computed(() => {
+  const a = attrs.value['attributes'] ?? {};
+  const s = attrs.value['skills'] ?? {};
+  return JSON.stringify({ ...a, ...s }, null, 2);
+});
+
+function updateJsonAttrs(raw: string) {
+  try {
+    const parsed = JSON.parse(raw);
+    props.updateAttributes({ attributes: parsed });
+  } catch { /* ignore invalid JSON while typing */ }
+}
 </script>
 
 <style scoped>
 .block-view--npc { border-left: 4px solid var(--color-warning, #ff9800); }
+.block-header { display:flex; align-items:center; gap:6px; padding:6px 10px;
+  cursor:pointer; user-select:none; background:var(--bg-2,#f5f5f5); }
+.block-icon { font-size:14px; }
+.block-title { flex:1; font-weight:600; font-size:13px;
+  color:var(--fg-1,#222); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.block-tag { font-size:11px; padding:1px 6px; border-radius:10px;
+  background:var(--color-warning-light,#ffe0b2); color:var(--color-warning-dark,#bf360c); }
+.block-del { border:none; background:none; cursor:pointer; color:var(--fg-3,#999);
+  font-size:12px; padding:2px 4px; border-radius:3px; }
+.block-del:hover { background:var(--color-danger-light,#ffcdd2); color:var(--color-danger,#f44336); }
+.block-chevron { font-size:10px; color:var(--fg-3,#999); }
+.block-body { padding:12px; display:flex; flex-direction:column; gap:8px; }
+.form-row { display:flex; flex-direction:column; gap:3px; }
+.form-lbl { font-size:11px; color:var(--fg-2,#666); font-weight:500; }
+.form-inp,.form-ta { width:100%; padding:5px 8px; border:1px solid var(--border,#ddd);
+  border-radius:4px; font-size:13px; font-family:inherit;
+  background:var(--bg-1,#fff); color:var(--fg-1,#222); box-sizing:border-box; }
+.form-ta { resize:vertical; min-height:50px; }
+.form-ta--code { font-family:monospace; font-size:12px; }
+.content-sep { font-size:11px; color:var(--fg-3,#aaa); margin:4px 0 2px; }
+.block-content { min-height:40px; }
+.blk-enter-active,.blk-leave-active { transition:opacity .15s,transform .15s; }
+.blk-enter-from,.blk-leave-to { opacity:0; transform:translateY(-4px); }
 </style>

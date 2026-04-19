@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import SceneBlockView from '../blocks/SceneBlockView.vue';
 
 export const SceneBlockExtension = Node.create({
@@ -13,11 +12,16 @@ export const SceneBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      scene_name: { default: '' },
-      scene_type: { default: 'spatial' },
-      atmosphere: { default: '' },
-      gm_notes: { default: '' },
+      id:                 { default: '' },
+      collapsed:          { default: false },
+      scene_name:         { default: '' },
+      scene_type:         { default: 'spatial' },
+      opening_time:       { default: null },
+      atmosphere:         { default: '' },
+      gm_notes:           { default: '' },
+      map_description:    { default: '' },
+      connections:        { default: [] },
+      checks:             { default: [] },
     };
   },
 

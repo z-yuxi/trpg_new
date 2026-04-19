@@ -397,7 +397,16 @@ export interface CampaignNpc {
 }
 
 // ===== 模组与资产库 =====
-export type ModuleStatus = 'draft' | 'public' | 'archived';
+export type ModuleStatus = 'draft' | 'public' | 'archived' | 'reviewing' | 'public_notice' | 'suspended';
+
+/** 模组额外元数据（存于 modules.metadata JSON 列） */
+export interface ModuleMetadata {
+  tags?: string[];
+  estimated_hours?: number;
+}
+
+/** 模组举报类型 */
+export type ModuleReportType = 'plagiarism' | 'violation' | 'other';
 
 /** 模组大纲条目（发布时自动生成缓存） */
 export interface ModuleOutlineItem {
@@ -439,6 +448,14 @@ export interface Module {
   word_count?: number;
   /** 最近自动保存时间 */
   auto_saved_at?: Date | null;
+  /** 元数据（标签/时长等） */
+  metadata?: ModuleMetadata | null;
+  /** 提交审核时间 */
+  submitted_at?: Date | null;
+  /** 公示期结束时间 */
+  public_notice_end_at?: Date | null;
+  /** 下架原因 */
+  suspended_reason?: string | null;
   created_at: Date;
   updated_at: Date;
 }

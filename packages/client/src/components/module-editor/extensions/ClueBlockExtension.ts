@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { VueNodeViewRenderer } from '@tiptap/vue-3';
-import { BASE_BLOCK_ATTRS } from './BaseBlockExtension';
 import ClueBlockView from '../blocks/ClueBlockView.vue';
 
 export const ClueBlockExtension = Node.create({
@@ -13,10 +12,16 @@ export const ClueBlockExtension = Node.create({
 
   addAttributes() {
     return {
-      ...BASE_BLOCK_ATTRS,
-      clue_name: { default: '' },
-      clue_type: { default: 'physical' },
-      visibility: { default: 'hidden' },
+      id:                         { default: '' },
+      collapsed:                  { default: false },
+      clue_name:                  { default: '' },
+      clue_type:                  { default: 'physical' },
+      content:                    { default: '' },
+      unlock_condition:           { default: '' },
+      reveal_method:              { default: 'auto' },
+      associated_scene_block_id:  { default: null },
+      associated_check_block_id:  { default: null },
+      theme:                      { default: 'river' },
     };
   },
 
@@ -32,3 +37,4 @@ export const ClueBlockExtension = Node.create({
     return VueNodeViewRenderer(ClueBlockView);
   },
 });
+
