@@ -24,8 +24,10 @@ export function mergeRulesets(child: Partial<Ruleset>, parent: Ruleset): Ruleset
 
   return {
     id: child.id ?? parent.id,
+    author_id: child.author_id ?? parent.author_id,
     name: child.name ?? parent.name,
     version: child.version ?? parent.version,
+    description: child.description ?? parent.description ?? '',
     parent_ruleset_id: child.parent_ruleset_id !== undefined ? child.parent_ruleset_id : parent.parent_ruleset_id,
     atoms: mergedAtoms,
     commands: mergedCommands,

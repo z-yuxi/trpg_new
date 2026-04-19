@@ -13,15 +13,9 @@ export const DEFAULT_COMMANDS: Record<string, { graph: GraphDef; description: st
             expression: { type: 'static', value: '1d20' },
           },
         },
-        {
-          node_id: 'out',
-          atom_type: 'result_collector',
-          inputs: {
-            entries: { type: 'ref', node_id: 'roll', output_key: 'total' },
-          },
-        },
       ],
-      output_node_id: 'out',
+      // 直接以 dice_roll 的输出（{ total, details, rolls }）作为最终结果
+      output_node_id: 'roll',
     },
   },
   check: {

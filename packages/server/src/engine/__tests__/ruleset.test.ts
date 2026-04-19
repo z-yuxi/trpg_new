@@ -92,8 +92,10 @@ character_card_schema: {}
 describe('Ruleset Merger', () => {
   const parent: Ruleset = {
     id: 'parent-001',
+    author_id: null,
     name: '父规则集',
     version: '1.0.0',
+    description: '',
     parent_ruleset_id: null,
     atoms: { roll: { type: 'dice_roll' }, compare: { type: 'threshold_compare' } },
     connections: [],

@@ -53,6 +53,7 @@ function makeBuilder(table: string): any {
     _whereIn: null as { col: string; vals: any[] } | null,
     _first: false,
     _maxCol: null as string | null,
+    _countMode: false,
   };
 
   builder.where = (cond: any, val?: any) => {
@@ -64,10 +65,15 @@ function makeBuilder(table: string): any {
   builder.select = () => builder;
   builder.first = () => { builder._first = true; return builder; };
   builder.limit = () => builder;
+  builder.offset = () => builder;
   builder.orderBy = () => builder;
   builder.join = () => builder;
   builder.leftJoin = () => builder;
   builder.max = (expr: string) => { builder._maxCol = expr; return builder; };
+  builder.count = (_expr?: string) => { builder._countMode = true; return builder; };
+  builder.clone = () => { const c = makeBuilder(table); Object.assign(c._where, builder._where); return c; };
+  builder.union = (_other: any) => builder;
+  builder.andWhereNot = (_key: string, _val: any) => builder;
 
   builder.insert = async (data: any) => {
     if (!rows[table]) rows[table] = [];
@@ -103,6 +109,13 @@ function makeBuilder(table: string): any {
   };
 
   const execute = () => {
+    if (builder._countMode) {
+      const filtered = (rows[table] ?? []).filter((r) =>
+        Object.entries(builder._where).every(([k, v]) => r[k] === v)
+      );
+      const result = { count: String(filtered.length) };
+      return builder._first ? result : [result];
+    }
     if (builder._maxCol) {
       const colName = (builder._maxCol as string).split(' as ')[1] ?? builder._maxCol;
       const maxVal = (rows[table] ?? []).reduce((m: number, r: any) => Math.max(m, r.uid ?? 0), 0);
@@ -137,6 +150,7 @@ vi.mock('../../db/knex-config', () => {
 vi.mock('../../db', () => {
   const db = (table: string) => makeBuilder(table);
   (db as any).fn = { now: () => new Date().toISOString() };
+  (db as any).raw = (sql: string) => sql;
   return { db };
 });
 

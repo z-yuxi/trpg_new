@@ -214,10 +214,42 @@ export interface RecruitmentComment {
 // ===== 规则集 =====
 export type RulesetStatus = 'draft' | 'published';
 
+/** 命令图节点输入源 */
+export type CommandInputSource =
+  | { type: 'static'; value: unknown }
+  | { type: 'ref'; node_id: string; output_key: string };
+
+/** 命令图节点定义 */
+export interface CommandGraphNode {
+  node_id: string;
+  atom_type: string;
+  inputs: Record<string, CommandInputSource>;
+}
+
+/** 命令图定义 */
+export interface CommandGraph {
+  nodes: CommandGraphNode[];
+  output_node_id: string;
+}
+
+/** 规则集命令定义 */
+export interface RulesetCommand {
+  name: string;
+  description: string;
+  aliases: string[];
+  graph: CommandGraph;
+}
+
+/** 平台预置命令名称列表 */
+export const PLATFORM_PRESET_COMMAND_NAMES = ['roll', 'check', 'initiative'] as const;
+export type PlatformPresetCommandName = typeof PLATFORM_PRESET_COMMAND_NAMES[number];
+
 export interface Ruleset {
   id: string;
+  author_id: string | null;
   name: string;
   version: string;
+  description: string;
   parent_ruleset_id: string | null;
   atoms: object;
   connections: object;
@@ -295,6 +327,7 @@ export interface ExecuteResponse {
   success: boolean;
   output: unknown;
   logs: NodeExecutionLog[];
+  error?: string;
 }
 
 // ===== 文字艺术主题 =====

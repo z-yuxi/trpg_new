@@ -46,8 +46,10 @@ describe('Command Parser', () => {
 describe('Command Resolver', () => {
   const emptyRuleset: Ruleset = {
     id: 'r1',
+    author_id: null,
     name: '空规则集',
     version: '1.0.0',
+    description: '',
     parent_ruleset_id: null,
     atoms: {},
     connections: {},

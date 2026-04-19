@@ -398,8 +398,10 @@ function rowToRuleset(row: Record<string, unknown>): Ruleset {
 
   return {
     id: row['id'] as string,
+    author_id: (row['author_id'] as string) ?? null,
     name: row['name'] as string,
     version: row['version'] as string,
+    description: (row['description'] as string) ?? '',
     parent_ruleset_id: row['parent_ruleset_id'] as string | null,
     atoms: parseJson(row['atoms']),
     connections: parseJson(row['connections']),
