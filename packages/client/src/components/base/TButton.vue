@@ -22,32 +22,62 @@ defineProps<{
 .t-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-2);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 500;
-  transition: background var(--transition-fast), opacity var(--transition-fast);
+  font-weight: var(--font-medium);
+  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
-.t-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.t-btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+.t-btn:not(:disabled):hover { transform: translateY(-1px); }
+.t-btn:not(:disabled):active { transform: scale(0.98); }
 
+/* 尺寸 — 附录 B 3.1 */
 .t-btn--sm { height: 28px; padding: 0 var(--space-3); font-size: var(--text-xs); }
 .t-btn--md { height: 36px; padding: 0 var(--space-4); }
 .t-btn--lg { height: 44px; padding: 0 var(--space-6); font-size: var(--text-base); }
 
-.t-btn--primary { background: var(--color-accent); color: var(--color-text-inverse); }
-.t-btn--primary:hover:not(:disabled) { background: var(--color-accent-hover); }
+/* primary — 日间深色/夜间浅色，自动反色 */
+.t-btn--primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+.t-btn--primary:not(:disabled):hover { background: var(--btn-primary-hover); }
+.t-btn--primary:not(:disabled):active { background: var(--color-primary-active); }
 
-.t-btn--secondary { background: var(--color-card-bg); color: var(--color-text-primary); border: 1px solid var(--color-card-border); }
-.t-btn--secondary:hover:not(:disabled) { background: var(--color-page-bg); }
+/* secondary */
+.t-btn--secondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--btn-secondary-border);
+}
+.t-btn--secondary:not(:disabled):hover {
+  background: var(--surface-hover);
+  border-color: var(--border-hover);
+}
 
-.t-btn--danger { background: var(--color-danger); color: var(--color-text-inverse); }
-.t-btn--danger:hover:not(:disabled) { opacity: 0.85; }
+/* danger */
+.t-btn--danger {
+  background: var(--color-danger);
+  color: var(--text-inverse);
+  border: none;
+}
+.t-btn--danger:not(:disabled):hover { background: var(--red-700); }
 
-.t-btn--ghost { background: transparent; color: var(--color-accent); }
-.t-btn--ghost:hover:not(:disabled) { background: rgba(59,130,246,0.08); }
+/* ghost */
+.t-btn--ghost {
+  background: transparent;
+  color: var(--text-body);
+  border: 1px solid var(--border-default);
+}
+.t-btn--ghost:not(:disabled):hover {
+  background: var(--color-primary-light);
+  border-color: var(--border-hover);
+}
 
 .t-btn__spinner {
   width: 14px; height: 14px;

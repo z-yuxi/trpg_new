@@ -1,35 +1,85 @@
+/* ============================================================
+   日间主题 — 显式覆盖（data-theme="day"）
+   与 tokens.css 中 :root 默认值相同，确保显式切换日间时生效
+   ============================================================ */
+
 :root[data-theme='day'] {
-  --el-color-primary: #3b82f6;
+  /* 主色 */
+  --color-primary:        #0f172a;   /* Slate 900 */
+  --color-primary-hover:  #1e293b;   /* Slate 800 */
+  --color-primary-active: #020617;   /* Slate 950 */
+  --color-primary-light:  rgba(15, 23, 42, 0.08);
+
+  /* 功能色 */
+  --color-info:        #2563eb;
+  --color-info-bg:     #eff6ff;
+  --color-success:     #16a34a;
+  --color-success-bg:  #f0fdf4;
+  --color-warning:     #f59e0b;
+  --color-warning-bg:  #fffbeb;
+  --color-danger:      #dc2626;
+  --color-danger-bg:   #fef2f2;
+
+  /* 背景层 */
+  --surface-page:     #f9fafb;
+  --surface-card:     #ffffff;
+  --surface-hover:    #f3f4f6;
+  --surface-active:   #e5e7eb;
+  --surface-elevated: #ffffff;
+
+  /* 文字层 */
+  --text-primary:   #111827;
+  --text-body:      #374151;
+  --text-secondary: #6b7280;
+  --text-muted:     #9ca3af;
+  --text-inverse:   #ffffff;
+
+  /* 边框 */
+  --border-default: #e5e7eb;
+  --border-hover:   #d1d5db;
+  --border-active:  #0f172a;
+
+  /* 按钮专用 */
+  --btn-primary-bg:     #0f172a;
+  --btn-primary-text:   #ffffff;
+  --btn-primary-hover:  #1e293b;
+
+  --btn-secondary-bg:     #ffffff;
+  --btn-secondary-text:   #374151;
+  --btn-secondary-border: #e5e7eb;
+
+  /* 阴影 */
+  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  /* 向后兼容别名 */
+  --color-page-bg:        #f9fafb;
+  --color-card-bg:        #ffffff;
+  --color-card-border:    #e5e7eb;
+  --color-input-bg:       #f9fafb;
+  --color-input-border:   #e5e7eb;
+  --color-input-focus:    #0f172a;
+  --color-text-primary:   #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted:     #9ca3af;
+  --color-text-inverse:   #ffffff;
+  --color-tag-default-bg:   #f3f4f6;
+  --color-tag-default-text: #475569;
+
+  /* Element Plus 覆盖 */
+  --el-color-primary:        #2563eb;
   --el-color-primary-light-3: #93bbfd;
   --el-color-primary-light-5: #9dc0fe;
   --el-color-primary-light-7: #bdd5fe;
   --el-color-primary-light-9: #deeaff;
-  --el-color-primary-dark-2: #2563eb;
-  --el-bg-color: #ffffff;
-  --el-bg-color-page: #f9fafb;
-  --el-text-color-primary: #0f172a;
-  --el-text-color-regular: #334155;
-  --el-border-color: #e5e7eb;
-  --el-fill-color-light: #f3f4f6;
-
-  /* 自定义设计 token */
-  --color-primary: #0f172a;
-  --color-primary-light: #dbeafe;
-  --color-accent: #3b82f6;
-  --color-page-bg: #f9fafb;
-  --color-card-bg: #ffffff;
-  --color-card-border: #e5e7eb;
-  --color-input-bg: #ffffff;
-  --color-input-border: #d1d5db;
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
-  --color-success: #15803d;
-  --color-success-bg: #dcfce7;
-  --color-warning: #a16207;
-  --color-warning-bg: #fef9c3;
-  --color-danger: #b91c1c;
-  --color-danger-bg: #fee2e2;
-  --color-tag-default-bg: #f1f5f9;
-  --color-tag-default-text: #475569;
+  --el-color-primary-dark-2:  #1d4ed8;
+  --el-bg-color:             #ffffff;
+  --el-bg-color-page:        #f9fafb;
+  --el-text-color-primary:   #111827;
+  --el-text-color-regular:   #374151;
+  --el-border-color:         #e5e7eb;
+  --el-fill-color-light:     #f3f4f6;
 }

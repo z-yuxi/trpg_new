@@ -1,20 +1,86 @@
-:root[data-theme='night'] {
-  --color-primary: #e2e8f0;
-  --color-primary-light: #cbd5e1;
-  --color-page-bg: #030712;
-  --color-card-bg: #111827;
-  --color-card-border: #1f2937;
-  --color-input-bg: #1f2937;
-  --color-input-border: #374151;
-  --color-text-primary: #e2e8f0;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
+/* ============================================================
+   夜间主题 — 覆盖（data-theme="night"）
+   按附录 B 2.3 反色策略：Slate 200 主色 + Gray 950 背景
+   ============================================================ */
 
-  --el-color-primary: #60a5fa;
-  --el-bg-color: #111827;
-  --el-bg-color-page: #030712;
-  --el-text-color-primary: #e2e8f0;
-  --el-text-color-regular: #cbd5e1;
-  --el-border-color: #1f2937;
-  --el-fill-color-light: #1f2937;
+:root[data-theme='night'] {
+  /* 主色反色 — Slate 200 背景 + Slate 900 文字 */
+  --color-primary:        #e2e8f0;   /* Slate 200 */
+  --color-primary-hover:  #f1f5f9;   /* Slate 100，更浅 */
+  --color-primary-active: #cbd5e1;   /* Slate 300，稍深 */
+  --color-primary-light:  rgba(226, 232, 240, 0.15);
+
+  /* 功能色（提亮，适配深色背景） */
+  --color-info:        #3b82f6;
+  --color-info-bg:     rgba(59, 130, 246, 0.15);
+  --color-success:     #22c55e;
+  --color-success-bg:  rgba(34, 197, 94, 0.15);
+  --color-warning:     #f59e0b;
+  --color-warning-bg:  rgba(245, 158, 11, 0.15);
+  --color-danger:      #ef4444;
+  --color-danger-bg:   rgba(239, 68, 68, 0.15);
+
+  /* 背景层反色 */
+  --surface-page:     #030712;   /* Gray 950 */
+  --surface-card:     #111827;   /* Gray 900 */
+  --surface-hover:    rgba(255, 255, 255, 0.05);
+  --surface-active:   rgba(255, 255, 255, 0.10);
+  --surface-elevated: #1f2937;   /* Gray 800，比卡片稍亮 */
+
+  /* 文字层提亮 */
+  --text-primary:   #f9fafb;   /* Gray 50，近白 */
+  --text-body:      #d1d5db;   /* Gray 300 */
+  --text-secondary: #9ca3af;   /* Gray 400 */
+  --text-muted:     #6b7280;   /* Gray 500 */
+  --text-inverse:   #0f172a;   /* Slate 900，深色（用于浅色按钮文字） */
+
+  /* 边框 */
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-hover:   rgba(255, 255, 255, 0.20);
+  --border-active:  #e2e8f0;   /* Slate 200 */
+
+  /* 按钮反色（浅色背景 + 深色文字） */
+  --btn-primary-bg:     #e2e8f0;   /* Slate 200 */
+  --btn-primary-text:   #0f172a;   /* Slate 900 */
+  --btn-primary-hover:  #f1f5f9;   /* Slate 100 */
+
+  --btn-secondary-bg:     transparent;
+  --btn-secondary-text:   #d1d5db;
+  --btn-secondary-border: rgba(255, 255, 255, 0.10);
+
+  /* 阴影（加深，适配深色环境） */
+  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.15);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.40), 0 2px 4px -2px rgba(0, 0, 0, 0.20);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.50), 0 4px 6px -4px rgba(0, 0, 0, 0.30);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.60), 0 8px 10px -6px rgba(0, 0, 0, 0.40);
+
+  /* 向后兼容别名 */
+  --color-page-bg:        #030712;
+  --color-card-bg:        #111827;
+  --color-card-border:    rgba(255, 255, 255, 0.10);
+  --color-input-bg:       #1f2937;
+  --color-input-border:   rgba(255, 255, 255, 0.10);
+  --color-input-focus:    #e2e8f0;
+  --color-text-primary:   #f9fafb;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted:     #6b7280;
+  --color-text-inverse:   #0f172a;
+  --color-tag-default-bg:   rgba(255, 255, 255, 0.08);
+  --color-tag-default-text: #cbd5e1;
+
+  /* Element Plus 夜间覆盖 */
+  --el-color-primary:        #60a5fa;
+  --el-color-primary-light-3: rgba(96, 165, 250, 0.7);
+  --el-color-primary-light-5: rgba(96, 165, 250, 0.5);
+  --el-color-primary-light-7: rgba(96, 165, 250, 0.3);
+  --el-color-primary-light-9: rgba(96, 165, 250, 0.1);
+  --el-color-primary-dark-2:  #3b82f6;
+  --el-bg-color:             #111827;
+  --el-bg-color-page:        #030712;
+  --el-text-color-primary:   #f9fafb;
+  --el-text-color-regular:   #d1d5db;
+  --el-border-color:         rgba(255, 255, 255, 0.10);
+  --el-fill-color-light:     rgba(255, 255, 255, 0.05);
+  --el-mask-color:           rgba(0, 0, 0, 0.7);
 }
