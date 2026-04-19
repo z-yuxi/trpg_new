@@ -104,3 +104,32 @@
   96% { opacity: 0.5; }
   97% { opacity: 1; }
 }
+
+/* ===== 全局：尊重 prefers-reduced-motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  .text-art-river,
+  .text-art-blur,
+  .text-art-fragment,
+  .text-art-wave > span,
+  .text-art-blood,
+  .text-art-ash,
+  .text-art-cyber {
+    animation: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    width: auto !important;
+    -webkit-text-fill-color: currentColor;
+  }
+  .text-art-fragment {
+    border-right: none;
+    white-space: normal;
+  }
+}
+
+/* ===== 移动端：降级动画复杂度 ===== */
+@media (max-width: 768px) {
+  .text-art-river { animation-duration: 6s; }
+  .text-art-wave > span { animation-duration: 3s; }
+  .text-art-cyber { text-shadow: 0 0 4px #22d3ee; animation: none; }
+}

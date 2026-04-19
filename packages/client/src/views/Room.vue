@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { ElDialog, ElMessage, ElSelect, ElOption } from 'element-plus';
 import RoomLayout from '../layouts/RoomLayout.vue';
 import LeftSidebar from '../components/room/LeftSidebar.vue';
@@ -15,6 +15,7 @@ import { socketClient } from '../socket/socket-client';
 import type { StoryTime } from '@trpg/shared';
 
 const route = useRoute();
+const router = useRouter();
 const campaignStore = useCampaignStore();
 const authStore = useAuthStore();
 const messageStore = useMessageStore();
@@ -261,6 +262,7 @@ onUnmounted(() => {
       :room-code="campaignStore.currentCampaign?.room_code"
       :is-gm="isGm"
       @toggle-gm-console="showGMConsole = !showGMConsole"
+      @export-log="router.push(`/room/${campaignId}/export`)"
     >
       <template #gm-console>
         <transition name="gm-slide">

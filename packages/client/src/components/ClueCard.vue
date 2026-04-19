@@ -37,4 +37,14 @@ defineProps<{
 .clue-sender { margin-left: auto; font-size: var(--text-xs); color: var(--color-text-muted); }
 .clue-title { font-weight: 600; font-size: var(--text-base); margin-bottom: var(--space-2); }
 .clue-content { font-size: var(--text-sm); line-height: 1.6; }
+
+/* 移动端：简化动画 */
+@media (max-width: 768px) {
+  .clue-card:hover { transform: none; }
+}
+
+/* 尊重系统无动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .clue-card, .clue-card:hover { transition: none; transform: none; }
+}
 </style>

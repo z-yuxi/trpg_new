@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
+import TSkeleton from '../../components/base/TSkeleton.vue';
 import { useAuthStore } from '../../stores/auth-store';
 
 const router = useRouter();
@@ -54,7 +55,9 @@ onMounted(loadCharacters);
       <TButton type="primary" size="sm" @click="router.push('/character/editor')">+ 新建</TButton>
     </div>
 
-    <div v-if="loading" class="empty">正在加载角色卡...</div>
+    <div v-if="loading" class="cards-grid">
+      <TSkeleton type="list" :rows="1" v-for="i in 4" :key="i" />
+    </div>
     <div v-else-if="normalizedCards.length === 0" class="empty">还没有角色卡，点击右上角创建第一张吧。</div>
 
     <div v-else class="cards-grid">

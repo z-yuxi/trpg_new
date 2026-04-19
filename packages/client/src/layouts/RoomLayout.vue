@@ -3,8 +3,8 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
 
-const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean }>();
-const emit = defineEmits<{ 'toggle-gm-console': [] }>();
+const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string }>();
+const emit = defineEmits<{ 'toggle-gm-console': []; 'export-log': [] }>();
 const router = useRouter();
 
 const leftVisible = ref(true);
@@ -49,6 +49,10 @@ function handleBackToCampaigns() {
         <button v-if="isGm" class="icon-btn gm-btn" @click="emit('toggle-gm-console')">
           <SvgIcon name="icon-settings" :size="18" />
           <span>GM 控制台</span>
+        </button>
+        <button v-if="isGm" class="icon-btn export-btn" @click="emit('export-log')" aria-label="导出日志">
+          <SvgIcon name="icon-scroll" :size="18" />
+          <span>导出日志</span>
         </button>
         <button class="icon-btn" @click="rightVisible = !rightVisible" aria-label="切换助手台">
           <SvgIcon name="icon-scroll" :size="18" />
@@ -120,6 +124,7 @@ function handleBackToCampaigns() {
 }
 .icon-btn:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
 .gm-btn { background: #fef3c7; color: #92400e; }
+.export-btn { background: var(--surface-hover); color: var(--color-text-secondary); }
 .back-btn { margin-right: 2px; }
 
 .room-body {

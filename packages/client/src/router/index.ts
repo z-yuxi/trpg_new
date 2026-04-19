@@ -38,6 +38,12 @@ const routes = [
     meta: { requiresAuth: true, title: '跑团房间' },
   },
   {
+    path: '/room/:id/export',
+    name: 'LogExport',
+    component: () => import('../views/LogExport.vue'),
+    meta: { requiresAuth: true, title: '导出日志' },
+  },
+  {
     path: '/character/editor/:id?',
     name: 'CharacterEditor',
     component: () => import('../views/CharacterEditor.vue'),
@@ -62,6 +68,18 @@ const routes = [
     name: 'Login',
     component: () => import('../views/Login.vue'),
     meta: { title: '登录' },
+  },
+  {
+    path: '/403',
+    name: 'Forbidden',
+    component: () => import('../views/Forbidden.vue'),
+    meta: { title: '无权访问' },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('../views/NotFound.vue'),
+    meta: { title: '页面不存在' },
   },
 ];
 

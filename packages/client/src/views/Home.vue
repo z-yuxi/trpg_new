@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import TTag from '../components/base/TTag.vue';
+import TSkeleton from '../components/base/TSkeleton.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const authStore = useAuthStore();
@@ -57,7 +58,9 @@ onMounted(async () => {
             <h2 class="section-title">进行中的战役</h2>
             <button class="see-all" @click="router.push('/campaigns')">查看全部 ›</button>
           </div>
-          <div v-if="loading" class="hint-text">加载中…</div>
+          <div v-if="loading" class="campaign-scroll">
+            <TSkeleton type="card" v-for="i in 3" :key="i" style="min-width:160px;flex-shrink:0" />
+          </div>
           <div v-else-if="campaigns.length === 0" class="hint-text">
             暂无战役，<span class="link" @click="router.push('/campaigns')">去创建</span>
           </div>

@@ -5,6 +5,7 @@ import { ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElMessage } 
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
+import TSkeleton from '../components/base/TSkeleton.vue';
 import { useAuthStore } from '../stores/auth-store';
 
 const router = useRouter();
@@ -101,7 +102,10 @@ function copyCode(code: string) {
     </div>
 
     <div class="campaigns-grid">
-      <TCard v-for="c in campaigns" :key="c.id" padding="md" hoverable>
+      <template v-if="loading">
+        <TSkeleton type="card" v-for="i in 4" :key="i" />
+      </template>
+      <TCard v-else v-for="c in campaigns" :key="c.id" padding="md" hoverable>
         <div class="c-header">
           <span class="c-name">{{ c.name }}</span>
           <TTag :color="(statusMap[c.status]?.color as any)" size="sm">{{ statusMap[c.status]?.label }}</TTag>
