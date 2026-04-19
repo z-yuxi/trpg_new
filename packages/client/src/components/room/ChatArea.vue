@@ -7,7 +7,15 @@ import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { socketClient } from '../../socket/socket-client';
 
-const props = defineProps<{ prefillText?: string }>();
+const props = defineProps<{
+  prefillText?: string;
+  isGm?: boolean;
+  currentSceneType?: string;
+  myCharacter?: { id: string; name: string; avatarUrl?: string } | null;
+  roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
+  authDisplayName?: string;
+  selectedIdentityKey?: string;
+}>();
 
 const messageStore = useMessageStore();
 const authStore = useAuthStore();
@@ -21,7 +29,26 @@ watch(() => messageStore.currentMessages.length, async () => {
 function handleSend(content: string, messageType: string, senderIdentity?: string) {
   const tempId = uuidv4();
   messageStore.addPendingMessage(content, tempId, messageType);
-  socketClient.sendMessage({ content, message_type: messageType, metadata: { temp_id: tempId, sender_identity: senderIdentity } });
+  let senderIdentityLabel: string | undefined;
+  if (senderIdentity?.startsWith('npc:')) {
+    senderIdentityLabel = props.roleplayableNpcs?.find((npc) => `npc:${npc.id}` === senderIdentity)?.name;
+  } else if (senderIdentity?.startsWith('char:')) {
+    senderIdentityLabel = props.myCharacter?.name;
+  } else if (senderIdentity === 'gm') {
+    senderIdentityLabel = 'GM';
+  } else if (senderIdentity === 'platform') {
+    senderIdentityLabel = props.authDisplayName;
+  }
+
+  socketClient.sendMessage({
+    content,
+    message_type: messageType,
+    metadata: {
+      temp_id: tempId,
+      sender_identity: senderIdentity,
+      sender_identity_label: senderIdentityLabel,
+    },
+  });
 }
 
 function handleCommand(commandStr: string) {
@@ -59,7 +86,17 @@ onMounted(() => {
         @retry="handleRetry"
       />
     </div>
-    <ChatInput :prefill-text="props.prefillText" @send="handleSend" @command="handleCommand" />
+    <ChatInput
+      :prefill-text="props.prefillText"
+      :is-gm="props.isGm"
+      :current-scene-type="props.currentSceneType"
+      :my-character="props.myCharacter"
+      :roleplayable-npcs="props.roleplayableNpcs"
+      :auth-display-name="props.authDisplayName"
+      :selected-identity-key="props.selectedIdentityKey"
+      @send="handleSend"
+      @command="handleCommand"
+    />
   </div>
 </template>
 

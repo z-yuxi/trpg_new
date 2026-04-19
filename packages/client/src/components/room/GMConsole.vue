@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { ElDialog, ElMessage } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
@@ -32,6 +32,7 @@ function formatTime(t: StoryTime) { return `第${t.day}日 ${padZ(t.hour)}:${pad
 const showTimeConfirm = ref(false);
 const pendingTime = ref<StoryTime | null>(null);
 const pendingScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; execute_at_story: StoryTime }[]>([]);
+const currentScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; execute_at_story: StoryTime }[]>([]);
 const loadingMoves = ref(false);
 const customDayDelta = ref(0);
 const customHourDelta = ref(0);
@@ -66,6 +67,32 @@ async function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: num
     }
   } catch { /* API 可能未实现，忽略 */ }
   finally { loadingMoves.value = false; }
+}
+
+async function loadPendingScheduledMoves() {
+  loadingMoves.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/scheduled-moves?status=pending`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) return;
+    currentScheduledMoves.value = await res.json();
+  } catch {
+    // ignore
+  } finally {
+    loadingMoves.value = false;
+  }
+}
+
+function approveMove(moveId: string) {
+  socketClient.gmApproveMove(moveId);
+  currentScheduledMoves.value = currentScheduledMoves.value.filter((move) => move.id !== moveId);
+}
+
+function approveAllMoves() {
+  currentScheduledMoves.value.forEach((move) => socketClient.gmApproveMove(move.id));
+  currentScheduledMoves.value = [];
+  ElMessage.success('已批量批准当前待审批移动');
 }
 
 function confirmAdvanceTime() {
@@ -170,20 +197,63 @@ const clueTargetAll = ref(true);
 const clueTargetCharId = ref('');
 const localClues = ref<{id:string;title:string;content:string;theme:ClueTheme}[]>([]);
 
+async function loadClues() {
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) return;
+    const clues = await res.json() as { id: string; title: string; content: string; theme: ClueTheme }[];
+    localClues.value = clues;
+  } catch {
+    // ignore initial load failure
+  }
+}
+
 function prepareClue() {
   if (!clueForm.value.title.trim() || !clueForm.value.content.trim()) { ElMessage.warning('标题和内容不能为空'); return; }
   showClueTargetDialog.value = true;
 }
 
-function sendClue() {
-  localClues.value.unshift({ id: Date.now().toString(), ...clueForm.value });
-  socketClient.sendMessage({ content: clueForm.value.content, message_type: 'clue_card', metadata: { theme: clueForm.value.theme, title: clueForm.value.title, visible_to: clueTargetAll.value ? null : [clueTargetCharId.value] } });
-  clueForm.value = { title: '', content: '', theme: 'river' };
-  showClueTargetDialog.value = false;
-  ElMessage.success('线索已发放');
+async function sendClue() {
+  try {
+    const visibleTo = clueTargetAll.value ? null : [clueTargetCharId.value];
+    const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({
+        title: clueForm.value.title,
+        content: clueForm.value.content,
+        theme: clueForm.value.theme,
+        is_revealed: true,
+        revealed_to: visibleTo,
+      }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '发放失败');
+    const clue = await res.json() as { id: string; title: string; content: string; theme: ClueTheme };
+    localClues.value.unshift(clue);
+    socketClient.sendMessage({
+      content: clue.content,
+      message_type: 'clue_card',
+      visible_to: visibleTo ?? undefined,
+      metadata: { clue_id: clue.id, theme: clue.theme, title: clue.title },
+    });
+    clueForm.value = { title: '', content: '', theme: 'river' };
+    showClueTargetDialog.value = false;
+    clueTargetAll.value = true;
+    clueTargetCharId.value = '';
+    ElMessage.success('线索已发放');
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '发放失败');
+  }
 }
 
 const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatial' || s.type === 'lobby'));
+
+onMounted(() => {
+  loadClues();
+  loadPendingScheduledMoves();
+});
 </script>
 
 <template>
@@ -206,6 +276,20 @@ const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatia
           <div class="delta-field"><input v-model.number="customDayDelta" type="number" min="0"/><label>天</label></div>
           <div class="delta-field"><input v-model.number="customHourDelta" type="number" min="0" max="23"/><label>时</label></div>
           <div class="delta-field"><input v-model.number="customMinDelta" type="number" min="0" max="59"/><label>分</label></div>
+        </div>
+        <div class="pending-moves-panel">
+          <div class="pending-moves-head">
+            <span class="section-label">待审批移动</span>
+            <button class="sm-btn accent" :disabled="currentScheduledMoves.length===0" @click="approveAllMoves">全部批准</button>
+          </div>
+          <div v-if="currentScheduledMoves.length===0" class="moves-hint">当前无待审批移动</div>
+          <div v-for="move in currentScheduledMoves" :key="move.id" class="move-preview-row">
+            <div>
+              <div class="move-char">{{ move.character_name || '未命名角色' }}</div>
+              <div class="move-scene">→ {{ move.to_scene_name || move.to_scene_id }} · {{ formatTime(move.execute_at_story) }}</div>
+            </div>
+            <button class="sm-btn" @click="approveMove(move.id)">批准</button>
+          </div>
         </div>
       </div>
       <!-- Tab 2: 场景 -->
@@ -391,6 +475,11 @@ const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatia
 .move-arrow { color: var(--color-text-muted); }
 .move-time { color: var(--color-text-muted); }
 .clue-preview-wrap { margin-top: 4px; }
+.pending-moves-panel { margin-top: var(--space-4); border-top: 1px solid var(--border-default); padding-top: var(--space-3); }
+.pending-moves-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
+.move-preview-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--border-default); }
+.move-char { font-size: var(--text-sm); color: var(--text-primary); font-weight: var(--font-semibold); }
+.move-scene { font-size: var(--text-xs); color: var(--text-muted); }
 .empty-hint { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-3); }
 .sm-btn { padding: 3px 10px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-xs); white-space: nowrap; }
 .sm-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }

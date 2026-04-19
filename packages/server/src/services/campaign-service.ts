@@ -197,6 +197,47 @@ export class ScheduledMoveService {
     };
   }
 
+  async listByCampaign(params: {
+    campaign_id: string;
+    status?: ScheduledMove['status'];
+  }): Promise<Array<ScheduledMove & { character_name?: string; to_scene_name?: string }>> {
+    let query = db('scheduled_moves as sm')
+      .leftJoin('character_sheets as cs', 'sm.character_id', 'cs.id')
+      .leftJoin('scenes as sc', 'sm.to_scene_id', 'sc.id')
+      .where('sm.campaign_id', params.campaign_id)
+      .select(
+        'sm.id',
+        'sm.character_id',
+        'sm.campaign_id',
+        'sm.to_scene_id',
+        'sm.execute_at_story',
+        'sm.status',
+        'sm.created_at',
+        'cs.name as character_name',
+        'sc.name as to_scene_name'
+      )
+      .orderBy('sm.created_at', 'asc');
+
+    if (params.status) {
+      query = query.where('sm.status', params.status);
+    }
+
+    const rows = await query;
+    return rows.map((row) => ({
+      id: row['id'] as string,
+      character_id: row['character_id'] as string,
+      campaign_id: row['campaign_id'] as string,
+      to_scene_id: row['to_scene_id'] as string,
+      execute_at_story: typeof row['execute_at_story'] === 'string'
+        ? JSON.parse(row['execute_at_story'] as string)
+        : row['execute_at_story'] as StoryTime,
+      status: row['status'] as ScheduledMove['status'],
+      created_at: row['created_at'] as Date,
+      character_name: row['character_name'] as string | undefined,
+      to_scene_name: row['to_scene_name'] as string | undefined,
+    }));
+  }
+
   async updateStatus(id: string, status: ScheduledMove['status']): Promise<void> {
     await db('scheduled_moves').where({ id }).update({ status });
   }

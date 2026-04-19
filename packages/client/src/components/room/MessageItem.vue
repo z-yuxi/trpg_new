@@ -21,6 +21,21 @@ function parseClue(metadata: any) {
   if (!metadata) return null;
   return metadata as { title?: string; content?: string; theme?: string };
 }
+
+function getSenderIdentity(metadata: any) {
+  if (!metadata) return null;
+  return metadata as { sender_identity?: string; sender_identity_label?: string };
+}
+
+function getSenderLabel(message: LocalMessage) {
+  const identity = getSenderIdentity(message.metadata);
+  if (!identity?.sender_identity_label) return '';
+  return identity.sender_identity_label;
+}
+
+function isNpcMessage(message: LocalMessage) {
+  return getSenderIdentity(message.metadata)?.sender_identity?.startsWith('npc:') ?? false;
+}
 </script>
 
 <template>
@@ -59,6 +74,9 @@ function parseClue(metadata: any) {
   <div v-else class="msg-bubble-row" :class="{ own: isOwn }">
     <div class="msg-avatar">{{ (message.sender_character_id ?? message.sender_user_id ?? '?')[0] }}</div>
     <div class="msg-bubble-wrap">
+      <div v-if="getSenderLabel(message)" class="msg-sender" :class="{ npc: isNpcMessage(message) }">
+        {{ getSenderLabel(message) }}
+      </div>
       <div class="msg-bubble" :class="{ 'own-bubble': isOwn, 'failed': message._sendStatus === 'failed', 'private': message.visible_to !== null }">
         <span v-if="message.visible_to !== null" class="private-badge" title="私密消息（仅部分人可见）">
           <SvgIcon name="icon-lock" :size="12" />
@@ -168,6 +186,15 @@ function parseClue(metadata: any) {
 
 /* ===== 气泡容器 ===== */
 .msg-bubble-wrap { max-width: 85%; position: relative; }
+.msg-sender {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.msg-sender.npc {
+  color: var(--color-primary);
+  font-weight: var(--font-semibold);
+}
 
 /* ===== 气泡 — 按附录 B 3.5 ===== */
 .msg-bubble {

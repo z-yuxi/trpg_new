@@ -8,6 +8,7 @@ const props = defineProps<{
   myCharacter?: { id: string; name: string; avatarUrl?: string } | null;
   roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
   authDisplayName?: string;
+  selectedIdentityKey?: string;
   prefillText?: string;
 }>();
 
@@ -39,12 +40,23 @@ const identityOptions = computed<IdentityOption[]>(() => {
 
 const selectedIdentityKey = ref<string>('');
 
+watch(() => props.selectedIdentityKey, (val) => {
+  if (val) selectedIdentityKey.value = val;
+}, { immediate: true });
+
 const selectedIdentity = computed<IdentityOption>(() => {
   if (!selectedIdentityKey.value) return identityOptions.value[0] ?? { key: 'player', label: '玩家' };
   return identityOptions.value.find((o) => o.key === selectedIdentityKey.value) ?? identityOptions.value[0] ?? { key: 'player', label: '玩家' };
 });
 
 const showIdentityDropdown = ref(false);
+
+watch(identityOptions, (list) => {
+  if (!list.length) return;
+  if (!selectedIdentityKey.value || !list.some((item) => item.key === selectedIdentityKey.value)) {
+    selectedIdentityKey.value = list[0]!.key;
+  }
+}, { immediate: true });
 
 function selectIdentity(option: IdentityOption) {
   selectedIdentityKey.value = option.key;

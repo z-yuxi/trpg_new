@@ -64,6 +64,11 @@ const myVirtualSceneIds = computed(() => {
 const moveTargetOptions = computed(() => scenes.value.filter((scene) => scene.type === 'spatial' || scene.type === 'lobby'));
 
 const prefillCommand = ref('');
+const selectedSenderIdentity = ref('');
+
+const myCharacter = computed(() =>
+  roomCharacters.value.find((char) => char.id === characterId.value) ?? null
+);
 
 function handleFillCommand(cmd: string) {
   prefillCommand.value = cmd;
@@ -275,7 +280,7 @@ onUnmounted(() => {
             :characters="roomCharacters.map(c => ({ id: c.id, name: c.name }))"
             @scene-created="handleSceneCreated"
             @npc-created="(n) => npcs.push(n)"
-            @play-as-npc="(id) => { /* TODO: set identity */ }"
+            @play-as-npc="(id) => { selectedSenderIdentity = `npc:${id}`; showGMConsole = false; }"
           />
         </transition>
       </template>
@@ -298,7 +303,15 @@ onUnmounted(() => {
         />
       </template>
       <template #chat-area>
-        <ChatArea :prefill-text="prefillCommand" />
+        <ChatArea
+          :prefill-text="prefillCommand"
+          :is-gm="isGm"
+          :current-scene-type="currentScene?.type"
+          :my-character="myCharacter ? { id: myCharacter.id, name: myCharacter.name, avatarUrl: myCharacter.avatarUrl } : null"
+          :roleplayable-npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, avatarUrl: npc.avatar_url }))"
+          :auth-display-name="authStore.nickname"
+          :selected-identity-key="selectedSenderIdentity"
+        />
       </template>
       <template #right-desk>
         <AssistantDesk

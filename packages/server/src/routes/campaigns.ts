@@ -1,7 +1,8 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
-import { campaignService } from '../services/campaign-service';
+import { campaignService, scheduledMoveService } from '../services/campaign-service';
+import { clueService } from '../services/clue-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { generateId } from '@trpg/shared';
@@ -358,6 +359,83 @@ router.post('/:id/force-move', async (req, res) => {
     res.json({ character_id, from_scene_id: fromSceneId, to_scene_id });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Force move failed' });
+  }
+});
+
+// GET /api/campaigns/:id/scheduled-moves
+router.get('/:id/scheduled-moves', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can view scheduled moves' }); return; }
+
+    const status = req.query['status'];
+    const moves = await scheduledMoveService.listByCampaign({
+      campaign_id: req.params.id,
+      status: typeof status === 'string' ? status as 'pending' | 'approved' | 'cancelled' : undefined,
+    });
+    res.json(moves);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// GET /api/campaigns/:id/clues
+router.get('/:id/clues', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can view clues' }); return; }
+
+    const clues = await clueService.listByCampaign(req.params.id);
+    res.json(clues);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// POST /api/campaigns/:id/clues
+router.post('/:id/clues', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create clues' }); return; }
+
+    const { title, content, theme, is_revealed, revealed_to } = req.body as {
+      title?: string;
+      content?: string;
+      theme?: 'river' | 'blur' | 'fragment' | 'wave' | 'ancient' | 'blood' | 'ash' | 'cyber';
+      is_revealed?: boolean;
+      revealed_to?: string[] | null;
+    };
+    if (!title || !content || !theme) { res.status(400).json({ error: 'title, content and theme are required' }); return; }
+
+    const clue = await clueService.create({
+      campaign_id: req.params.id,
+      title,
+      content,
+      theme,
+      is_revealed,
+      revealed_to,
+    });
+    res.status(201).json(clue);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  }
+});
+
+// PUT /api/campaigns/:id/clues/:clueId
+router.put('/:id/clues/:clueId', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update clues' }); return; }
+
+    const clue = await clueService.update(req.params.clueId, req.body ?? {});
+    if (!clue) { res.status(404).json({ error: 'Clue not found' }); return; }
+    res.json(clue);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
   }
 });
 
