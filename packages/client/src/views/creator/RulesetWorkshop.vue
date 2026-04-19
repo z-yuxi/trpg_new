@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElDialog, ElMessage } from 'element-plus';
@@ -102,7 +102,7 @@ onMounted(loadRulesets);
 .workshop-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6); }
 .page-title { font-size: var(--text-xl); font-weight: 700; color: var(--text-primary); }
 .new-btn {
-  padding: var(--space-2) var(--space-4); background: var(--accent-primary); color: #fff;
+  padding: var(--space-2) var(--space-4); background: var(--color-accent); color: #fff;
   border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm);
   transition: opacity var(--transition-fast);
 }
@@ -130,7 +130,7 @@ onMounted(loadRulesets);
   background: none; cursor: pointer; font-size: var(--text-sm); color: var(--text-primary);
   transition: border-color var(--transition-fast), color var(--transition-fast);
 }
-.edit-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.edit-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .form-body { display: flex; flex-direction: column; gap: var(--space-2); }
 .form-label { font-size: var(--text-sm); font-weight: 500; color: var(--text-secondary); }
 .field-input {
@@ -138,9 +138,9 @@ onMounted(loadRulesets);
   border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-primary);
   font-size: var(--text-sm); box-sizing: border-box;
 }
-.field-input:focus { outline: none; border-color: var(--accent-primary); }
+.field-input:focus { outline: none; border-color: var(--color-accent); }
 .dlg-btn { padding: var(--space-2) var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: none; cursor: pointer; font-size: var(--text-sm); color: var(--text-primary); margin-left: var(--space-2); }
-.dlg-btn.accent { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+.dlg-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
 .dlg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .empty-hint { text-align: center; color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-6); }
 </style>

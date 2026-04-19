@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -262,10 +262,10 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .editor { display: flex; flex-direction: column; height: 100%; max-width: 880px; }
 .editor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
 .back-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: var(--text-sm); padding: 0; }
-.back-btn:hover { color: var(--accent-primary); }
+.back-btn:hover { color: var(--color-accent); }
 .header-right { display: flex; align-items: center; gap: var(--space-2); }
 .status-select { padding: var(--space-1) var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-primary); font-size: var(--text-sm); }
-.save-btn { padding: var(--space-2) var(--space-5); background: var(--accent-primary); color: #fff; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm); transition: opacity var(--transition-fast); }
+.save-btn { padding: var(--space-2) var(--space-5); background: var(--color-accent); color: #fff; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm); transition: opacity var(--transition-fast); }
 .save-btn:hover:not(:disabled) { opacity: 0.85; }
 .save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -281,7 +281,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .form-field.flex-2 { flex: 2; }
 .form-label { font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
 .field-input { padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-primary); font-size: var(--text-sm); box-sizing: border-box; width: 100%; }
-.field-input:focus { outline: none; border-color: var(--accent-primary); }
+.field-input:focus { outline: none; border-color: var(--color-accent); }
 .num-field { max-width: 100px; }
 
 .radio-group { display: flex; gap: var(--space-4); align-items: center; padding: var(--space-2) 0; flex-wrap: wrap; }
@@ -292,12 +292,12 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .dyn-row .field-input.flex-2 { flex: 2; }
 
 .add-btn { padding: 2px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: none; cursor: pointer; font-size: var(--text-xs); color: var(--text-secondary); transition: border-color var(--transition-fast), color var(--transition-fast); }
-.add-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.add-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .rm-btn { width: 24px; height: 24px; border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: 16px; flex-shrink: 0; }
 .rm-btn:hover { color: var(--text-primary); }
 
 .checkbox-group { display: flex; flex-direction: column; gap: var(--space-2); }
 .checkbox-item { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: var(--text-sm); }
-.cmd-name-mono { font-family: var(--font-mono); color: var(--accent-primary); }
+.cmd-name-mono { font-family: var(--font-mono); color: var(--color-accent); }
 .cmd-label { color: var(--text-secondary); }
 </style>

@@ -89,8 +89,8 @@ function isActive(path: string) {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.nav-item:hover { background: var(--surface-sunken); color: var(--text-primary); }
-.nav-item.active { background: color-mix(in srgb, var(--accent-primary) 12%, transparent); color: var(--accent-primary); font-weight: 500; }
+.nav-item:hover { background: var(--surface-hover); color: var(--text-primary); }
+.nav-item.active { background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-accent); font-weight: 500; }
 
 .creator-main {
   flex: 1;
