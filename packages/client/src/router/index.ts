@@ -44,9 +44,17 @@ const routes = [
   },
   {
     path: '/creator',
-    name: 'CreatorDashboard',
     component: () => import('../views/CreatorDashboard.vue'),
     meta: { requiresAuth: true, title: '创作台' },
+    children: [
+      { path: '', redirect: '/creator/workshop' },
+      { path: 'workshop', name: 'RulesetWorkshop', component: () => import('../views/creator/RulesetWorkshop.vue') },
+      { path: 'workshop/:id/edit', name: 'RulesetEditor', component: () => import('../views/creator/RulesetEditor.vue') },
+      { path: 'modules', name: 'ModuleEditor', component: () => import('../views/creator/DevPlaceholder.vue') },
+      { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/DevPlaceholder.vue') },
+      { path: 'dashboard', name: 'CreatorDashboard', component: () => import('../views/creator/DevPlaceholder.vue') },
+      { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/DevPlaceholder.vue') },
+    ],
   },
   {
     path: '/login',

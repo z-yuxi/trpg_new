@@ -52,6 +52,7 @@ export interface Scene {
   campaign_id: string;
   name: string;
   type: SceneType;
+  description: string;
   history_visibility: HistoryVisibility;
   visible_history_count: number;
   created_at: Date;

@@ -31,9 +31,15 @@ function formatTime(t: StoryTime) { return `第${t.day}日 ${padZ(t.hour)}:${pad
 // ─── Tab 1: 时间控制 ─────────────────────────────────────────────────────────
 const showTimeConfirm = ref(false);
 const pendingTime = ref<StoryTime | null>(null);
+const pendingScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; execute_at_story: StoryTime }[]>([]);
+const loadingMoves = ref(false);
 const customDayDelta = ref(0);
 const customHourDelta = ref(0);
 const customMinDelta = ref(30);
+
+function storyTimeToMinutes(t: StoryTime): number {
+  return (t.day - 1) * 1440 + t.hour * 60 + t.minute;
+}
 
 function calcNewTime(dayDelta: number, hourDelta: number, minDelta: number): StoryTime {
   const base = props.globalStoryTime;
@@ -42,9 +48,24 @@ function calcNewTime(dayDelta: number, hourDelta: number, minDelta: number): Sto
   return { day: Math.floor(total / 1440) + 1, hour: Math.floor((total % 1440) / 60), minute: total % 60 };
 }
 
-function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: number) {
+async function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: number) {
   pendingTime.value = calcNewTime(dayDelta, hourDelta, minDelta);
+  pendingScheduledMoves.value = [];
   showTimeConfirm.value = true;
+  loadingMoves.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/scheduled-moves?status=pending`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) {
+      const moves: any[] = await res.json();
+      const cap = storyTimeToMinutes(pendingTime.value!);
+      pendingScheduledMoves.value = moves.filter((m) =>
+        m.execute_at_story && storyTimeToMinutes(m.execute_at_story as StoryTime) <= cap
+      );
+    }
+  } catch { /* API 可能未实现，忽略 */ }
+  finally { loadingMoves.value = false; }
 }
 
 function confirmAdvanceTime() {
@@ -226,9 +247,14 @@ const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatia
         <div class="section-label" style="margin-top:12px">线索发放</div>
         <input v-model="clueForm.title" class="field-input" placeholder="线索标题"/>
         <textarea v-model="clueForm.content" class="field-input" placeholder="线索内容..." rows="2" style="margin-top:6px;resize:vertical"/>
+        <div class="section-label" style="margin-top:6px">文字主题</div>
+        <div class="theme-grid">
+          <div v-for="t in THEMES" :key="t" class="theme-card" :class="{ selected: clueForm.theme === t }" @click="clueForm.theme = t">
+            <span class="theme-preview" :class="`text-art-${t}`">示例</span>
+            <div class="theme-card-name">{{ t }}</div>
+          </div>
+        </div>
         <div class="clue-meta-row">
-          <label>文字风格：</label>
-          <select v-model="clueForm.theme" class="theme-select"><option v-for="t in THEMES" :key="t" :value="t">{{t}}</option></select>
           <button class="sm-btn accent" @click="prepareClue" style="margin-left:auto">发放线索</button>
         </div>
         <div v-if="clueForm.title" class="clue-preview-wrap"><ClueCard :title="clueForm.title" :content="clueForm.content||'...'" :theme="clueForm.theme"/></div>
@@ -238,8 +264,23 @@ const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatia
   </div>
 
   <!-- 时间确认 -->
-  <ElDialog v-model="showTimeConfirm" title="确认推进时间" width="360px">
-    <p style="font-size:var(--text-sm)">将推进至 <strong>{{pendingTime?formatTime(pendingTime):''}}</strong></p>
+  <ElDialog v-model="showTimeConfirm" title="确认推进时间" width="420px">
+    <div class="time-confirm-body">
+      <p>将推进至 <strong>{{pendingTime ? formatTime(pendingTime) : ''}}</strong></p>
+      <div v-if="loadingMoves" class="moves-hint">加载预约移动中...</div>
+      <template v-else>
+        <div v-if="pendingScheduledMoves.length > 0" class="moves-list">
+          <div class="moves-title">将触发以下预约移动：</div>
+          <div v-for="m in pendingScheduledMoves" :key="m.id" class="move-item">
+            <span>{{ m.character_name ?? '角色' }}</span>
+            <span class="move-arrow">→</span>
+            <span>{{ m.to_scene_name ?? '场景' }}</span>
+            <span class="move-time">({{ formatTime(m.execute_at_story) }})</span>
+          </div>
+        </div>
+        <div v-else class="moves-hint">无预约移动将在此时触发</div>
+      </template>
+    </div>
     <template #footer><button class="dlg-btn" @click="showTimeConfirm=false">取消</button><button class="dlg-btn accent" @click="confirmAdvanceTime">确认推进</button></template>
   </ElDialog>
   <!-- 新建场景 -->
@@ -336,7 +377,19 @@ const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatia
 .broadcast-row { display: flex; gap: var(--space-2); align-items: flex-end; }
 .broadcast-input { flex: 1; padding: var(--space-2); border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); resize: none; }
 .clue-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
-.theme-select { padding: 4px 6px; border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); }
+.theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
+.theme-card { border: 1px solid var(--color-card-border); border-radius: var(--radius-md); padding: 6px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: border-color var(--transition-fast); }
+.theme-card:hover { border-color: var(--color-accent); }
+.theme-card.selected { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent); }
+.theme-preview { font-size: 12px; font-weight: 600; line-height: 1.2; max-width: 100%; overflow: hidden; text-align: center; }
+.theme-card-name { font-size: 9px; color: var(--color-text-muted); text-align: center; }
+.time-confirm-body { font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); }
+.moves-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
+.moves-list { display: flex; flex-direction: column; gap: 4px; }
+.moves-title { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; }
+.move-item { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); }
+.move-arrow { color: var(--color-text-muted); }
+.move-time { color: var(--color-text-muted); }
 .clue-preview-wrap { margin-top: 4px; }
 .empty-hint { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-3); }
 .sm-btn { padding: 3px 10px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-xs); white-space: nowrap; }

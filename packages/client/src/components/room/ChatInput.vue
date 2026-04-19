@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 
 const props = defineProps<{
@@ -8,6 +8,7 @@ const props = defineProps<{
   myCharacter?: { id: string; name: string; avatarUrl?: string } | null;
   roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
   authDisplayName?: string;
+  prefillText?: string;
 }>();
 
 const emit = defineEmits<{
@@ -51,6 +52,7 @@ function selectIdentity(option: IdentityOption) {
 }
 
 const content = ref('');
+watch(() => props.prefillText, (val) => { if (val) { content.value = val; } }, { immediate: false });
 const messageType = ref<'narrative' | 'ooc'>('narrative');
 const showDicePanel = ref(false);
 const customDice = ref('');

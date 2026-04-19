@@ -1,25 +1,108 @@
-<script setup lang="ts">
-import TCard from '../components/base/TCard.vue';
+﻿<script setup lang="ts">
+import { useRoute } from 'vue-router';
+import SvgIcon from '../components/SvgIcon.vue';
 
-// 创作者交易系统当前版本暂未实现
+const route = useRoute();
+
+const navItems = [
+  { path: '/creator/workshop',   icon: 'icon-list',      label: '规则工坊' },
+  { path: '/creator/modules',    icon: 'icon-book',      label: '模组编辑器' },
+  { path: '/creator/assets',     icon: 'icon-dice',      label: '素材库' },
+  { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者面板' },
+  { path: '/creator/products',   icon: 'icon-star',      label: '我的作品' },
+];
+
+function isActive(path: string) {
+  return route.path.startsWith(path);
+}
 </script>
 
 <template>
-  <div class="creator-dash">
-    <h1 class="page-title">创作者后台</h1>
-    <TCard padding="lg" shadow>
-      <div class="empty-state">
-        <p class="empty-title">暂无数据</p>
-        <p class="empty-desc">创作者收益与订单系统将在后续版本上线，敬请期待。</p>
-      </div>
-    </TCard>
+  <div class="creator-layout">
+    <!-- 左侧导航 -->
+    <aside class="creator-sidebar">
+      <div class="sidebar-title">创作台</div>
+      <nav class="sidebar-nav">
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: isActive(item.path) }"
+        >
+          <SvgIcon :name="item.icon" :size="16" />
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="creator-main">
+      <RouterView />
+    </main>
   </div>
 </template>
 
 <style scoped>
-.creator-dash { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-6); }
-.page-title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); }
-.empty-state { text-align: center; padding: var(--space-8); }
-.empty-title { font-size: var(--text-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--space-2); }
-.empty-desc { font-size: var(--text-sm); color: var(--color-text-muted); }
+.creator-layout {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.creator-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-default);
+  background: var(--surface-card);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) 0;
+  overflow-y: auto;
+}
+
+.sidebar-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--space-2);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.nav-item:hover { background: var(--surface-sunken); color: var(--text-primary); }
+.nav-item.active { background: color-mix(in srgb, var(--accent-primary) 12%, transparent); color: var(--accent-primary); font-weight: 500; }
+
+.creator-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+
+@media (max-width: 768px) {
+  .creator-sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border-default); flex-direction: row; padding: var(--space-2); }
+  .creator-layout { flex-direction: column; }
+  .sidebar-nav { flex-direction: row; gap: var(--space-1); }
+  .sidebar-title { display: none; }
+  .nav-item { padding: var(--space-1) var(--space-2); }
+}
 </style>

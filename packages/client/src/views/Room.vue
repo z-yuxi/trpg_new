@@ -62,6 +62,29 @@ const myVirtualSceneIds = computed(() => {
 
 const moveTargetOptions = computed(() => scenes.value.filter((scene) => scene.type === 'spatial' || scene.type === 'lobby'));
 
+const prefillCommand = ref('');
+
+function handleFillCommand(cmd: string) {
+  prefillCommand.value = cmd;
+  // Reset after a tick so the watcher fires again if the same command is used twice
+  setTimeout(() => { prefillCommand.value = ''; }, 50);
+}
+
+async function loadScenes() {
+  const res = await fetch(`/api/campaigns/${campaignId}/scenes`, {
+    headers: { Authorization: `Bearer ${authStore.token}` },
+  });
+  if (res.ok) scenes.value = await res.json();
+}
+
+async function handleSceneCreated(s: any) {
+  // 同步更新（Vue 批量处理，避免中间状态导致私密场/公共场 computed 漏掉新场景）
+  scenes.value.push(s);
+  switchScene(s.id);
+  // 后台静默刷新，保证数据与服务器一致
+  loadScenes();
+}
+
 function switchScene(sceneId: string) {
   currentSceneId.value = sceneId;
   messageStore.setCurrentScene(sceneId);
@@ -179,15 +202,10 @@ onMounted(async () => {
       }
     }
 
-    const scenesRes = await fetch(`/api/campaigns/${campaignId}/scenes`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (scenesRes.ok) {
-      scenes.value = await scenesRes.json();
-      if (!currentSceneId.value) {
-        const firstScene = scenes.value[0]?.id;
-        if (firstScene) switchScene(firstScene);
-      }
+    await loadScenes();
+    if (!currentSceneId.value) {
+      const firstScene = scenes.value[0]?.id;
+      if (firstScene) switchScene(firstScene);
     }
 
     const npcsRes = await fetch(`/api/campaigns/${campaignId}/npcs`, {
@@ -253,7 +271,7 @@ onUnmounted(() => {
             :scenes="scenes"
             :npcs="npcs"
             :characters="roomCharacters.map(c => ({ id: c.id, name: c.name }))"
-            @scene-created="(s) => scenes.push(s)"
+            @scene-created="handleSceneCreated"
             @npc-created="(n) => npcs.push(n)"
             @play-as-npc="(id) => { /* TODO: set identity */ }"
           />
@@ -278,14 +296,14 @@ onUnmounted(() => {
         />
       </template>
       <template #chat-area>
-        <ChatArea />
+        <ChatArea :prefill-text="prefillCommand" />
       </template>
       <template #right-desk>
         <AssistantDesk
+          :campaign-id="campaignId"
           :commands="commands"
-          :dice-history="diceHistory"
           :is-gm="isGm"
-          @fill-command="() => {}"
+          @fill-command="handleFillCommand"
           @broadcast="() => {}"
         />
       </template>

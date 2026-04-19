@@ -97,7 +97,7 @@ router.post('/:id/scenes', async (req, res) => {
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scenes' }); return; }
     const id = generateId();
-    await db('scenes').insert({ id, campaign_id: req.params.id, ...req.body });
+    await db('scenes').insert({ id, campaign_id: req.params.id, name: req.body.name, type: req.body.type, description: req.body.description ?? '' });
     const scene = await db('scenes').where({ id }).first();
     res.status(201).json(scene);
   } catch (err: any) {

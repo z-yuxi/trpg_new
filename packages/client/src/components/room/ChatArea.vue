@@ -7,6 +7,8 @@ import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { socketClient } from '../../socket/socket-client';
 
+const props = defineProps<{ prefillText?: string }>();
+
 const messageStore = useMessageStore();
 const authStore = useAuthStore();
 const listRef = ref<HTMLElement>();
@@ -57,7 +59,7 @@ onMounted(() => {
         @retry="handleRetry"
       />
     </div>
-    <ChatInput @send="handleSend" @command="handleCommand" />
+    <ChatInput :prefill-text="props.prefillText" @send="handleSend" @command="handleCommand" />
   </div>
 </template>
 

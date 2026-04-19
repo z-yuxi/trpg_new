@@ -32,6 +32,7 @@ function rowToScene(row: Record<string, unknown>): Scene {
     campaign_id: row['campaign_id'] as string,
     name: row['name'] as string,
     type: row['type'] as SceneType,
+    description: (row['description'] as string) ?? '',
     history_visibility: row['history_visibility'] as HistoryVisibility,
     visible_history_count: row['visible_history_count'] as number,
     created_at: row['created_at'] as Date,
