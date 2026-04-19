@@ -1,54 +1,37 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import TTag from '../../components/base/TTag.vue';
+import { useAuthStore } from '../../stores/auth-store';
 
-interface ActivityItem {
-  id: string;
-  type: 'post' | 'reply' | 'join' | 'publish';
-  label: string;
-  title: string;
-  link?: string;
-  createdAt: string;
+interface ForumThread { id: string; title: string; reply_count: number; created_at: string; }
+interface ForumPost { id: string; thread_id: string; content: string; floor_number: number; created_at: string; thread_title: string; }
+
+const authStore = useAuthStore();
+const router = useRouter();
+const activeTab = ref<'threads' | 'posts'>('threads');
+const threads = ref<ForumThread[]>([]);
+const posts = ref<ForumPost[]>([]);
+const loading = ref(false);
+
+async function fetchActivity() {
+  if (!authStore.isLoggedIn) return;
+  loading.value = true;
+  try {
+    const res = await fetch('/api/users/me/activity', {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) throw new Error();
+    const body = await res.json() as { threads: ForumThread[]; posts: ForumPost[] };
+    threads.value = body.threads;
+    posts.value = body.posts;
+  } catch {
+    ElMessage.error('加载动态失败');
+  } finally {
+    loading.value = false;
+  }
 }
-
-// TODO: 后端 GET /api/users/me/activity 接口实现后替换此本地数据
-const activities = ref<ActivityItem[]>([
-  {
-    id: '1',
-    type: 'post',
-    label: '发布了帖子',
-    title: '有没有人推荐一套适合新手的 COC 规则入门资料？',
-    createdAt: new Date(Date.now() - 3_600_000).toISOString(),
-  },
-  {
-    id: '2',
-    type: 'reply',
-    label: '回复了帖子',
-    title: '我的第一个自制模组分享——《碎镜》',
-    createdAt: new Date(Date.now() - 7_200_000).toISOString(),
-  },
-  {
-    id: '3',
-    type: 'join',
-    label: '申请加入了招募',
-    title: '【COC】月色幽深夜——四人密室恐怖团',
-    createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-  },
-  {
-    id: '4',
-    type: 'publish',
-    label: '发布了招募帖',
-    title: '招募 3 名 D&D 5e 玩家，长期团，每周六',
-    createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
-  },
-]);
-
-const TYPE_COLOR: Record<string, 'default' | 'info' | 'success' | 'warning' | 'danger'> = {
-  post:    'info',
-  reply:   'default',
-  join:    'success',
-  publish: 'warning',
-};
 
 function formatTime(iso: string) {
   try {
@@ -61,40 +44,91 @@ function formatTime(iso: string) {
     return '-';
   }
 }
+
+onMounted(fetchActivity);
 </script>
 
 <template>
   <div class="my-activity">
     <h2 class="page-title">我的动态</h2>
 
-    <div v-if="activities.length === 0" class="empty-state">
-      暂无动态记录
+    <div class="tabs-bar">
+      <button class="tab-btn" :class="{ active: activeTab === 'threads' }" @click="activeTab = 'threads'">
+        我发的帖 ({{ threads.length }})
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'posts' }" @click="activeTab = 'posts'">
+        我的回复 ({{ posts.length }})
+      </button>
     </div>
 
-    <div v-else class="timeline">
-      <div v-for="(item, index) in activities" :key="item.id" class="timeline-item">
-        <!-- 时间轴线 -->
-        <div class="timeline-axis">
-          <div class="axis-dot"></div>
-          <div v-if="index < activities.length - 1" class="axis-line"></div>
-        </div>
+    <div v-if="loading" class="empty-state">加载中...</div>
 
-        <!-- 内容 -->
-        <div class="timeline-content">
-          <div class="item-header">
-            <TTag :color="TYPE_COLOR[item.type]" size="sm">{{ item.label }}</TTag>
-            <span class="item-time">{{ formatTime(item.createdAt) }}</span>
+    <template v-else-if="activeTab === 'threads'">
+      <div v-if="threads.length === 0" class="empty-state">暂无发帖记录</div>
+      <div v-else class="timeline">
+        <div v-for="(thread, index) in threads" :key="thread.id" class="timeline-item">
+          <div class="timeline-axis">
+            <div class="axis-dot"></div>
+            <div v-if="index < threads.length - 1" class="axis-line"></div>
           </div>
-          <div class="item-title">{{ item.title }}</div>
+
+          <div class="timeline-content">
+            <div class="item-header">
+              <TTag color="info" size="sm">发布了帖子</TTag>
+              <span class="item-time">{{ formatTime(thread.created_at) }}</span>
+            </div>
+            <div class="item-title clickable" @click="router.push(`/community/thread/${thread.id}`)">{{ thread.title }}</div>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
+
+    <template v-else>
+      <div v-if="posts.length === 0" class="empty-state">暂无回复记录</div>
+      <div v-else class="timeline">
+        <div v-for="(post, index) in posts" :key="post.id" class="timeline-item">
+          <div class="timeline-axis">
+            <div class="axis-dot"></div>
+            <div v-if="index < posts.length - 1" class="axis-line"></div>
+          </div>
+
+          <div class="timeline-content">
+            <div class="item-header">
+              <TTag color="default" size="sm">回复了帖子</TTag>
+              <span class="item-time">{{ formatTime(post.created_at) }}</span>
+            </div>
+            <div class="item-title clickable" @click="router.push(`/community/thread/${post.thread_id}`)">{{ post.thread_title }}</div>
+            <div class="reply-preview">{{ post.content.slice(0, 80) }}{{ post.content.length > 80 ? '...' : '' }}</div>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .my-activity { display: flex; flex-direction: column; gap: var(--space-4); }
 .page-title { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--text-primary); }
+
+.tabs-bar {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tab-btn {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--surface-base);
+  color: var(--text-body);
+  cursor: pointer;
+}
+
+.tab-btn.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--btn-primary-text);
+}
 
 .empty-state {
   text-align: center;
@@ -156,6 +190,20 @@ function formatTime(iso: string) {
 .item-title {
   font-size: var(--text-sm);
   color: var(--text-body);
+  line-height: var(--leading-normal);
+}
+
+.item-title.clickable {
+  cursor: pointer;
+}
+
+.item-title.clickable:hover {
+  color: var(--color-primary);
+}
+
+.reply-preview {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
   line-height: var(--leading-normal);
 }
 </style>

@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { ElMessage, ElDialog, ElForm, ElFormItem, ElInput, ElButton as ElBtn } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
+import { useAuthStore } from '../../stores/auth-store';
 
 interface Thread {
   id: string;
-  pinned?: boolean;
-  featured?: boolean;
-  isNew?: boolean;
+  is_pinned?: boolean;
+  is_locked?: boolean;
   title: string;
-  author: string;
-  replies: number;
-  views: number;
-  lastReplyAt: string;
-  lastReplyUser: string;
+  author_nickname?: string;
+  reply_count: number;
+  view_count: number;
+  last_reply_at: string | null;
+  created_at: string;
 }
 
 const BOARD_LABELS: Record<string, string> = {
@@ -27,53 +28,67 @@ const BOARD_LABELS: Record<string, string> = {
 
 const route = useRoute();
 const router = useRouter();
-const board = computed(() => route.params.board as string);
+const authStore = useAuthStore();
+const board = computed(() => route.params['board'] as string);
 const boardLabel = computed(() => BOARD_LABELS[board.value] ?? '讨论区');
 
 const page = ref(1);
 const pageSize = 20;
+const sort = ref<'newest' | 'hottest' | 'latest_reply'>('latest_reply');
+const threads = ref<Thread[]>([]);
+const total = ref(0);
+const loading = ref(false);
 
-// TODO: 后端 /api/forum/:board/threads 接口实现后替换此本地数据
-const threads = ref<Thread[]>([
-  {
-    id: '1',
-    pinned: true,
-    featured: true,
-    title: '【置顶】板块说明与规则',
-    author: '管理员',
-    replies: 5,
-    views: 1024,
-    lastReplyAt: new Date(Date.now() - 3600_000).toISOString(),
-    lastReplyUser: '管理员',
-  },
-  {
-    id: '2',
-    isNew: true,
-    title: '有没有人推荐一套适合新手的 COC 规则入门资料？',
-    author: '星光旅者',
-    replies: 12,
-    views: 280,
-    lastReplyAt: new Date(Date.now() - 900_000).toISOString(),
-    lastReplyUser: '老玩家甲',
-  },
-  {
-    id: '3',
-    title: '我的第一个自制模组分享——《碎镜》',
-    author: '创作者小王',
-    replies: 8,
-    views: 156,
-    lastReplyAt: new Date(Date.now() - 7200_000).toISOString(),
-    lastReplyUser: '路人乙',
-  },
-]);
+// 发帖弹窗
+const showPostDialog = ref(false);
+const newTitle = ref('');
+const newContent = ref('');
+const posting = ref(false);
 
-const total = computed(() => threads.value.length);
-const pagedThreads = computed(() => {
-  const start = (page.value - 1) * pageSize;
-  return threads.value.slice(start, start + pageSize);
-});
+async function fetchThreads() {
+  loading.value = true;
+  try {
+    const params = new URLSearchParams({ sort: sort.value, page: String(page.value), limit: String(pageSize) });
+    const res = await fetch(`/api/forum/boards/${board.value}/threads?${params}`);
+    if (!res.ok) throw new Error();
+    const body = await res.json() as { data: Thread[]; total: number };
+    threads.value = body.data;
+    total.value = body.total;
+  } catch {
+    ElMessage.error('加载失败');
+  } finally {
+    loading.value = false;
+  }
+}
 
-function formatTime(iso: string) {
+async function submitPost() {
+  if (!newTitle.value.trim() || !newContent.value.trim()) {
+    ElMessage.warning('标题和内容不能为空');
+    return;
+  }
+  posting.value = true;
+  try {
+    const res = await fetch('/api/forum/threads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({ board: board.value, title: newTitle.value, content: newContent.value }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const thread = await res.json() as Thread;
+    ElMessage.success('发帖成功');
+    showPostDialog.value = false;
+    newTitle.value = '';
+    newContent.value = '';
+    router.push(`/community/thread/${thread.id}`);
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '发帖失败');
+  } finally {
+    posting.value = false;
+  }
+}
+
+function formatTime(iso: string | null) {
+  if (!iso) return '-';
   try {
     const d = new Date(iso);
     const diff = Date.now() - d.getTime();
@@ -91,18 +106,28 @@ function goThread(id: string) {
 }
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize));
+
+watch([board, sort], () => { page.value = 1; fetchThreads(); }, { immediate: false });
+watch(page, fetchThreads);
+onMounted(fetchThreads);
 </script>
 
 <template>
   <div class="forum-board">
     <div class="board-header">
       <h2 class="board-title">{{ boardLabel }}</h2>
-      <TButton type="primary" size="sm">+ 发帖</TButton>
+      <div class="header-actions">
+        <select v-model="sort" class="sort-select">
+          <option value="latest_reply">最新回复</option>
+          <option value="newest">最新发布</option>
+          <option value="hottest">最热</option>
+        </select>
+        <TButton v-if="authStore.isLoggedIn" type="primary" size="sm" @click="showPostDialog = true">+ 发帖</TButton>
+      </div>
     </div>
 
     <!-- 帖子列表 -->
     <div class="thread-table">
-      <!-- 表头 -->
       <div class="thread-row thread-head">
         <span class="col-title">标题</span>
         <span class="col-author">作者</span>
@@ -112,32 +137,29 @@ const totalPages = computed(() => Math.ceil(total.value / pageSize));
       </div>
 
       <div
-        v-for="t in pagedThreads"
+        v-for="t in threads"
         :key="t.id"
         class="thread-row thread-item"
-        :class="{ pinned: t.pinned }"
+        :class="{ pinned: t.is_pinned }"
         @click="goThread(t.id)"
       >
-        <!-- 标题 + 标签 -->
         <div class="col-title title-cell">
           <div class="title-tags">
-            <TTag v-if="t.pinned" size="sm" color="warning">置顶</TTag>
-            <TTag v-if="t.featured" size="sm" color="success">精华</TTag>
-            <TTag v-if="t.isNew" size="sm" color="info">NEW</TTag>
+            <TTag v-if="t.is_pinned" size="sm" color="warning">置顶</TTag>
+            <TTag v-if="t.is_locked" size="sm" color="info">锁帖</TTag>
           </div>
           <span class="thread-title">{{ t.title }}</span>
         </div>
 
-        <span class="col-author author-name">{{ t.author }}</span>
-        <span class="col-num">{{ t.replies }}</span>
-        <span class="col-num">{{ t.views }}</span>
+        <span class="col-author author-name">{{ t.author_nickname ?? '-' }}</span>
+        <span class="col-num">{{ t.reply_count }}</span>
+        <span class="col-num">{{ t.view_count }}</span>
         <div class="col-last last-cell">
-          <span>{{ formatTime(t.lastReplyAt) }}</span>
-          <span class="last-user">{{ t.lastReplyUser }}</span>
+          <span>{{ formatTime(t.last_reply_at) }}</span>
         </div>
       </div>
 
-      <div v-if="pagedThreads.length === 0" class="empty-state">
+      <div v-if="!loading && threads.length === 0" class="empty-state">
         暂无帖子，来发布第一篇吧！
       </div>
     </div>
@@ -148,6 +170,24 @@ const totalPages = computed(() => Math.ceil(total.value / pageSize));
       <span class="page-info">{{ page }} / {{ totalPages }}</span>
       <button class="page-btn" :disabled="page >= totalPages" @click="page++">下一页</button>
     </div>
+
+    <!-- 发帖弹窗 -->
+    <ElDialog v-model="showPostDialog" title="发布新帖" width="480px">
+      <div class="post-form">
+        <div class="form-item">
+          <label class="form-label">标题</label>
+          <ElInput v-model="newTitle" placeholder="帖子标题（2-200字）" maxlength="200" show-word-limit />
+        </div>
+        <div class="form-item">
+          <label class="form-label">内容</label>
+          <ElInput v-model="newContent" type="textarea" :rows="6" placeholder="帖子内容" maxlength="10000" show-word-limit />
+        </div>
+      </div>
+      <template #footer>
+        <ElBtn @click="showPostDialog = false">取消</ElBtn>
+        <ElBtn type="primary" :loading="posting" @click="submitPost">发布</ElBtn>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -160,6 +200,19 @@ const totalPages = computed(() => Math.ceil(total.value / pageSize));
   justify-content: space-between;
 }
 .board-title { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--text-primary); }
+.header-actions { display: flex; align-items: center; gap: var(--space-2); }
+.sort-select {
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.post-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.form-item { display: flex; flex-direction: column; gap: var(--space-1); }
+.form-label { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-body); }
 
 /* 表格 */
 .thread-table {

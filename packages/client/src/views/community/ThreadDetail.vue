@@ -1,47 +1,69 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
+import { useAuthStore } from '../../stores/auth-store';
 
 interface Post {
-  floor: number;
-  author: string;
-  avatarChar: string;
+  id: string;
+  floor_number: number;
+  author_nickname?: string;
   content: string;
-  createdAt: string;
+  created_at: string;
+  reply_to_post_id?: string | null;
+}
+
+interface ThreadDetail {
+  id: string;
+  title: string;
+  content: string;
+  author_nickname?: string;
+  view_count: number;
+  reply_count: number;
+  is_locked: boolean;
+}
+
+interface ThreadResponse {
+  thread: ThreadDetail;
+  posts: Post[];
+  total_posts: number;
+  page: number;
+  limit: number;
+  has_more: boolean;
 }
 
 const route = useRoute();
-const threadId = route.params.id as string;
+const authStore = useAuthStore();
+const threadId = route.params['id'] as string;
 
-// TODO: 后端 GET /api/forum/threads/:id 接口实现后替换此本地数据
-const title = ref('有没有人推荐一套适合新手的 COC 规则入门资料？');
-const posts = ref<Post[]>([
-  {
-    floor: 1,
-    author: '星光旅者',
-    avatarChar: '星',
-    content: '我是新人，最近想入坑 COC，但感觉规则书太多太乱，有没有大佬推荐一个学习路径？',
-    createdAt: new Date(Date.now() - 3600_000).toISOString(),
-  },
-  {
-    floor: 2,
-    author: '老玩家甲',
-    avatarChar: '老',
-    content: '建议先看《克苏鲁神话TRPG》第七版规则书，然后直接跑一个新手模组《梦境追踪者》，边玩边学最快。',
-    createdAt: new Date(Date.now() - 2400_000).toISOString(),
-  },
-  {
-    floor: 3,
-    author: '路人乙',
-    avatarChar: '路',
-    content: '同意楼上，另外 B 站有很多实际游戏视频，看看别人怎么跑团也很有帮助。',
-    createdAt: new Date(Date.now() - 1200_000).toISOString(),
-  },
-]);
-
+const thread = ref<ThreadDetail | null>(null);
+const posts = ref<Post[]>([]);
+const loading = ref(false);
 const replyContent = ref('');
 const submitting = ref(false);
+const replyToId = ref<string | null>(null);
+const currentPage = ref(1);
+const pageSize = 20;
+const hasMore = ref(false);
+
+async function fetchThread(page = 1, append = false) {
+  loading.value = true;
+  try {
+    const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+    const res = await fetch(`/api/forum/threads/${threadId}?${params}`);
+    if (!res.ok) throw new Error();
+    const body = await res.json() as ThreadResponse;
+    thread.value = body.thread;
+    posts.value = append ? posts.value.concat(body.posts) : body.posts;
+    currentPage.value = body.page;
+    hasMore.value = body.has_more;
+  } catch {
+    ElMessage.error('加载失败');
+  } finally {
+    loading.value = false;
+  }
+}
 
 function formatTime(iso: string) {
   try {
@@ -51,60 +73,113 @@ function formatTime(iso: string) {
   }
 }
 
-function submitReply() {
+async function submitReply() {
   const text = replyContent.value.trim();
   if (!text) return;
-  // TODO: POST /api/forum/threads/:id/posts
-  posts.value.push({
-    floor: posts.value.length + 1,
-    author: '我',
-    avatarChar: '我',
-    content: text,
-    createdAt: new Date().toISOString(),
-  });
-  replyContent.value = '';
+  if (!authStore.isLoggedIn) { ElMessage.warning('请先登录'); return; }
+  submitting.value = true;
+  try {
+    const body: Record<string, string> = { content: text };
+    if (replyToId.value) body['reply_to_post_id'] = replyToId.value;
+    const res = await fetch(`/api/forum/threads/${threadId}/posts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const post = await res.json() as Post;
+    posts.value.push(post);
+    if (thread.value) thread.value.reply_count += 1;
+    replyContent.value = '';
+    replyToId.value = null;
+    ElMessage.success('回复成功');
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '回复失败');
+  } finally {
+    submitting.value = false;
+  }
 }
+
+function quoteReply(post: Post) {
+  replyToId.value = post.id;
+  replyContent.value = `> 引用 ${post.author_nickname ?? '匿名'} #${post.floor_number}楼：${post.content.slice(0, 50)}...\n`;
+}
+
+function loadMorePosts() {
+  if (!hasMore.value || loading.value) return;
+  fetchThread(currentPage.value + 1, true);
+}
+
+onMounted(fetchThread);
 </script>
 
 <template>
   <div class="thread-detail">
-    <h1 class="thread-title">{{ title }}</h1>
+    <template v-if="thread">
+      <h1 class="thread-title">{{ thread.title }}</h1>
+      <div class="thread-meta">
+        <span>作者：{{ thread.author_nickname ?? '-' }}</span>
+        <span>浏览：{{ thread.view_count }}</span>
+        <span>回复：{{ thread.reply_count }}</span>
+        <span v-if="thread.is_locked" class="locked-tag">已锁帖</span>
+      </div>
 
-    <!-- 帖子楼层列表 -->
-    <div class="posts-list">
-      <div v-for="post in posts" :key="post.floor" class="post-item">
-        <!-- 左侧：楼层 + 头像 -->
-        <div class="post-left">
-          <div class="avatar">{{ post.avatarChar }}</div>
-          <div class="floor-num">#{{ post.floor }}</div>
-        </div>
-
-        <!-- 右侧：内容 -->
-        <div class="post-body">
-          <div class="post-header">
-            <span class="post-author">{{ post.author }}</span>
-            <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+      <!-- 帖子楼层列表（楼主+回帖） -->
+      <div class="posts-list">
+        <!-- 楼主帖 -->
+        <div class="post-item op-post">
+          <div class="post-left">
+            <div class="avatar">{{ (thread.author_nickname ?? '?')[0] }}</div>
+            <div class="floor-num">#1</div>
           </div>
-          <div class="post-content">{{ post.content }}</div>
+          <div class="post-body">
+            <div class="post-header">
+              <span class="post-author">{{ thread.author_nickname ?? '-' }}</span>
+            </div>
+            <div class="post-content">{{ thread.content }}</div>
+          </div>
+        </div>
+
+        <div v-for="post in posts" :key="post.id" class="post-item">
+          <div class="post-left">
+            <div class="avatar">{{ (post.author_nickname ?? '?')[0] }}</div>
+            <div class="floor-num">#{{ post.floor_number }}</div>
+          </div>
+          <div class="post-body">
+            <div class="post-header">
+              <span class="post-author">{{ post.author_nickname ?? '-' }}</span>
+              <span class="post-time">{{ formatTime(post.created_at) }}</span>
+              <button v-if="!thread.is_locked" class="quote-btn" @click="quoteReply(post)">引用</button>
+            </div>
+            <div class="post-content">{{ post.content }}</div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 回复输入区 -->
-    <div class="reply-box">
-      <h3 class="reply-title">发表回复</h3>
-      <textarea
-        v-model="replyContent"
-        class="reply-textarea"
-        placeholder="写下你的回复..."
-        rows="4"
-        maxlength="2000"
-      />
-      <div class="reply-actions">
-        <span class="char-count">{{ replyContent.length }} / 2000</span>
-        <TButton type="primary" :loading="submitting" @click="submitReply">回复</TButton>
+      <div v-if="hasMore" class="load-more-wrap">
+        <TButton type="ghost" :loading="loading" @click="loadMorePosts">加载更多</TButton>
       </div>
-    </div>
+
+      <!-- 回复输入区 -->
+      <div v-if="!thread.is_locked" class="reply-box">
+        <h3 class="reply-title">发表回复</h3>
+        <textarea
+          v-model="replyContent"
+          class="reply-textarea"
+          placeholder="写下你的回复..."
+          rows="4"
+          maxlength="10000"
+        />
+        <div class="reply-actions">
+          <span class="char-count">{{ replyContent.length }} / 10000</span>
+          <TButton type="primary" :loading="submitting" @click="submitReply">回复</TButton>
+        </div>
+      </div>
+      <div v-else class="locked-notice">该帖已锁定，无法回复。</div>
+    </template>
+
+    <div v-else-if="loading" class="loading-state">加载中...</div>
+    <div v-else class="empty-state">帖子不存在</div>
   </div>
 </template>
 
@@ -216,4 +291,13 @@ function submitReply() {
   justify-content: space-between;
 }
 .char-count { font-size: var(--text-xs); color: var(--text-muted); }
+.thread-meta { display: flex; gap: var(--space-4); font-size: var(--text-sm); color: var(--text-muted); }
+.locked-tag { color: var(--color-warning); }
+.quote-btn { margin-left: auto; font-size: var(--text-xs); color: var(--text-muted); background: none; border: none; cursor: pointer; }
+.quote-btn:hover { color: var(--color-primary); }
+.op-post { background: color-mix(in srgb, var(--color-primary-light, #e0eaff) 20%, transparent); }
+.locked-notice { text-align: center; color: var(--text-muted); padding: var(--space-4); }
+.loading-state { text-align: center; color: var(--text-muted); padding: var(--space-8); }
+.empty-state { text-align: center; color: var(--text-muted); padding: var(--space-8); }
+.load-more-wrap { display: flex; justify-content: center; }
 </style>

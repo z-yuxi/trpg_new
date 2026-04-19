@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { userService } from '../services/user-service';
+import { forumService } from '../services/forum-service';
 
 const router: IRouter = Router();
 
@@ -37,6 +38,16 @@ router.put('/me', authMiddleware, async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });
   }
+});
+
+// GET /api/users/me/activity
+router.get('/me/activity', authMiddleware, async (req, res) => {
+  const { page, limit } = req.query as Record<string, string>;
+  const result = await forumService.getUserActivity(req.user!.id, {
+    page: page ? Number(page) : 1,
+    limit: limit ? Number(limit) : 20,
+  });
+  res.json(result);
 });
 
 export default router;
