@@ -33,6 +33,7 @@ export interface ClientToServerEvents {
     last_event_id?: SnowflakeId;
   }) => void;
   leave_room: () => void;
+  subscribe_scene: (data: { scene_id: string }) => void;
   chat_message: (data: {
     content: string;
     temp_id: string;

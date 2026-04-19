@@ -16,10 +16,10 @@ watch(() => messageStore.currentMessages.length, async () => {
   if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight;
 });
 
-function handleSend(content: string, messageType: string) {
+function handleSend(content: string, messageType: string, senderIdentity?: string) {
   const tempId = uuidv4();
   messageStore.addPendingMessage(content, tempId, messageType);
-  socketClient.sendMessage({ content, message_type: messageType, metadata: { temp_id: tempId } });
+  socketClient.sendMessage({ content, message_type: messageType, metadata: { temp_id: tempId, sender_identity: senderIdentity } });
 }
 
 function handleCommand(commandStr: string) {

@@ -66,6 +66,40 @@ export class UserService {
     return bcrypt.compare(password, user.password_hash);
   }
 
+  async getStats(userId: string): Promise<{ joined_campaigns: number; created_campaigns: number; total_hours: number }> {
+    const gmCampaignRows = await db('campaigns')
+      .where({ gm_user_id: userId })
+      .select('id');
+
+    const joinedCampaignRows = await db('character_scene_states as css')
+      .join('character_sheets as cs', 'cs.id', 'css.character_id')
+      .where('cs.user_id', userId)
+      .distinct('css.campaign_id as campaign_id');
+
+    const createdCampaignIds = gmCampaignRows.map((row: Record<string, unknown>) => String(row['id']));
+    const joinedCampaignIds = joinedCampaignRows.map((row: Record<string, unknown>) => String(row['campaign_id']));
+    const allCampaignIds = new Set([...createdCampaignIds, ...joinedCampaignIds]);
+
+    const participationRows = await db('scene_participations as sp')
+      .join('character_sheets as cs', 'cs.id', 'sp.character_id')
+      .where('cs.user_id', userId)
+      .select('sp.joined_at', 'sp.left_at');
+
+    let totalMs = 0;
+    for (const row of participationRows as Array<Record<string, unknown>>) {
+      const joinedAt = row['joined_at'] ? new Date(String(row['joined_at'])).getTime() : NaN;
+      const leftAt = row['left_at'] ? new Date(String(row['left_at'])).getTime() : Date.now();
+      if (!Number.isFinite(joinedAt) || !Number.isFinite(leftAt) || leftAt <= joinedAt) continue;
+      totalMs += leftAt - joinedAt;
+    }
+
+    return {
+      joined_campaigns: allCampaignIds.size,
+      created_campaigns: createdCampaignIds.length,
+      total_hours: Math.floor(totalMs / (1000 * 60 * 60)),
+    };
+  }
+
   private rowToUser(row: Record<string, unknown>): User {
     return {
       id: row['id'] as string,

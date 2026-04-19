@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
 
 const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean }>();
 const emit = defineEmits<{ 'toggle-gm-console': [] }>();
+const router = useRouter();
 
 const leftVisible = ref(true);
 const rightVisible = ref(true);
@@ -21,12 +23,21 @@ onUnmounted(() => window.removeEventListener('resize', updateMobile));
 function copyCode() {
   if (props.roomCode) navigator.clipboard.writeText(props.roomCode);
 }
+
+function handleBackToCampaigns() {
+  const confirmed = window.confirm('确定离开房间？未保存的内容不会丢失，你可以随时回来。');
+  if (!confirmed) return;
+  router.push('/campaigns');
+}
 </script>
 
 <template>
   <div class="room-layout" :class="{ 'mobile': isMobile }">
     <!-- 顶部栏 -->
     <header class="room-topbar">
+      <button class="icon-btn back-btn" @click="handleBackToCampaigns" aria-label="离开房间">
+        <SvgIcon name="icon-back" :size="18" />
+      </button>
       <button class="icon-btn" @click="leftVisible = !leftVisible" aria-label="切换左侧栏">
         <SvgIcon name="icon-list" :size="18" />
       </button>
@@ -44,6 +55,11 @@ function copyCode() {
         </button>
       </div>
     </header>
+
+    <!-- GM 控制台面板（下拉，推挤聊天区，仅GM可见） -->
+    <div class="gm-console-wrap">
+      <slot name="gm-console" />
+    </div>
 
     <!-- 主体区域 -->
     <div class="room-body">
@@ -104,6 +120,7 @@ function copyCode() {
 }
 .icon-btn:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
 .gm-btn { background: #fef3c7; color: #92400e; }
+.back-btn { margin-right: 2px; }
 
 .room-body {
   flex: 1;
@@ -134,4 +151,5 @@ function copyCode() {
   gap: 2px; border: none; background: none; cursor: pointer;
   color: var(--color-text-secondary); font-size: var(--text-xs);
 }
+.gm-console-wrap { flex-shrink: 0; overflow: hidden; }
 </style>

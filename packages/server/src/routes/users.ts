@@ -5,6 +5,16 @@ import { userService } from '../services/user-service';
 
 const router: IRouter = Router();
 
+// GET /api/users/me/stats
+router.get('/me/stats', authMiddleware, async (req, res) => {
+  try {
+    const stats = await userService.getStats(req.user!.id);
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
 // GET /api/users/me
 router.get('/me', authMiddleware, (req, res) => {
   res.json({ user: req.user });

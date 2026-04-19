@@ -43,6 +43,10 @@ export class SocketClient {
     this.roomSocket?.emit('leave_room');
   }
 
+  subscribeScene(sceneId: string): void {
+    this.roomSocket?.emit('subscribe_scene', { scene_id: sceneId });
+  }
+
   sendMessage(payload: {
     content: string;
     message_type?: string;

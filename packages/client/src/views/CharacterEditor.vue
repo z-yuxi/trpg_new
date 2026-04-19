@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
@@ -24,6 +24,33 @@ const form = ref({
 
 const saving = ref(false);
 const saveError = ref('');
+const initialSnapshot = ref('');
+
+function snapshotForm() {
+  return JSON.stringify(form.value);
+}
+
+function hasUnsavedChanges() {
+  return initialSnapshot.value !== '' && snapshotForm() !== initialSnapshot.value;
+}
+
+function confirmLeaveIfNeeded() {
+  if (!hasUnsavedChanges()) return true;
+  return window.confirm('有未保存的修改，确定离开？');
+}
+
+function goBackWithFallback() {
+  if (window.history.length > 1) {
+    router.back();
+    return;
+  }
+  router.push('/');
+}
+
+function handleCancel() {
+  if (!confirmLeaveIfNeeded()) return;
+  goBackWithFallback();
+}
 
 onMounted(async () => {
   if (isEditing && characterId) {
@@ -42,7 +69,10 @@ onMounted(async () => {
       }
     } catch { /* ignore */ }
   }
+  initialSnapshot.value = snapshotForm();
 });
+
+onBeforeRouteLeave(() => confirmLeaveIfNeeded() || false);
 
 async function save() {
   saveError.value = '';
@@ -111,7 +141,7 @@ async function save() {
       </div>
 
       <div class="actions">
-        <TButton type="secondary" @click="router.back()">取消</TButton>
+        <TButton type="secondary" @click="handleCancel">取消</TButton>
         <TButton type="primary" @click="save" :loading="saving">保存角色</TButton>
       </div>
     </TCard>

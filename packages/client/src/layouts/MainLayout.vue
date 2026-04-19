@@ -11,12 +11,20 @@ const route = useRoute();
 
 const pageTitle = computed(() => (route.meta.title as string) ?? '');
 const canGoBack = computed(() => route.path !== '/');
+
+function handleBack() {
+  if (window.history.length > 1) {
+    router.back();
+    return;
+  }
+  router.push('/');
+}
 </script>
 
 <template>
   <div class="main-layout">
     <header class="top-bar">
-      <button v-if="canGoBack" class="back-btn" @click="router.back()" aria-label="返回">
+      <button v-if="canGoBack" class="back-btn" @click="handleBack" aria-label="返回">
         <SvgIcon name="icon-back" :size="20" />
       </button>
       <span v-else class="logo">TRPG</span>

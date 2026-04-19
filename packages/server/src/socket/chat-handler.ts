@@ -46,6 +46,11 @@ export function registerChatHandlers(
       }
     });
 
+    // 订阅当前浏览场景（客户端切换场景时调用）
+    socket.on('subscribe_scene', (data) => {
+      socket.data.activeSceneId = data.scene_id;
+    });
+
     // chat_message 事件
     socket.on('chat_message', async (data) => {
       const campaignId = socket.data.campaignId as string;

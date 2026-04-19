@@ -1,11 +1,54 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 
+const props = defineProps<{
+  isGm?: boolean;
+  currentSceneType?: string;
+  myCharacter?: { id: string; name: string; avatarUrl?: string } | null;
+  roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
+  authDisplayName?: string;
+}>();
+
 const emit = defineEmits<{
-  send: [content: string, messageType: string];
+  send: [content: string, messageType: string, senderIdentity: string];
   command: [commandStr: string];
 }>();
+
+type IdentityOption = { key: string; label: string; avatarUrl?: string };
+
+const identityOptions = computed<IdentityOption[]>(() => {
+  const list: IdentityOption[] = [];
+  if (props.myCharacter) {
+    list.push({ key: `char:${props.myCharacter.id}`, label: props.myCharacter.name, avatarUrl: props.myCharacter.avatarUrl });
+  }
+  if (props.isGm) {
+    list.push({ key: 'gm', label: 'GM' });
+  }
+  if (props.isGm && props.roleplayableNpcs) {
+    props.roleplayableNpcs.forEach((npc) => {
+      list.push({ key: `npc:${npc.id}`, label: npc.name, avatarUrl: npc.avatarUrl });
+    });
+  }
+  if (props.currentSceneType === 'lobby' && props.authDisplayName) {
+    list.push({ key: 'platform', label: props.authDisplayName });
+  }
+  return list;
+});
+
+const selectedIdentityKey = ref<string>('');
+
+const selectedIdentity = computed<IdentityOption>(() => {
+  if (!selectedIdentityKey.value) return identityOptions.value[0] ?? { key: 'player', label: '玩家' };
+  return identityOptions.value.find((o) => o.key === selectedIdentityKey.value) ?? identityOptions.value[0] ?? { key: 'player', label: '玩家' };
+});
+
+const showIdentityDropdown = ref(false);
+
+function selectIdentity(option: IdentityOption) {
+  selectedIdentityKey.value = option.key;
+  showIdentityDropdown.value = false;
+}
 
 const content = ref('');
 const messageType = ref<'narrative' | 'ooc'>('narrative');
@@ -20,7 +63,7 @@ function send() {
   if (text.startsWith('/')) {
     emit('command', text);
   } else {
-    emit('send', text, messageType.value);
+    emit('send', text, messageType.value, selectedIdentity.value.key);
   }
   content.value = '';
   showDicePanel.value = false;
@@ -45,7 +88,7 @@ function onKeydown(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="chat-input-area">
+  <div class="chat-input-area" @click="showIdentityDropdown = false">
     <!-- 骰子快捷面板 -->
     <div v-if="showDicePanel" class="dice-panel">
       <button v-for="d in quickDice" :key="d" class="dice-quick-btn" @click="rollDice(d)">{{ d }}</button>
@@ -56,6 +99,29 @@ function onKeydown(e: KeyboardEvent) {
     </div>
 
     <div class="input-row">
+      <!-- 身份选择器 -->
+      <div v-if="identityOptions.length > 0" class="identity-selector" @click.stop="showIdentityDropdown = !showIdentityDropdown">
+        <div class="identity-avatar">
+          <img v-if="selectedIdentity.avatarUrl" :src="selectedIdentity.avatarUrl" />
+          <span v-else class="identity-fallback">{{ selectedIdentity.label[0] }}</span>
+        </div>
+        <div v-if="showIdentityDropdown" class="identity-dropdown" @click.stop>
+          <div
+            v-for="option in identityOptions"
+            :key="option.key"
+            class="identity-option"
+            :class="{ selected: option.key === selectedIdentity.key }"
+            @click="selectIdentity(option)"
+          >
+            <div class="identity-option-avatar">
+              <img v-if="option.avatarUrl" :src="option.avatarUrl" />
+              <span v-else class="identity-fallback">{{ option.label[0] }}</span>
+            </div>
+            <span>{{ option.label }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 消息类型 -->
       <select v-model="messageType" class="type-select">
         <option value="narrative">叙述</option>
@@ -63,7 +129,7 @@ function onKeydown(e: KeyboardEvent) {
       </select>
 
       <!-- 骰子按钮 -->
-      <button class="icon-btn" :class="{ active: showDicePanel }" @click="showDicePanel = !showDicePanel" title="骰子">
+      <button class="icon-btn" :class="{ active: showDicePanel }" @click.stop="showDicePanel = !showDicePanel" title="骰子">
         <SvgIcon name="icon-dice" :size="18" />
       </button>
 
@@ -106,6 +172,57 @@ function onKeydown(e: KeyboardEvent) {
   border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm);
 }
 .input-row { display: flex; align-items: flex-end; gap: var(--space-2); }
+
+/* 身份选择器 */
+.identity-selector {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.identity-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--color-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-page-bg);
+  transition: border-color var(--transition-fast);
+}
+.identity-avatar:hover { border-color: var(--color-accent); }
+.identity-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.identity-fallback { font-size: var(--text-xs); font-weight: 600; color: var(--color-accent); }
+.identity-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 160px;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+  z-index: 100;
+  padding: 4px;
+}
+.identity-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.identity-option:hover { background: var(--color-page-bg); }
+.identity-option.selected { background: rgba(59,130,246,0.1); color: var(--color-accent); }
+.identity-option-avatar {
+  width: 24px; height: 24px; border-radius: 50%; overflow: hidden;
+  background: var(--color-page-bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.identity-option-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
 .type-select {
   height: 36px; padding: 0 var(--space-2); border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md); background: var(--color-input-bg);

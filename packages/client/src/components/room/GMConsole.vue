@@ -1,256 +1,361 @@
-<script setup lang="ts">
-import { ref } from 'vue';
+﻿<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { ElDialog, ElMessage } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
-import type { StoryTime, ScheduledMove, Scene, CampaignNpc } from '@trpg/shared';
+import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
+import { useAuthStore } from '../../stores/auth-store';
 
 const props = defineProps<{
   campaignId: string;
   globalStoryTime: StoryTime;
-  pendingMoves: ScheduledMove[];
   scenes: Scene[];
   npcs: CampaignNpc[];
-  enableConnections: boolean;
+  characters: { id: string; name: string }[];
 }>();
 
-const activeTab = ref<'time' | 'moves' | 'scenes' | 'npcs' | 'clues'>('time');
+const emit = defineEmits<{
+  'scene-created': [scene: Scene];
+  'npc-created': [npc: CampaignNpc];
+  'play-as-npc': [npcId: string];
+}>();
 
-// 时间控制
-const deltaDay = ref(0);
-const deltaHour = ref(0);
-const deltaMin = ref(0);
+const authStore = useAuthStore();
 
-function applyDelta() {
-  const base = props.globalStoryTime;
-  let totalMinutes = base.minute + deltaMin.value + (base.hour + deltaHour.value) * 60 + (base.day + deltaDay.value - 1) * 1440;
-  if (deltaDay.value === 0 && deltaHour.value === 0 && deltaMin.value === 0) return;
-  const newDay = Math.floor(totalMinutes / 1440) + 1;
-  const rem = totalMinutes % 1440;
-  const newHour = Math.floor(rem / 60);
-  const newMin = rem % 60;
-  socketClient.gmAdvanceTime({ custom_time: { day: newDay, hour: newHour, minute: newMin } });
-}
+const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast'>('time');
 
-function quickAdvance(days: number, hours: number, minutes: number) {
-  const base = props.globalStoryTime;
-  let totalMinutes = base.minute + minutes + (base.hour + hours) * 60 + (base.day + days - 1) * 1440;
-  const newDay = Math.floor(totalMinutes / 1440) + 1;
-  const rem = totalMinutes % 1440;
-  const newHour = Math.floor(rem / 60);
-  const newMin = rem % 60;
-  socketClient.gmAdvanceTime({ custom_time: { day: newDay, hour: newHour, minute: newMin } });
-}
-
-const tabs = [
-  { key: 'time', icon: 'icon-clock', label: '\u65f6\u95f4' },
-  { key: 'moves', icon: 'icon-list', label: '\u79fb\u52a8' },
-  { key: 'scenes', icon: 'icon-grid', label: '\u573a' },
-  { key: 'npcs', icon: 'icon-npc', label: 'NPC' },
-  { key: 'clues', icon: 'icon-scroll', label: '\u7ebf\u7d22' },
-];
-
-function getSceneName(id: string) { return props.scenes.find(s => s.id === id)?.name ?? id; }
 function padZ(n: number) { return String(n).padStart(2, '0'); }
+function formatTime(t: StoryTime) { return `第${t.day}日 ${padZ(t.hour)}:${padZ(t.minute)}`; }
 
-// 线索管理
-const THEMES = ['river', 'blur', 'fragment', 'wave', 'ancient', 'blood', 'ash', 'cyber'] as const;
+// ─── Tab 1: 时间控制 ─────────────────────────────────────────────────────────
+const showTimeConfirm = ref(false);
+const pendingTime = ref<StoryTime | null>(null);
+const customDayDelta = ref(0);
+const customHourDelta = ref(0);
+const customMinDelta = ref(30);
+
+function calcNewTime(dayDelta: number, hourDelta: number, minDelta: number): StoryTime {
+  const base = props.globalStoryTime;
+  let total = base.minute + minDelta + (base.hour + hourDelta) * 60 + (base.day - 1 + dayDelta) * 1440;
+  total = Math.max(0, total);
+  return { day: Math.floor(total / 1440) + 1, hour: Math.floor((total % 1440) / 60), minute: total % 60 };
+}
+
+function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: number) {
+  pendingTime.value = calcNewTime(dayDelta, hourDelta, minDelta);
+  showTimeConfirm.value = true;
+}
+
+function confirmAdvanceTime() {
+  if (!pendingTime.value) return;
+  socketClient.gmAdvanceTime({ custom_time: pendingTime.value });
+  showTimeConfirm.value = false;
+  pendingTime.value = null;
+}
+
+// ─── Tab 2: 场景管理 ─────────────────────────────────────────────────────────
+const showNewScene = ref(false);
+const newScene = ref({ name: '', type: 'spatial' as 'spatial' | 'virtual' | 'lobby', description: '' });
+const sceneLoading = ref(false);
+const typeLabel: Record<string, string> = { spatial: '剧情场', virtual: '私密场', lobby: '公共场' };
+
+async function createScene() {
+  if (!newScene.value.name.trim()) { ElMessage.warning('场景名称不能为空'); return; }
+  sceneLoading.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/scenes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(newScene.value),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '创建失败');
+    const scene = await res.json();
+    emit('scene-created', scene);
+    showNewScene.value = false;
+    newScene.value = { name: '', type: 'spatial', description: '' };
+    ElMessage.success('场景已创建');
+  } catch (e: any) { ElMessage.error(e.message ?? '创建失败'); }
+  finally { sceneLoading.value = false; }
+}
+
+const showForceMoveScene = ref(false);
+const forceMoveCharId = ref('');
+const forceMoveSceneId = ref('');
+
+async function submitForceMoveScene() {
+  if (!forceMoveCharId.value || !forceMoveSceneId.value) return;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/force-move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({ character_id: forceMoveCharId.value, to_scene_id: forceMoveSceneId.value }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '移动失败');
+    ElMessage.success('强制移动成功');
+    showForceMoveScene.value = false;
+  } catch (e: any) { ElMessage.error(e.message ?? '移动失败'); }
+}
+
+// ─── Tab 3: NPC 控制 ─────────────────────────────────────────────────────────
+const showNewNpc = ref(false);
+const showNpcAdvanced = ref(false);
+const newNpc = ref({ name: '', display_name: '', description: '', roleplay_hint: '', avatar_url: '', attributes: [] as {key:string;value:string}[], skills: [] as {key:string;value:string}[] });
+const npcLoading = ref(false);
+
+function addAttr() { newNpc.value.attributes.push({ key: '', value: '' }); }
+function addSkill() { newNpc.value.skills.push({ key: '', value: '' }); }
+function removeAttr(i: number) { newNpc.value.attributes.splice(i, 1); }
+function removeSkill(i: number) { newNpc.value.skills.splice(i, 1); }
+
+async function createNpc() {
+  if (!newNpc.value.name.trim()) { ElMessage.warning('NPC 名称不能为空'); return; }
+  npcLoading.value = true;
+  try {
+    const body: Record<string, unknown> = { name: newNpc.value.name, display_name: newNpc.value.display_name || newNpc.value.name, description: newNpc.value.description, roleplay_hint: newNpc.value.roleplay_hint, avatar_url: newNpc.value.avatar_url };
+    if (newNpc.value.attributes.length > 0) body.attributes = Object.fromEntries(newNpc.value.attributes.map(a => [a.key, Number(a.value) || 0]));
+    if (newNpc.value.skills.length > 0) body.skills = Object.fromEntries(newNpc.value.skills.map(s => [s.key, Number(s.value) || 0]));
+    const res = await fetch(`/api/campaigns/${props.campaignId}/npcs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '创建失败');
+    const npc = await res.json();
+    emit('npc-created', npc);
+    showNewNpc.value = false;
+    newNpc.value = { name: '', display_name: '', description: '', roleplay_hint: '', avatar_url: '', attributes: [], skills: [] };
+    showNpcAdvanced.value = false;
+    ElMessage.success('NPC 已创建');
+  } catch (e: any) { ElMessage.error(e.message ?? '创建失败'); }
+  finally { npcLoading.value = false; }
+}
+
+// ─── Tab 4: 广播与线索 ────────────────────────────────────────────────────────
+const broadcastContent = ref('');
+function sendBroadcast() {
+  const text = broadcastContent.value.trim();
+  if (!text) return;
+  socketClient.sendMessage({ content: `[GM公告] ${text}`, message_type: 'announcement' });
+  broadcastContent.value = '';
+  ElMessage.success('公告已发送');
+}
+
+const THEMES = ['river','blur','fragment','wave','ancient','blood','ash','cyber'] as const;
 type ClueTheme = typeof THEMES[number];
+const clueForm = ref({ title: '', content: '', theme: 'river' as ClueTheme });
+const showClueTargetDialog = ref(false);
+const clueTargetAll = ref(true);
+const clueTargetCharId = ref('');
+const localClues = ref<{id:string;title:string;content:string;theme:ClueTheme}[]>([]);
 
-const clueForm = ref({
-  title: '',
-  content: '',
-  theme: 'river' as ClueTheme,
-});
-const localClues = ref<{ id: string; title: string; content: string; theme: ClueTheme }[]>([]);
+function prepareClue() {
+  if (!clueForm.value.title.trim() || !clueForm.value.content.trim()) { ElMessage.warning('标题和内容不能为空'); return; }
+  showClueTargetDialog.value = true;
+}
 
 function sendClue() {
-  if (!clueForm.value.title || !clueForm.value.content) return;
-  const clue = {
-    id: Date.now().toString(),
-    title: clueForm.value.title,
-    content: clueForm.value.content,
-    theme: clueForm.value.theme,
-  };
-  localClues.value.unshift(clue);
-  // 通过 socket 发送 clue_card 消息
-  socketClient.sendMessage({
-    content: clueForm.value.content,
-    message_type: 'clue_card',
-    metadata: { theme: clueForm.value.theme, title: clueForm.value.title },
-  });
+  localClues.value.unshift({ id: Date.now().toString(), ...clueForm.value });
+  socketClient.sendMessage({ content: clueForm.value.content, message_type: 'clue_card', metadata: { theme: clueForm.value.theme, title: clueForm.value.title, visible_to: clueTargetAll.value ? null : [clueTargetCharId.value] } });
   clueForm.value = { title: '', content: '', theme: 'river' };
+  showClueTargetDialog.value = false;
+  ElMessage.success('线索已发放');
 }
+
+const spatialScenes = computed(() => props.scenes.filter(s => s.type === 'spatial' || s.type === 'lobby'));
 </script>
 
 <template>
   <div class="gm-console">
     <div class="console-tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="console-tab"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = (tab.key as any)"
-        :title="tab.label"
-      >
-        <SvgIcon :name="tab.icon" :size="16" />
-        <span>{{ tab.label }}</span>
+      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
+        <SvgIcon :name="tab.icon" :size="14" /><span>{{tab.label}}</span>
       </button>
     </div>
-
     <div class="console-body">
-      <!-- 时间控制 -->
-      <div v-if="activeTab === 'time'">
-        <div class="story-time-display">
-          <SvgIcon name="icon-clock" :size="18" />
-          <span>Day {{ globalStoryTime.day }}, {{ padZ(globalStoryTime.hour) }}:{{ padZ(globalStoryTime.minute) }}</span>
+      <!-- Tab 1: 时间 -->
+      <div v-if="activeTab==='time'" class="tab-pane">
+        <div class="time-display"><span class="time-big">{{formatTime(globalStoryTime)}}</span></div>
+        <div class="quick-btns">
+          <button class="q-btn" @click="askAdvanceTime(0,0,30)">+30分钟</button>
+          <button class="q-btn" @click="askAdvanceTime(0,1,0)">+1小时</button>
+          <button class="q-btn accent" @click="askAdvanceTime(customDayDelta,customHourDelta,customMinDelta)">自定义推进</button>
         </div>
-        <div class="quick-advance">
-          <button @click="quickAdvance(0, 0, 10)">+10分</button>
-          <button @click="quickAdvance(0, 0, 30)">+30分</button>
-          <button @click="quickAdvance(0, 1, 0)">+1小时</button>
-          <button @click="quickAdvance(0, 6, 0)">+6小时</button>
-          <button @click="quickAdvance(1, 0, 0)">+1天</button>
-        </div>
-        <div class="custom-advance">
-          <p class="label">自定义推进</p>
-          <div class="delta-row">
-            <div class="delta-item"><input v-model.number="deltaDay" type="number" min="0" /><span>天</span></div>
-            <div class="delta-item"><input v-model.number="deltaHour" type="number" min="0" max="23" /><span>时</span></div>
-            <div class="delta-item"><input v-model.number="deltaMin" type="number" min="0" max="59" /><span>分</span></div>
-          </div>
-          <button class="apply-btn" @click="applyDelta">推进时间</button>
+        <div class="custom-row">
+          <div class="delta-field"><input v-model.number="customDayDelta" type="number" min="0"/><label>天</label></div>
+          <div class="delta-field"><input v-model.number="customHourDelta" type="number" min="0" max="23"/><label>时</label></div>
+          <div class="delta-field"><input v-model.number="customMinDelta" type="number" min="0" max="59"/><label>分</label></div>
         </div>
       </div>
-
-      <!-- 待审批移动 -->
-      <div v-else-if="activeTab === 'moves'">
-        <div v-for="move in pendingMoves" :key="move.id" class="move-item">
-          <div class="move-info">
-            <span class="move-char">{{ move.character_id }}</span>
-            <span>→</span>
-            <span class="move-target">{{ getSceneName(move.to_scene_id) }}</span>
-          </div>
-          <div class="move-actions">
-            <button class="approve-btn" @click="socketClient.gmApproveMove(move.id)">
-              <SvgIcon name="icon-plus" :size="14" /> 批准
-            </button>
-            <button class="reject-btn" @click="socketClient.gmRejectMove(move.id)">
-              <SvgIcon name="icon-lock" :size="14" /> 拒绝
-            </button>
+      <!-- Tab 2: 场景 -->
+      <div v-else-if="activeTab==='scenes'" class="tab-pane">
+        <div class="pane-header">
+          <span class="pane-count">共{{scenes.length}}个场景</span>
+          <div class="pane-actions">
+            <button class="sm-btn" @click="showForceMoveScene=true">强制移动</button>
+            <button class="sm-btn accent" @click="showNewScene=true">+ 新建场景</button>
           </div>
         </div>
-        <div v-if="pendingMoves.length === 0" class="empty">暂无待审批移动</div>
+        <table class="data-table"><thead><tr><th>名称</th><th>类型</th><th>描述</th></tr></thead>
+          <tbody><tr v-for="s in scenes" :key="s.id"><td class="td-name">{{s.name}}</td><td><span class="type-tag" :class="s.type">{{typeLabel[s.type]??s.type}}</span></td><td class="td-desc">{{s.description||'—'}}</td></tr></tbody>
+        </table>
+        <div v-if="scenes.length===0" class="empty-hint">暂无场景</div>
       </div>
-
-      <!-- 场管理 -->
-      <div v-else-if="activeTab === 'scenes'">
-        <div v-for="scene in scenes" :key="scene.id" class="scene-row">
-          <span class="scene-name">{{ scene.name }}</span>
-          <span class="scene-type">{{ scene.type }}</span>
+      <!-- Tab 3: NPC -->
+      <div v-else-if="activeTab==='npcs'" class="tab-pane">
+        <div class="pane-header">
+          <span class="pane-count">共{{npcs.length}}个NPC</span>
+          <button class="sm-btn accent" @click="showNewNpc=true">+ 新建NPC</button>
         </div>
-        <div v-if="scenes.length === 0" class="empty">暂无场景</div>
-      </div>
-
-      <!-- NPC 控制 -->
-      <div v-else-if="activeTab === 'npcs'">
-        <div v-for="npc in npcs" :key="npc.id" class="npc-row">
-          <div class="npc-info">
-            <span class="npc-name">{{ npc.display_name || npc.name }}</span>
-            <span class="npc-active" :class="{ active: npc.is_active }">{{ npc.is_active ? '活跃' : '非活跃' }}</span>
+        <div class="npc-cards">
+          <div v-for="npc in npcs" :key="npc.id" class="npc-card">
+            <div class="npc-avatar"><img v-if="npc.avatar_url" :src="npc.avatar_url"/><span v-else>{{(npc.display_name||npc.name)[0]}}</span></div>
+            <div class="npc-info"><div class="npc-name">{{npc.display_name||npc.name}}</div><div class="npc-desc">{{npc.description||'暂无描述'}}</div></div>
+            <button class="sm-btn" @click="emit('play-as-npc',npc.id)">扮演</button>
           </div>
         </div>
-        <div v-if="npcs.length === 0" class="empty">暂无 NPC</div>
+        <div v-if="npcs.length===0" class="empty-hint">暂无NPC</div>
       </div>
-
-      <!-- 线索库 -->
-      <div v-else-if="activeTab === 'clues'" class="clues-panel">
-        <div class="clue-form">
-          <p class="label">创建线索</p>
-          <input v-model="clueForm.title" class="clue-input" placeholder="线索标题" />
-          <textarea v-model="clueForm.content" class="clue-textarea" rows="3" placeholder="线索内容..." />
-          <div class="theme-select">
-            <span class="label">文字风格：</span>
-            <select v-model="clueForm.theme" class="theme-dropdown">
-              <option v-for="t in ['river','blur','fragment','wave','ancient','blood','ash','cyber']" :key="t" :value="t">{{ t }}</option>
-            </select>
-          </div>
-          <button class="apply-btn" @click="sendClue">发送线索</button>
+      <!-- Tab 4: 广播 -->
+      <div v-else-if="activeTab==='broadcast'" class="tab-pane broadcast-pane">
+        <div class="section-label">全员广播</div>
+        <div class="broadcast-row">
+          <textarea v-model="broadcastContent" class="broadcast-input" placeholder="输入公告内容，发送后自动添加 [GM公告] 前缀" rows="2"/>
+          <button class="sm-btn accent" @click="sendBroadcast" :disabled="!broadcastContent.trim()">发送</button>
         </div>
-        <div class="clue-preview" v-if="clueForm.title">
-          <p class="label">预览</p>
-          <ClueCard :title="clueForm.title" :content="clueForm.content || '...'" :theme="clueForm.theme" />
+        <div class="section-label" style="margin-top:12px">线索发放</div>
+        <input v-model="clueForm.title" class="field-input" placeholder="线索标题"/>
+        <textarea v-model="clueForm.content" class="field-input" placeholder="线索内容..." rows="2" style="margin-top:6px;resize:vertical"/>
+        <div class="clue-meta-row">
+          <label>文字风格：</label>
+          <select v-model="clueForm.theme" class="theme-select"><option v-for="t in THEMES" :key="t" :value="t">{{t}}</option></select>
+          <button class="sm-btn accent" @click="prepareClue" style="margin-left:auto">发放线索</button>
         </div>
-        <div v-if="localClues.length > 0" class="clue-history">
-          <p class="label">已发送</p>
-          <ClueCard v-for="c in localClues" :key="c.id" :title="c.title" :content="c.content" :theme="c.theme" style="margin-bottom:8px" />
-        </div>
+        <div v-if="clueForm.title" class="clue-preview-wrap"><ClueCard :title="clueForm.title" :content="clueForm.content||'...'" :theme="clueForm.theme"/></div>
+        <div v-if="localClues.length>0" style="margin-top:8px"><div class="section-label">已发放</div><ClueCard v-for="c in localClues" :key="c.id" :title="c.title" :content="c.content" :theme="c.theme" style="margin-bottom:6px"/></div>
       </div>
     </div>
   </div>
+
+  <!-- 时间确认 -->
+  <ElDialog v-model="showTimeConfirm" title="确认推进时间" width="360px">
+    <p style="font-size:var(--text-sm)">将推进至 <strong>{{pendingTime?formatTime(pendingTime):''}}</strong></p>
+    <template #footer><button class="dlg-btn" @click="showTimeConfirm=false">取消</button><button class="dlg-btn accent" @click="confirmAdvanceTime">确认推进</button></template>
+  </ElDialog>
+  <!-- 新建场景 -->
+  <ElDialog v-model="showNewScene" title="新建场景" width="420px">
+    <div class="form-body">
+      <label class="form-label">场景名称 *</label><input v-model="newScene.name" class="field-input" placeholder="如：酒馆大厅"/>
+      <label class="form-label" style="margin-top:12px">场景类型</label>
+      <div class="type-btns">
+        <button v-for="t in (['spatial','virtual','lobby'] as const)" :key="t" class="type-btn" :class="{active:newScene.type===t}" @click="newScene.type=t">{{typeLabel[t]}}</button>
+      </div>
+      <label class="form-label" style="margin-top:12px">描述</label>
+      <textarea v-model="newScene.description" class="field-input" rows="2" style="resize:vertical" placeholder="选填"/>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showNewScene=false">取消</button><button class="dlg-btn accent" @click="createScene" :disabled="sceneLoading">{{sceneLoading?'创建中...':'创建场景'}}</button></template>
+  </ElDialog>
+  <!-- 强制移动 -->
+  <ElDialog v-model="showForceMoveScene" title="强制移动角色" width="360px">
+    <div class="form-body">
+      <label class="form-label">选择角色</label>
+      <select v-model="forceMoveCharId" class="field-input"><option value="">请选择</option><option v-for="c in characters" :key="c.id" :value="c.id">{{c.name}}</option></select>
+      <label class="form-label" style="margin-top:12px">目标场景</label>
+      <select v-model="forceMoveSceneId" class="field-input"><option value="">请选择</option><option v-for="s in spatialScenes" :key="s.id" :value="s.id">{{s.name}}</option></select>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showForceMoveScene=false">取消</button><button class="dlg-btn accent" @click="submitForceMoveScene">确认移动</button></template>
+  </ElDialog>
+  <!-- 新建NPC -->
+  <ElDialog v-model="showNewNpc" title="新建NPC" width="500px">
+    <div class="form-body">
+      <label class="form-label">名称 *</label><input v-model="newNpc.name" class="field-input" placeholder="NPC内部名称"/>
+      <button class="advanced-toggle" @click="showNpcAdvanced=!showNpcAdvanced">{{showNpcAdvanced?'▲ 收起高级选项':'▼ 展开高级选项'}}</button>
+      <template v-if="showNpcAdvanced">
+        <label class="form-label" style="margin-top:10px">显示名称</label><input v-model="newNpc.display_name" class="field-input" placeholder="玩家看到的名字"/>
+        <label class="form-label" style="margin-top:10px">描述</label><textarea v-model="newNpc.description" class="field-input" rows="2" style="resize:vertical"/>
+        <label class="form-label" style="margin-top:10px">扮演提示</label><textarea v-model="newNpc.roleplay_hint" class="field-input" rows="2" style="resize:vertical"/>
+        <div class="dyn-section"><div class="dyn-header"><span>属性</span><button class="sm-btn" @click="addAttr">+ 添加</button></div>
+          <div v-for="(a,i) in newNpc.attributes" :key="i" class="dyn-row"><input v-model="a.key" class="field-input dyn-key" placeholder="属性名"/><input v-model="a.value" class="field-input dyn-val" type="number" placeholder="值"/><button class="sm-btn danger" @click="removeAttr(i)">×</button></div>
+        </div>
+        <div class="dyn-section"><div class="dyn-header"><span>技能</span><button class="sm-btn" @click="addSkill">+ 添加</button></div>
+          <div v-for="(s,i) in newNpc.skills" :key="i" class="dyn-row"><input v-model="s.key" class="field-input dyn-key" placeholder="技能名"/><input v-model="s.value" class="field-input dyn-val" type="number" placeholder="值"/><button class="sm-btn danger" @click="removeSkill(i)">×</button></div>
+        </div>
+      </template>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showNewNpc=false">取消</button><button class="dlg-btn accent" @click="createNpc" :disabled="npcLoading">{{npcLoading?'创建中...':'创建NPC'}}</button></template>
+  </ElDialog>
+  <!-- 线索范围 -->
+  <ElDialog v-model="showClueTargetDialog" title="选择发放范围" width="360px">
+    <div class="form-body">
+      <label class="radio-row"><input v-model="clueTargetAll" type="radio" :value="true"/><span>全员可见</span></label>
+      <label class="radio-row" style="margin-top:8px"><input v-model="clueTargetAll" type="radio" :value="false"/><span>仅指定角色</span></label>
+      <select v-if="!clueTargetAll" v-model="clueTargetCharId" class="field-input" style="margin-top:8px"><option value="">请选择</option><option v-for="c in characters" :key="c.id" :value="c.id">{{c.name}}</option></select>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showClueTargetDialog=false">取消</button><button class="dlg-btn accent" @click="sendClue">确认发放</button></template>
+  </ElDialog>
 </template>
 
 <style scoped>
-.gm-console { display: flex; flex-direction: column; background: var(--color-card-bg); border-bottom: 1px solid var(--color-card-border); }
-.console-tabs { display: flex; border-bottom: 1px solid var(--color-card-border); padding: 0 var(--space-2); }
-.console-tab {
-  display: flex; align-items: center; gap: 4px; padding: var(--space-2) var(--space-3);
-  border: none; background: none; cursor: pointer; color: var(--color-text-secondary);
-  font-size: var(--text-xs); border-bottom: 2px solid transparent; transition: color var(--transition-fast);
-}
+.gm-console { background: var(--color-card-bg); border-bottom: 2px solid var(--color-accent); display: flex; flex-direction: column; }
+.console-tabs { display: flex; border-bottom: 1px solid var(--color-card-border); padding: 0 var(--space-3); background: var(--color-page-bg); }
+.console-tab { display: flex; align-items: center; gap: 5px; padding: var(--space-2) var(--space-3); border: none; background: none; cursor: pointer; color: var(--color-text-secondary); font-size: var(--text-xs); border-bottom: 2px solid transparent; transition: color var(--transition-fast); }
 .console-tab.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
-.console-body { padding: var(--space-4); max-height: 280px; overflow-y: auto; }
-.story-time-display { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xl); font-weight: 700; font-family: var(--font-mono); margin-bottom: var(--space-3); color: var(--color-accent); }
-.quick-advance { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
-.quick-advance button {
-  padding: 4px 10px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md);
-  background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm);
-}
-.quick-advance button:hover { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
-.custom-advance { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
-.label { font-size: var(--text-sm); color: var(--color-text-secondary); margin-bottom: var(--space-2); }
-.delta-row { display: flex; gap: var(--space-3); margin-bottom: var(--space-3); }
-.delta-item { display: flex; align-items: center; gap: var(--space-1); }
-.delta-item input { width: 60px; padding: 4px 8px; border: 1px solid var(--color-input-border); border-radius: var(--radius-md); text-align: center; font-size: var(--text-sm); }
-.apply-btn { width: 100%; padding: var(--space-2); background: var(--color-accent); color: #fff; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm); }
-.move-item { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-card-border); gap: var(--space-3); }
-.move-info { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); flex: 1; }
-.move-char { font-weight: 500; }
-.move-target { color: var(--color-accent); }
-.move-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
-.approve-btn { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: #dcfce7; color: #15803d; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-xs); }
-.reject-btn { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: #fee2e2; color: #b91c1c; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-xs); }
-.scene-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-card-border); }
-.scene-name { font-size: var(--text-sm); }
-.scene-type { font-size: var(--text-xs); color: var(--color-text-muted); }
-.npc-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-card-border); }
+.console-body { padding: var(--space-3); max-height: 200px; overflow-y: auto; }
+.tab-pane { display: flex; flex-direction: column; gap: var(--space-2); }
+.time-display { margin-bottom: 4px; }
+.time-big { font-size: 22px; font-weight: 700; font-family: var(--font-mono); color: var(--color-accent); }
+.quick-btns { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.q-btn { padding: 4px 12px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm); }
+.q-btn:hover { background: var(--color-card-border); }
+.q-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+.custom-row { display: flex; gap: var(--space-3); align-items: center; }
+.delta-field { display: flex; align-items: center; gap: 4px; }
+.delta-field input { width: 52px; padding: 4px 6px; border: 1px solid var(--color-input-border); border-radius: var(--radius-sm); text-align: center; font-size: var(--text-sm); background: var(--color-input-bg); }
+.delta-field label { font-size: var(--text-xs); color: var(--color-text-muted); }
+.pane-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.pane-count { font-size: var(--text-xs); color: var(--color-text-muted); }
+.pane-actions { display: flex; gap: var(--space-2); }
+.data-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.data-table th { text-align: left; color: var(--color-text-muted); padding: 4px 6px; border-bottom: 1px solid var(--color-card-border); }
+.data-table td { padding: 4px 6px; border-bottom: 1px solid var(--color-card-border); }
+.td-name { font-weight: 500; }
+.td-desc { color: var(--color-text-muted); max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.type-tag { font-size: 10px; padding: 1px 5px; border-radius: var(--radius-full); }
+.type-tag.spatial { background: #eff6ff; color: #1d4ed8; }
+.type-tag.virtual { background: #fdf4ff; color: #7e22ce; }
+.type-tag.lobby { background: #f0fdf4; color: #15803d; }
+.npc-cards { display: flex; flex-direction: column; gap: var(--space-2); }
+.npc-card { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--color-card-border); border-radius: var(--radius-md); }
+.npc-avatar { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: var(--color-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); font-weight: 600; flex-shrink: 0; }
+.npc-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.npc-info { flex: 1; min-width: 0; }
 .npc-name { font-size: var(--text-sm); font-weight: 500; }
-.npc-active { font-size: var(--text-xs); color: var(--color-text-muted); }
-.npc-active.active { color: var(--color-success); }
-.empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-4); }
-
-.clues-panel { display: flex; flex-direction: column; gap: var(--space-3); }
-.clue-form { display: flex; flex-direction: column; gap: var(--space-2); }
-.clue-input, .clue-textarea, .theme-dropdown {
-  width: 100%; padding: var(--space-2); border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-.clue-textarea { resize: vertical; font-family: var(--font-sans); }
-.theme-select { display: flex; align-items: center; gap: var(--space-2); }
-.clue-preview { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
-.clue-history { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
-
-.clues-panel { display: flex; flex-direction: column; gap: var(--space-3); }
-.clue-form { display: flex; flex-direction: column; gap: var(--space-2); }
-.clue-input, .clue-textarea, .theme-dropdown {
-  width: 100%; padding: var(--space-2); border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm);
-  color: var(--color-text-primary);
-}
-.clue-textarea { resize: vertical; font-family: var(--font-sans); }
-.theme-select { display: flex; align-items: center; gap: var(--space-2); }
-.clue-preview { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
-.clue-history { border-top: 1px solid var(--color-card-border); padding-top: var(--space-3); }
+.npc-desc { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.broadcast-pane { gap: var(--space-2); }
+.section-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.broadcast-row { display: flex; gap: var(--space-2); align-items: flex-end; }
+.broadcast-input { flex: 1; padding: var(--space-2); border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); resize: none; }
+.clue-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
+.theme-select { padding: 4px 6px; border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); }
+.clue-preview-wrap { margin-top: 4px; }
+.empty-hint { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-3); }
+.sm-btn { padding: 3px 10px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-xs); white-space: nowrap; }
+.sm-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+.sm-btn.danger { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+.sm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.form-body { display: flex; flex-direction: column; }
+.form-label { font-size: var(--text-xs); color: var(--color-text-secondary); margin-bottom: 4px; }
+.field-input { width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); color: var(--color-text-primary); font-size: var(--text-sm); box-sizing: border-box; }
+.type-btns { display: flex; gap: var(--space-2); }
+.type-btn { flex: 1; padding: var(--space-2); border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm); }
+.type-btn.active { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+.advanced-toggle { margin-top: 10px; border: none; background: none; color: var(--color-accent); font-size: var(--text-xs); cursor: pointer; text-align: left; padding: 0; }
+.dyn-section { margin-top: 10px; }
+.dyn-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: var(--text-xs); color: var(--color-text-secondary); }
+.dyn-row { display: flex; gap: var(--space-2); margin-bottom: 4px; }
+.dyn-key { flex: 2; }
+.dyn-val { flex: 1; }
+.radio-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: var(--text-sm); }
+.dlg-btn { padding: 6px 16px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm); }
+.dlg-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); margin-left: var(--space-2); }
 </style>

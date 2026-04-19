@@ -12,15 +12,27 @@ export interface LocalMessage extends ChatMessage {
 
 export const useMessageStore = defineStore('messages', () => {
   const messagesByScene = ref<Map<string, LocalMessage[]>>(new Map());
+  const unreadByScene = ref<Map<string, number>>(new Map());
   const currentSceneId = ref<string>('');
 
   const currentMessages = computed<LocalMessage[]>(() => {
     return messagesByScene.value.get(currentSceneId.value) ?? [];
   });
 
+  const unreadCounts = computed<Record<string, number>>(() => {
+    const result: Record<string, number> = {};
+    unreadByScene.value.forEach((count, sceneId) => {
+      result[sceneId] = count;
+    });
+    return result;
+  });
+
   function _getOrCreate(sceneId: string): LocalMessage[] {
     if (!messagesByScene.value.has(sceneId)) {
       messagesByScene.value.set(sceneId, []);
+    }
+    if (!unreadByScene.value.has(sceneId)) {
+      unreadByScene.value.set(sceneId, 0);
     }
     return messagesByScene.value.get(sceneId)!;
   }
@@ -35,6 +47,10 @@ export const useMessageStore = defineStore('messages', () => {
     // 按 id 排序（Snowflake 自然递增）
     list.sort((a, b) => (a.id > b.id ? 1 : -1));
     messagesByScene.value.set(sceneId, list);
+
+    if (sceneId && sceneId !== currentSceneId.value) {
+      unreadByScene.value.set(sceneId, (unreadByScene.value.get(sceneId) ?? 0) + 1);
+    }
   }
 
   function addPendingMessage(content: string, tempId: string, messageType?: string): void {
@@ -103,14 +119,18 @@ export const useMessageStore = defineStore('messages', () => {
   function setCurrentScene(sceneId: string): void {
     currentSceneId.value = sceneId;
     _getOrCreate(sceneId);
+    unreadByScene.value.set(sceneId, 0);
   }
 
   function clearScene(sceneId: string): void {
     messagesByScene.value.delete(sceneId);
+    unreadByScene.value.delete(sceneId);
   }
 
   return {
     messagesByScene,
+    unreadByScene,
+    unreadCounts,
     currentSceneId,
     currentMessages,
     addServerMessage,
