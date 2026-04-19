@@ -399,6 +399,21 @@ export interface CampaignNpc {
 // ===== 模组与资产库 =====
 export type ModuleStatus = 'draft' | 'public' | 'archived';
 
+/** 模组大纲条目（发布时自动生成缓存） */
+export interface ModuleOutlineItem {
+  id: string;
+  type: 'heading' | 'scene' | 'npc' | 'event' | 'clue' | 'check' | 'dialog';
+  label: string;
+  level?: number; // heading 层级 1-3
+}
+
+/** 模组内业务块基础接口 */
+export interface ModuleBlock {
+  id: string;
+  type: 'scene' | 'npc' | 'event' | 'clue' | 'check' | 'dialog';
+  attrs: Record<string, unknown>;
+}
+
 export interface Module {
   id: string;
   name: string;
@@ -416,6 +431,14 @@ export interface Module {
   price: number;
   rating: number;
   download_count: number;
+  /** TipTap ProseMirror JSON 文档（仅详情接口返回） */
+  content?: string | null;
+  /** 大纲缓存（发布时生成） */
+  outline?: ModuleOutlineItem[] | null;
+  /** 正文字数统计 */
+  word_count?: number;
+  /** 最近自动保存时间 */
+  auto_saved_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -426,6 +449,26 @@ export interface ModuleQueryFilter {
   sort?: 'hot' | 'new' | 'rating';
   page?: number;
   limit?: number;
+}
+
+/** 创建模组请求体 */
+export interface CreateModuleRequest {
+  name: string;
+  ruleset_id: string;
+  description?: string;
+}
+
+/** 更新模组请求体 */
+export interface UpdateModuleRequest {
+  name?: string;
+  description?: string;
+  content?: string;
+}
+
+/** 自动保存请求体 */
+export interface AutoSaveModuleRequest {
+  content: string;
+  word_count?: number;
 }
 
 // ===== 回合状态 =====

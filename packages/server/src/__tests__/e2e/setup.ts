@@ -47,7 +47,9 @@ const rows: Record<string, any[]> = {
   chat_messages: [],
 };
 
-function makeBuilder(table: string): any {
+function makeBuilder(tableName: string): any {
+  // 去除表别名（如 'modules as m' → 'modules'）
+  const table = tableName.split(/\s+as\s+/i)[0].trim();
   const builder: any = {
     _where: {} as Record<string, any>,
     _whereIn: null as { col: string; vals: any[] } | null,
@@ -56,9 +58,12 @@ function makeBuilder(table: string): any {
     _countMode: false,
   };
 
+  // 去除列前缀（'m.id' → 'id'，'u.name' → 'name'）
+  const col = (k: string) => k.includes('.') ? k.split('.').pop()! : k;
+
   builder.where = (cond: any, val?: any) => {
-    if (typeof cond === 'string') builder._where[cond] = val;
-    else Object.assign(builder._where, cond);
+    if (typeof cond === 'string') builder._where[col(cond)] = val;
+    else Object.entries(cond).forEach(([k, v]) => { builder._where[col(k)] = v; });
     return builder;
   };
   builder.whereIn = (col: string, vals: any[]) => { builder._whereIn = { col, vals }; return builder; };

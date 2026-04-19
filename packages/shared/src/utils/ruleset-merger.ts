@@ -3,7 +3,7 @@
  * 三方合并算法（纯函数，前后端共用）
  * 基于 node_id 做集合运算：parent 为 base，ours/theirs 为两路修改
  */
-import type { MergeResult, MergeConflict } from '../../types';
+import type { MergeResult, MergeConflict } from '../types';
 
 interface AtomNode {
   node_id: string;
@@ -88,7 +88,7 @@ export function mergeRulesetGraphs(base: SimpleGraph, ours: SimpleGraph, theirs:
   }
 
   return {
-    merged_graph: { atoms: merged, connections: theirs.connections },
+    merged_graph: { atoms: merged, connections: theirs.connections as object[] },
     conflicts,
   };
 }

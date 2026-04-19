@@ -1,9 +1,9 @@
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
-import type { Module, ModuleQueryFilter } from '@trpg/shared';
+import type { Module, ModuleQueryFilter, CreateModuleRequest, UpdateModuleRequest } from '@trpg/shared';
 
-function rowToModule(row: Record<string, unknown>): Module {
-  return {
+function rowToModule(row: Record<string, unknown>, includeContent = false): Module {
+  const m: Module = {
     id: row['id'] as string,
     name: row['name'] as string,
     author_id: row['author_id'] as string,
@@ -20,9 +20,25 @@ function rowToModule(row: Record<string, unknown>): Module {
     price: Number(row['price'] ?? 0),
     rating: Number(row['rating'] ?? 0),
     download_count: Number(row['download_count'] ?? 0),
+    word_count: Number(row['word_count'] ?? 0),
+    auto_saved_at: row['auto_saved_at'] ? (row['auto_saved_at'] as Date) : null,
     created_at: row['created_at'] as Date,
     updated_at: row['updated_at'] as Date,
   };
+  if (includeContent) {
+    m.content = (row['content'] as string) ?? null;
+    const outlineRaw = row['outline'];
+    if (outlineRaw) {
+      try {
+        m.outline = typeof outlineRaw === 'string' ? JSON.parse(outlineRaw) : outlineRaw;
+      } catch {
+        m.outline = null;
+      }
+    } else {
+      m.outline = null;
+    }
+  }
+  return m;
 }
 
 export class ModuleService {
@@ -82,6 +98,67 @@ export class ModuleService {
       deduped.set(mapped.id, mapped);
     });
     return [...deduped.values()];
+  }
+
+  async getById(id: string): Promise<Module | null> {
+    const row = await db('modules as m')
+      .leftJoin('users as u', 'u.id', 'm.author_id')
+      .leftJoin('rulesets as r', 'r.id', 'm.ruleset_id')
+      .where('m.id', id)
+      .select('m.*', 'u.nickname as author_name', 'r.name as ruleset_name')
+      .first();
+    if (!row) return null;
+    return rowToModule(row as Record<string, unknown>, true);
+  }
+
+  async create(authorId: string, data: CreateModuleRequest): Promise<Module> {
+    const id = generateId();
+    await db('modules').insert({
+      id,
+      name: data.name,
+      author_id: authorId,
+      ruleset_id: data.ruleset_id,
+      description: data.description ?? '',
+      cover_url: '',
+      status: 'draft',
+      price: 0,
+      rating: 0,
+      download_count: 0,
+      word_count: 0,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+    return (await this.getById(id))!;
+  }
+
+  async update(id: string, userId: string, data: UpdateModuleRequest): Promise<Module | null> {
+    const existing = await db('modules').where({ id, author_id: userId }).first();
+    if (!existing) return null;
+    const updates: Record<string, unknown> = { updated_at: new Date() };
+    if (data.name !== undefined) updates['name'] = data.name;
+    if (data.description !== undefined) updates['description'] = data.description;
+    if (data.content !== undefined) updates['content'] = data.content;
+    await db('modules').where({ id }).update(updates);
+    return this.getById(id);
+  }
+
+  async autoSave(id: string, userId: string, content: string, wordCount?: number): Promise<boolean> {
+    const existing = await db('modules').where({ id, author_id: userId }).first();
+    if (!existing) return false;
+    await db('modules').where({ id }).update({
+      content,
+      word_count: wordCount ?? 0,
+      auto_saved_at: new Date(),
+      updated_at: new Date(),
+    });
+    return true;
+  }
+
+  async delete(id: string, userId: string): Promise<boolean> {
+    const existing = await db('modules').where({ id, author_id: userId, status: 'draft' }).first();
+    if (!existing) return false;
+    await db('modules').where({ id }).delete();
+    return true;
   }
 
   async seedIfEmpty(authorId: string): Promise<void> {
