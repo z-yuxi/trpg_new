@@ -12,7 +12,7 @@ import { useCampaignStore } from '../stores/campaign-store';
 import { useAuthStore } from '../stores/auth-store';
 import { useMessageStore } from '../stores/message-store';
 import { socketClient } from '../socket/socket-client';
-import type { StoryTime } from '@trpg/shared';
+import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
 
 const route = useRoute();
 const router = useRouter();
@@ -34,7 +34,7 @@ const pendingMoves = ref<any[]>([]);
 const connections = ref<any[]>([]);
 const currentSceneId = ref('');
 const positionHistory = ref<Array<{ sceneId: string; storyTime?: any; messageId?: string }>>([]);
-const roomCharacters = ref<Array<{ id: string; name: string; avatarUrl: string; sceneId: string; online: boolean; userId?: string }>>([]);
+const roomCharacters = ref<Array<{ id: string; name: string; avatarUrl: string; sceneId: string; online: boolean; userId?: string; personalStoryTime?: StoryTime | null }>>([]);
 
 const showCharacterDialog = ref(false);
 const selectedCharacter = ref<any>(null);
@@ -76,6 +76,38 @@ function handleFillCommand(cmd: string) {
   setTimeout(() => { prefillCommand.value = ''; }, 50);
 }
 
+function normalizeRulesetCommands(raw: unknown): Array<{ name: string; description: string }> {
+  const mapped = new Map<string, { name: string; description: string }>();
+
+  PLATFORM_PRESET_COMMAND_NAMES.forEach((name) => {
+    mapped.set(name, { name, description: '平台预置命令' });
+  });
+
+  if (Array.isArray(raw)) {
+    raw.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      const command = item as { name?: string; description?: string };
+      if (!command.name) return;
+      mapped.set(command.name, {
+        name: command.name,
+        description: command.description ?? mapped.get(command.name)?.description ?? '',
+      });
+    });
+    return [...mapped.values()];
+  }
+
+  if (raw && typeof raw === 'object') {
+    Object.entries(raw as Record<string, unknown>).forEach(([name, value]) => {
+      const description = typeof value === 'string'
+        ? value
+        : (value as { description?: string } | null)?.description ?? mapped.get(name)?.description ?? '';
+      mapped.set(name, { name, description });
+    });
+  }
+
+  return [...mapped.values()];
+}
+
 async function loadScenes() {
   const res = await fetch(`/api/campaigns/${campaignId}/scenes`, {
     headers: { Authorization: `Bearer ${authStore.token}` },
@@ -115,6 +147,7 @@ async function loadRoomCharacters() {
       sceneId: item.scene_id || '',
       online: !!item.online,
       userId: item.user_id,
+      personalStoryTime: item.personal_story_time ?? null,
     }));
 
     const myChar = data.find((item: any) => item.user_id === authStore.userId);
@@ -199,11 +232,7 @@ onMounted(async () => {
         const rulesetRes = await fetch(`/api/rulesets/${campaign.ruleset_id}`).catch(() => null);
         if (rulesetRes?.ok) {
           const ruleset = await rulesetRes.json();
-          const cmds = ruleset.commands ?? {};
-          commands.value = Object.entries(cmds).map(([name, desc]: [string, any]) => ({
-            name,
-            description: typeof desc === 'string' ? desc : desc?.description ?? '',
-          }));
+          commands.value = normalizeRulesetCommands(ruleset.commands);
         }
       }
     }
@@ -317,6 +346,8 @@ onUnmounted(() => {
         <AssistantDesk
           :campaign-id="campaignId"
           :commands="commands"
+          :scenes="scenes"
+          :room-characters="roomCharacters"
           :is-gm="isGm"
           @fill-command="handleFillCommand"
           @broadcast="() => {}"

@@ -268,6 +268,7 @@ router.get('/:id/characters', async (req, res) => {
         'cs.avatar_url',
         'cs.ruleset_id',
         'css.current_spatial_scene_id as scene_id',
+        'css.personal_story_time',
       );
 
     res.json(
@@ -278,6 +279,9 @@ router.get('/:id/characters', async (req, res) => {
         avatar_url: row['avatar_url'] || '',
         ruleset_id: row['ruleset_id'],
         scene_id: row['scene_id'] || null,
+        personal_story_time: row['personal_story_time']
+          ? (typeof row['personal_story_time'] === 'string' ? JSON.parse(row['personal_story_time'] as string) : row['personal_story_time'])
+          : null,
         online: onlineUserIds.has(String(row['user_id'])),
       })),
     );

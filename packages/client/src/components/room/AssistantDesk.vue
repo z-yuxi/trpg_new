@@ -4,11 +4,13 @@ import { ElDialog } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
-import type { CharacterSheet } from '@trpg/shared';
+import type { CharacterSheet, Scene, StoryTime } from '@trpg/shared';
 
 const props = defineProps<{
   campaignId: string;
   commands: { name: string; description: string }[];
+  scenes: Scene[];
+  roomCharacters: Array<{ id: string; name: string; sceneId: string; personalStoryTime?: StoryTime | null }>;
   isGm: boolean;
 }>();
 
@@ -79,6 +81,18 @@ const hpPercent = computed(() => {
 });
 
 const charInitial = computed(() => characterSheet.value?.name?.charAt(0).toUpperCase() ?? '?');
+const selectedRoomCharacter = computed(() => props.roomCharacters.find((char) => char.id === selectedCharId.value) ?? null);
+const currentSceneName = computed(() => {
+  const sceneId = selectedRoomCharacter.value?.sceneId;
+  if (!sceneId) return '未进入场景';
+  return props.scenes.find((scene) => scene.id === sceneId)?.name ?? '未知场景';
+});
+const personalStoryTime = computed(() => selectedRoomCharacter.value?.personalStoryTime ?? null);
+
+function formatStoryTime(storyTime: StoryTime | null | undefined): string {
+  if (!storyTime) return '未同步';
+  return `第${storyTime.day}日 ${String(storyTime.hour).padStart(2, '0')}:${String(storyTime.minute).padStart(2, '0')}`;
+}
 
 // ── tabs ──────────────────────────────────────────────────────────────
 type TabKey = 'cmds' | 'dice' | 'secret' | 'broadcast';
@@ -168,6 +182,8 @@ function fmt(d: any): string {
               </div>
               <span class="hp-text">{{ hpEntry.key }}: {{ hpEntry.current }}/{{ hpEntry.max }}</span>
             </div>
+            <div class="char-meta">当前场景：{{ currentSceneName }}</div>
+            <div class="char-meta">个人时间：{{ formatStoryTime(personalStoryTime) }}</div>
           </div>
           <button class="unbind-btn" @click.stop="unbindChar" title="解除绑定">×</button>
         </div>
@@ -293,6 +309,7 @@ function fmt(d: any): string {
 }
 .char-info { flex: 1; min-width: 0; }
 .char-name { font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.char-meta { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
 .hp-bar-wrap { margin-top: 2px; }
 .hp-bar-track { height: 4px; background: var(--surface-hover); border-radius: 2px; overflow: hidden; }
 .hp-bar-fill { height: 100%; background: var(--color-accent); border-radius: 2px; transition: width 0.3s; }
