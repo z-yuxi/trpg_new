@@ -143,6 +143,10 @@ function handleBack() {
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 var(--space-2);
 }
 .icon-btn {
   display: flex;
@@ -177,6 +181,22 @@ function handleBack() {
   flex: 1;
   padding: var(--space-4);
   overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .top-bar {
+    padding: 0 var(--space-3);
+  }
+
+  .logo {
+    font-size: var(--text-lg);
+    letter-spacing: 1px;
+  }
+
+  .content {
+    padding: var(--space-3);
+    padding-bottom: calc(var(--space-3) + var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
 }
 </style>
 

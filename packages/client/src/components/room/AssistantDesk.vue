@@ -15,6 +15,7 @@ const props = defineProps<{
   currentSceneId: string;
   npcs: Array<{ id: string; name: string; display_name?: string }>;
   isGm: boolean;
+  initialTab?: TabKey;
 }>();
 
 const emit = defineEmits<{
@@ -101,6 +102,15 @@ function formatStoryTime(storyTime: StoryTime | null | undefined): string {
 type TabKey = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 const activeTab = ref<TabKey>('cmds');
 const currentScene = computed(() => props.scenes.find((scene) => scene.id === props.currentSceneId) ?? null);
+
+watch(
+  () => props.initialTab,
+  (tab) => {
+    if (!tab) return;
+    activeTab.value = tab;
+  },
+  { immediate: true },
+);
 
 // ── commands ──────────────────────────────────────────────────────────
 function useCommand(cmd: { name: string }) {
@@ -424,4 +434,24 @@ function fmt(d: any): string {
 
 /* empty */
 .empty-hint { text-align: center; color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-6); }
+
+@media (max-width: 768px) {
+  .assistant-desk {
+    background: var(--surface-card);
+  }
+
+  .char-zone,
+  .desk-tabs,
+  .desk-content {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+
+  .desk-tabs {
+    position: sticky;
+    top: 0;
+    background: var(--surface-card);
+    z-index: 2;
+  }
+}
 </style>

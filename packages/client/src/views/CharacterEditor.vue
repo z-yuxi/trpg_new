@@ -55,6 +55,7 @@ const form = ref({
   name: '',
   ruleset_id: '',
   occupation_id: '',
+  avatar_url: '',
   attributes: {} as Record<string, number>,
   skills: {} as Record<string, number>,
   appearance: '',
@@ -65,6 +66,8 @@ const form = ref({
 
 const saving = ref(false);
 const saveError = ref('');
+const avatarUploading = ref(false);
+const avatarInput = ref<HTMLInputElement | null>(null);
 
 /* ========== 计算属性 ========== */
 const occupations = computed<OccupationDef[]>(() => (schema.value.occupations ?? []));
@@ -152,6 +155,7 @@ onMounted(async () => {
         form.value.name = data.name ?? '';
         form.value.ruleset_id = data.ruleset_id ?? '';
         form.value.occupation_id = data.occupation_id ?? '';
+        form.value.avatar_url = data.avatar_url ?? '';
         form.value.attributes = data.attributes ?? {};
         form.value.skills = data.skills ?? {};
         form.value.background = data.background ?? '';
@@ -168,6 +172,51 @@ async function onRulesetChange() {
   if (!rs) return;
   if (rs.character_card_schema && typeof rs.character_card_schema === 'object') {
     schema.value = rs.character_card_schema as CardSchema;
+  }
+}
+
+async function uploadAvatar(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authStore.token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? '头像上传失败');
+  }
+
+  const data = await res.json();
+  return data.url;
+}
+
+function openAvatarPicker() {
+  avatarInput.value?.click();
+}
+
+async function onAvatarChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) {
+    saveError.value = '头像大小不能超过 5MB';
+    target.value = '';
+    return;
+  }
+
+  avatarUploading.value = true;
+  saveError.value = '';
+  try {
+    form.value.avatar_url = await uploadAvatar(file);
+  } catch (error: any) {
+    saveError.value = error?.message || '头像上传失败';
+  } finally {
+    avatarUploading.value = false;
+    target.value = '';
   }
 }
 
@@ -209,6 +258,7 @@ async function save() {
       name: form.value.name || '未命名角色',
       ruleset_id: form.value.ruleset_id,
       occupation_id: form.value.occupation_id || null,
+      avatar_url: form.value.avatar_url || '',
       background: [
         form.value.appearance ? `外貌：${form.value.appearance}` : '',
         form.value.background ? `背景：${form.value.background}` : '',
@@ -388,13 +438,20 @@ onBeforeRouteLeave(() => {
       <h2 class="step-title">角色预览</h2>
       <div class="preview-card">
         <div class="preview-header">
-          <div class="preview-avatar">{{ (form.name || '?')[0] }}</div>
+          <div class="preview-avatar uploadable" @click="openAvatarPicker">
+            <img v-if="form.avatar_url" :src="form.avatar_url" class="preview-avatar-image" />
+            <span v-else>{{ (form.name || '?')[0] }}</span>
+          </div>
           <div>
             <div class="preview-name">{{ form.name || '未命名' }}</div>
             <div class="preview-meta">
               <TTag size="sm" color="default">{{ rulesets.find(r => r.id === form.ruleset_id)?.name ?? form.ruleset_id }}</TTag>
               <TTag v-if="selectedOccupation" size="sm" color="info">{{ selectedOccupation.name }}</TTag>
             </div>
+            <button class="avatar-upload-btn" type="button" @click="openAvatarPicker">
+              {{ avatarUploading ? '上传中...' : '上传头像' }}
+            </button>
+            <input ref="avatarInput" type="file" class="hidden-avatar-input" accept="image/jpeg,image/png,image/webp,image/gif" @change="onAvatarChange" />
           </div>
         </div>
 
@@ -654,9 +711,22 @@ onBeforeRouteLeave(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
 }
+.preview-avatar.uploadable { cursor: pointer; }
+.preview-avatar-image { width: 100%; height: 100%; object-fit: cover; }
 .preview-name { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--text-primary); }
 .preview-meta { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
+.avatar-upload-btn {
+  margin-top: var(--space-2);
+  border: 1px solid var(--border-default);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.hidden-avatar-input { display: none; }
 .preview-section { display: flex; flex-direction: column; gap: var(--space-2); }
 .preview-section-title { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-secondary); border-bottom: 1px solid var(--border-default); padding-bottom: var(--space-1); }
 .preview-attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: var(--space-2); }

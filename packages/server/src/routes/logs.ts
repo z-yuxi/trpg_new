@@ -7,7 +7,10 @@ const router: IRouter = Router();
 
 const exportSchema = z.object({
   campaign_id: z.string().min(1),
-  format: z.enum(['json', 'markdown']).default('json'),
+  format: z.enum(['json', 'markdown', 'text']).default('json'),
+  mode: z.enum(['player', 'full']).default('player'),
+  sort_strategy: z.enum(['chronological', 'scene', 'interleave', 'custom']).default('chronological'),
+  simulate_user_id: z.string().min(1).optional(),
   scene_ids: z.array(z.string()).optional(),
 });
 
@@ -27,6 +30,8 @@ router.post('/export', authMiddleware, async (req, res) => {
 
     if (parsed.data.format === 'markdown') {
       res.type('text/markdown').send(result);
+    } else if (parsed.data.format === 'text') {
+      res.type('text/plain').send(result);
     } else {
       res.type('application/json').send(result);
     }

@@ -100,6 +100,67 @@ export class UserService {
     };
   }
 
+  async getPublicProfile(uid: string): Promise<Record<string, unknown> | null> {
+    const row = await db('users')
+      .where({ uid: Number(uid) })
+      .select('id', 'uid', 'nickname', 'avatar_url', 'user_type', 'subscription_type', 'creator_level', 'created_at')
+      .first();
+    if (!row) return null;
+
+    const userType = typeof row['user_type'] === 'string'
+      ? JSON.parse(row['user_type'] as string)
+      : [];
+
+    return {
+      id: row['id'],
+      uid: row['uid'],
+      nickname: row['nickname'],
+      avatar_url: row['avatar_url'] || '',
+      intro: '',
+      tags: userType,
+      subscription_type: row['subscription_type'],
+      creator_level: row['creator_level'],
+      follower_count: 0,
+      following_count: 0,
+      created_at: row['created_at'],
+    };
+  }
+
+  async getUserCampaigns(uid: string): Promise<Record<string, unknown>[]> {
+    const user = await db('users').where({ uid: Number(uid) }).select('id').first();
+    if (!user) return [];
+
+    return db('campaigns as c')
+      .join('character_scene_states as css', 'css.campaign_id', 'c.id')
+      .join('character_sheets as cs', 'cs.id', 'css.character_id')
+      .where('cs.user_id', user.id)
+      .select('c.id', 'c.name', 'c.status', 'c.created_at')
+      .groupBy('c.id', 'c.name', 'c.status', 'c.created_at')
+      .orderBy('c.created_at', 'desc');
+  }
+
+  async getHostedCampaigns(uid: string): Promise<Record<string, unknown>[]> {
+    const user = await db('users').where({ uid: Number(uid) }).select('id').first();
+    if (!user) return [];
+
+    return db('campaigns')
+      .where({ gm_user_id: user.id })
+      .select('id', 'name', 'status', 'created_at')
+      .orderBy('created_at', 'desc');
+  }
+
+  async getUserCreatedModules(uid: string): Promise<Record<string, unknown>[]> {
+    const user = await db('users').where({ uid: Number(uid) }).select('id').first();
+    if (!user) return [];
+
+    const [modules, rulesets] = await Promise.all([
+      db('modules').where({ author_id: user.id }).select('id', 'name', 'status', db.raw("'module' as type"), 'updated_at'),
+      db('rulesets').where({ author_id: user.id }).select('id', 'name', 'status', db.raw("'ruleset' as type"), 'created_at as updated_at'),
+    ]);
+
+    return [...modules, ...rulesets].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  }
+
   private rowToUser(row: Record<string, unknown>): User {
     return {
       id: row['id'] as string,

@@ -9,6 +9,7 @@ import logRoutes from './logs';
 import notificationRoutes from './notifications';
 import forumRoutes from './forum';
 import moduleRoutes from './modules';
+import uploadRoutes from './upload';
 
 const router: IRouter = Router();
 
@@ -25,5 +26,6 @@ router.use('/logs', logRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/forum', forumRoutes);
 router.use('/modules', moduleRoutes);
+router.use('/upload', uploadRoutes);
 
 export default router;

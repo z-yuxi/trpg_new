@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
@@ -10,8 +10,22 @@ const router = useRouter();
 
 const campaigns = ref<any[]>([]);
 const rulesets = ref<any[]>([]);
+const modules = ref<any[]>([]);
 const recruitments = ref<any[]>([]);
 const loading = ref(false);
+
+const quickActions = [
+  { title: '找团', desc: '浏览招募并加入适合你的战役', path: '/community/recruit' },
+  { title: '做GM', desc: '创建战役并开始组织你的队伍', path: '/campaigns' },
+  { title: '发招募', desc: '快速发布你的跑团招募帖', path: '/community/recruit' },
+  { title: '发求组', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
+];
+
+const mixedRecommendations = computed(() => [
+  ...modules.value.slice(0, 2).map((item) => ({ id: `m-${item.id}`, type: 'module', title: item.name, subtitle: item.ruleset_name || '模组', desc: item.description })),
+  ...rulesets.value.slice(0, 2).map((item) => ({ id: `r-${item.id}`, type: 'ruleset', title: item.name, subtitle: `v${item.version ?? '1.0'}`, desc: item.description })),
+  ...recruitments.value.slice(0, 2).map((item) => ({ id: `q-${item.id}`, type: 'recruitment', title: item.title ?? item.campaign_name, subtitle: '组队动态', desc: item.description ?? '新的招募动态' })),
+]);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
   running: { label: '进行中', color: 'success' },
@@ -24,13 +38,21 @@ onMounted(async () => {
   loading.value = true;
   try {
     const headers = authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
-    const [cRes, rRes, recRes] = await Promise.all([
+    const [cRes, rRes, mRes, recRes] = await Promise.all([
       authStore.isLoggedIn ? fetch('/api/campaigns', { headers }) : Promise.resolve(null),
-      fetch('/api/rulesets'),
+      fetch('/api/rulesets?limit=6'),
+      fetch('/api/modules?limit=6'),
       fetch('/api/recruitment?limit=5'),
     ]);
     if (cRes?.ok) { const d = await cRes.json(); campaigns.value = Array.isArray(d) ? d.slice(0, 6) : []; }
-    if (rRes?.ok) { const d = await rRes.json(); rulesets.value = Array.isArray(d) ? d.slice(0, 6) : []; }
+    if (rRes?.ok) {
+      const d = await rRes.json();
+      rulesets.value = Array.isArray(d?.data) ? d.data.slice(0, 6) : Array.isArray(d) ? d.slice(0, 6) : [];
+    }
+    if (mRes?.ok) {
+      const d = await mRes.json();
+      modules.value = Array.isArray(d?.data) ? d.data.slice(0, 6) : [];
+    }
     if (recRes?.ok) { const d = await recRes.json(); recruitments.value = Array.isArray(d) ? d.slice(0, 5) : []; }
   } catch { /* silent */ } finally {
     loading.value = false;
@@ -86,19 +108,31 @@ onMounted(async () => {
           </div>
         </section>
 
+        <section class="section quick-section">
+          <div class="section-header">
+            <h2 class="section-title">快速组队入口</h2>
+          </div>
+          <div class="quick-grid">
+            <button v-for="item in quickActions" :key="item.title" class="quick-card" @click="router.push(item.path)">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.desc }}</span>
+            </button>
+          </div>
+        </section>
+
         <section class="section">
           <div class="section-header">
             <h2 class="section-title">为你推荐</h2>
             <button class="see-all" @click="router.push('/assets')">查看广场 ›</button>
           </div>
-          <div v-if="rulesets.length === 0" class="hint-text">暂无规则集数据</div>
+          <div v-if="mixedRecommendations.length === 0" class="hint-text">暂无推荐内容</div>
           <div v-else class="ruleset-grid">
-            <div v-for="rs in rulesets" :key="rs.id" class="ruleset-card" @click="router.push('/assets')">
-              <div class="ruleset-icon">📘</div>
+            <div v-for="item in mixedRecommendations" :key="item.id" class="ruleset-card" @click="router.push(item.type === 'recruitment' ? '/community/recruit' : '/assets')">
+              <div class="ruleset-icon">{{ item.type === 'module' ? '🧩' : item.type === 'ruleset' ? '📘' : '📣' }}</div>
               <div class="ruleset-body">
-                <div class="ruleset-name">{{ rs.name }}</div>
-                <div class="ruleset-version">v{{ rs.version ?? '1.0' }}</div>
-                <p class="ruleset-desc">{{ rs.description || '暂无简介' }}</p>
+                <div class="ruleset-name">{{ item.title }}</div>
+                <div class="ruleset-version">{{ item.subtitle }}</div>
+                <p class="ruleset-desc">{{ item.desc || '暂无简介' }}</p>
               </div>
             </div>
           </div>
@@ -117,7 +151,21 @@ onMounted(async () => {
         </div>
         <div class="side-card">
           <div class="side-title">最近动态</div>
-          <div class="hint-text">暂无动态</div>
+          <div v-if="recruitments.length === 0" class="hint-text">暂无动态</div>
+          <div v-else class="feed-list">
+            <div v-for="item in recruitments.slice(0, 3)" :key="item.id" class="feed-item">
+              <strong>{{ item.title ?? item.campaign_name }}</strong>
+              <span>{{ item.description ?? '新的招募动态' }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="side-card">
+          <div class="side-title">新手指南</div>
+          <div class="guide-list">
+            <button class="guide-link" @click="router.push('/getting-started#join')">1. 创建或加入战役</button>
+            <button class="guide-link" @click="router.push('/getting-started#assets')">2. 浏览规则集和模组</button>
+            <button class="guide-link" @click="router.push('/getting-started#recruit')">3. 去社区发起或加入招募</button>
+          </div>
         </div>
       </aside>
     </div>
@@ -136,6 +184,10 @@ onMounted(async () => {
 .main-col { min-width: 0; }
 .side-col { display: flex; flex-direction: column; gap: var(--space-4); }
 .section { margin-bottom: var(--space-7); }
+.quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.quick-card { display: flex; flex-direction: column; gap: var(--space-1); text-align: left; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-xl); background: var(--surface-card); cursor: pointer; box-shadow: var(--shadow-sm); }
+.quick-card strong { color: var(--text-primary); }
+.quick-card span { color: var(--text-secondary); font-size: var(--text-sm); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
 .section-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0; }
 .see-all { background: none; border: none; color: var(--color-accent); font-size: var(--text-sm); cursor: pointer; }
@@ -168,9 +220,16 @@ onMounted(async () => {
 .recruit-name { font-size: var(--text-sm); color: var(--text-primary); margin-bottom: 2px; transition: color var(--transition-fast); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .recruit-meta { font-size: var(--text-xs); color: var(--text-muted); }
 .see-all-block { display: block; width: 100%; margin-top: var(--space-3); background: none; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--space-2); font-size: var(--text-xs); color: var(--color-accent); cursor: pointer; text-align: center; }
+.feed-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.feed-item { display: flex; flex-direction: column; gap: 4px; padding: var(--space-2) 0; border-top: 1px solid var(--border-default); }
+.feed-item strong { color: var(--text-primary); font-size: var(--text-sm); }
+.feed-item span { color: var(--text-secondary); font-size: var(--text-xs); }
+.guide-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.guide-link { text-align: left; border: none; background: var(--surface-hover); color: var(--text-primary); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); cursor: pointer; }
 @media (max-width: 768px) {
   .content-layout { grid-template-columns: 1fr; }
   .side-col { display: none; }
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ruleset-grid { grid-template-columns: repeat(2, 1fr); }
   .banner-title { font-size: var(--text-2xl); }
 }

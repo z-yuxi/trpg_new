@@ -32,8 +32,10 @@ export class CharacterSheetService {
     ruleset_id: string;
     name: string;
     occupation_id?: string;
+    avatar_url?: string;
     attributes?: Record<string, number>;
     skills?: Record<string, number>;
+    background?: string;
   }): Promise<CharacterSheet> {
     const id = generateId();
     const character_code = await this.generateUniqueCode();
@@ -45,12 +47,12 @@ export class CharacterSheetService {
       ruleset_id: params.ruleset_id,
       name: params.name,
       occupation_id: params.occupation_id ?? null,
-      avatar_url: '',
+      avatar_url: params.avatar_url ?? '',
       attributes: JSON.stringify(params.attributes ?? {}),
       skills: JSON.stringify(params.skills ?? {}),
       derived_max: JSON.stringify({}),
       equipment: JSON.stringify([]),
-      background: '',
+      background: params.background ?? '',
       avatar_custom_data: null,
       initial_snapshot: null,
     });

@@ -25,7 +25,7 @@ router.get('/me', authMiddleware, (req, res) => {
 router.put('/me', authMiddleware, async (req, res) => {
   const schema = z.object({
     nickname: z.string().min(1).optional(),
-    avatar_url: z.string().url().optional(),
+    avatar_url: z.string().min(1).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -48,6 +48,43 @@ router.get('/me/activity', authMiddleware, async (req, res) => {
     limit: limit ? Number(limit) : 20,
   });
   res.json(result);
+});
+
+router.get('/:uid/profile', async (req, res) => {
+  try {
+    const profile = await userService.getPublicProfile(req.params.uid);
+    if (!profile) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json(profile);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+router.get('/:uid/campaigns', async (req, res) => {
+  try {
+    const data = await userService.getUserCampaigns(req.params.uid);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+router.get('/:uid/hosted-campaigns', async (req, res) => {
+  try {
+    const data = await userService.getHostedCampaigns(req.params.uid);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+router.get('/:uid/created-modules', async (req, res) => {
+  try {
+    const data = await userService.getUserCreatedModules(req.params.uid);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
 });
 
 export default router;

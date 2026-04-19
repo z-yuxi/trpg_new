@@ -11,9 +11,13 @@ const authStore = useAuthStore();
 const campaignId = route.params.id as string;
 
 // 配置选项
-const format = ref<'json' | 'markdown'>('markdown');
+const format = ref<'json' | 'markdown' | 'text'>('markdown');
+const mode = ref<'player' | 'full'>('player');
+const sortStrategy = ref<'chronological' | 'scene' | 'interleave' | 'custom'>('chronological');
+const simulateUserId = ref('');
 const selectedSceneIds = ref<string[]>([]);
 const allScenesSelected = ref(true);
+const isGm = ref(false);
 
 // 场景列表
 const scenes = ref<Array<{ id: string; name: string }>>([]);
@@ -42,6 +46,14 @@ const resultLines = computed(() => exportResult.value.split('\n').length);
 async function loadScenes() {
   isLoadingScenes.value = true;
   try {
+    const campaignRes = await fetch(`/api/campaigns/${campaignId}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (campaignRes.ok) {
+      const campaign = await campaignRes.json();
+      isGm.value = campaign?.gm_user_id === authStore.userId;
+    }
+
     const res = await fetch(`/api/campaigns/${campaignId}/scenes`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
@@ -65,7 +77,13 @@ async function handleExport() {
   const body: Record<string, unknown> = {
     campaign_id: campaignId,
     format: format.value,
+    mode: mode.value,
+    sort_strategy: sortStrategy.value,
   };
+
+  if (isGm.value && simulateUserId.value.trim()) {
+    body.simulate_user_id = simulateUserId.value.trim();
+  }
 
   if (!allScenesSelected.value && selectedSceneIds.value.length > 0) {
     body.scene_ids = selectedSceneIds.value;
@@ -97,8 +115,8 @@ async function handleExport() {
 }
 
 function handleDownload() {
-  const ext = format.value === 'json' ? 'json' : 'md';
-  const mime = format.value === 'json' ? 'application/json' : 'text/markdown';
+  const ext = format.value === 'json' ? 'json' : format.value === 'text' ? 'txt' : 'md';
+  const mime = format.value === 'json' ? 'application/json' : format.value === 'text' ? 'text/plain' : 'text/markdown';
   const blob = new Blob([exportResult.value], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -123,6 +141,28 @@ onMounted(() => {
     </div>
 
     <div class="export-card">
+      <div class="section">
+        <div class="section-title">导出模式</div>
+        <div class="mode-options">
+          <label class="format-option" :class="{ active: mode === 'player' }">
+            <input v-model="mode" type="radio" value="player" />
+            <span class="format-icon">👤</span>
+            <div>
+              <div class="format-name">我的故事</div>
+              <div class="format-desc">按当前玩家可见内容导出</div>
+            </div>
+          </label>
+          <label class="format-option" :class="{ active: mode === 'full', disabled: !isGm }">
+            <input v-model="mode" type="radio" value="full" :disabled="!isGm" />
+            <span class="format-icon">🎭</span>
+            <div>
+              <div class="format-name">完整剧本</div>
+              <div class="format-desc">仅 GM 可导出全量消息</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <!-- 格式选择 -->
       <div class="section">
         <div class="section-title">导出格式</div>
@@ -143,7 +183,37 @@ onMounted(() => {
               <div class="format-desc">适合数据处理</div>
             </div>
           </label>
+          <label class="format-option" :class="{ active: format === 'text' }">
+            <input v-model="format" type="radio" value="text" />
+            <span class="format-icon">📄</span>
+            <div>
+              <div class="format-name">纯文本</div>
+              <div class="format-desc">适合快速复制与分享</div>
+            </div>
+          </label>
         </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">排序策略</div>
+        <select v-model="sortStrategy" class="strategy-select">
+          <option value="chronological">严格时序</option>
+          <option value="scene">场景优先</option>
+          <option value="interleave">主线穿插（当前按时序导出）</option>
+          <option value="custom">自定义排序（当前按时序导出）</option>
+        </select>
+        <p class="helper-text">当前 MVP 已实现严格时序与场景优先，其余策略先回退到时序导出。</p>
+      </div>
+
+      <div v-if="isGm && mode === 'player'" class="section">
+        <div class="section-title">GM 模拟玩家视角</div>
+        <input
+          v-model="simulateUserId"
+          class="simulate-input"
+          type="text"
+          placeholder="输入用户 ID，例如 1000000"
+        />
+        <p class="helper-text">留空则按你的可见范围导出。</p>
       </div>
 
       <!-- 场景筛选 -->
@@ -250,6 +320,11 @@ onMounted(() => {
   display: flex;
   gap: var(--space-3);
 }
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
 .format-option {
   flex: 1;
   display: flex;
@@ -263,9 +338,28 @@ onMounted(() => {
 }
 .format-option input { display: none; }
 .format-option.active { border-color: var(--color-accent); background: var(--surface-hover); }
+.format-option.disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
 .format-icon { font-size: 20px; flex-shrink: 0; }
 .format-name { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
 .format-desc { font-size: 11px; color: var(--color-text-muted); }
+.strategy-select,
+.simulate-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--color-text-primary);
+}
+.helper-text {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
 
 /* 场景列表 */
 .select-all-row { display: block; margin-bottom: var(--space-2); }
@@ -326,5 +420,23 @@ onMounted(() => {
   color: var(--color-text-primary);
   line-height: 1.6;
   box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .log-export-page {
+    padding: var(--space-3);
+  }
+
+  .format-options,
+  .mode-options {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .result-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
 }
 </style>

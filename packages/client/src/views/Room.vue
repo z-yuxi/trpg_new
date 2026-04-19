@@ -65,6 +65,7 @@ const moveTargetOptions = computed(() => scenes.value.filter((scene) => scene.ty
 
 const prefillCommand = ref('');
 const selectedSenderIdentity = ref('');
+const mobileAssistantTab = ref<'cmds' | 'map' | 'dice' | 'secret' | 'broadcast'>('cmds');
 
 const myCharacter = computed(() =>
   roomCharacters.value.find((char) => char.id === characterId.value) ?? null
@@ -83,6 +84,10 @@ function handleAssistantBroadcast(content: string) {
     content: `[GM公告] ${text}`,
     message_type: 'announcement',
   });
+}
+
+function handleMobileAssistantOpen(tab: 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast') {
+  mobileAssistantTab.value = tab;
 }
 
 function normalizeRulesetCommands(raw: unknown): Array<{ name: string; description: string }> {
@@ -296,6 +301,7 @@ onUnmounted(() => {
       :is-gm="isGm"
       @toggle-gm-console="showGMConsole = !showGMConsole"
       @export-log="router.push(`/room/${campaignId}/export`)"
+      @mobile-assistant-open="handleMobileAssistantOpen"
     >
       <template #gm-console>
         <transition name="gm-slide">
@@ -350,6 +356,7 @@ onUnmounted(() => {
           :current-scene-id="currentSceneId"
           :npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, display_name: npc.display_name }))"
           :is-gm="isGm"
+          :initial-tab="mobileAssistantTab"
           @fill-command="handleFillCommand"
           @broadcast="handleAssistantBroadcast"
         />

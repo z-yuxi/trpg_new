@@ -33,6 +33,14 @@
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: initial !important;
+}
+
 @media (max-width: 768px) {
   /* 全局字体调小一档 */
   html {
@@ -80,6 +88,29 @@
   .room-left-sidebar,
   .room-right-sidebar {
     display: none !important;
+  }
+
+  .mobile-only {
+    display: initial !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-page-pad {
+    padding-left: var(--space-3) !important;
+    padding-right: var(--space-3) !important;
+  }
+
+  .mobile-sheet {
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0 !important;
+    box-shadow: var(--shadow-xl);
+  }
+
+  .mobile-drawer {
+    width: var(--mobile-drawer-width);
+    max-width: 100%;
   }
 
   /* 移动端骰子面板全屏弹出 */

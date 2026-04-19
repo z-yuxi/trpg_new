@@ -29,6 +29,7 @@ const routes = [
       { path: 'personal/notification-list', name: 'PersonalNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
       { path: 'personal/privacy', name: 'PersonalPrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
       { path: 'personal/about', name: 'PersonalAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
+      { path: 'getting-started', name: 'GettingStarted', component: () => import('../views/GettingStarted.vue'), meta: { title: '新手指南' } },
       { path: 'u/:uid', name: 'UserProfile', component: () => import('../views/UserProfile.vue'), meta: { title: '个人主页' } },
     ],
   },

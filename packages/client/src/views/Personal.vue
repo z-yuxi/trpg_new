@@ -165,28 +165,53 @@ function openAvatarPicker() {
   avatarInput.value?.click();
 }
 
-function cropToSquare(file: File) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const side = Math.min(img.width, img.height);
-      const sx = (img.width - side) / 2;
-      const sy = (img.height - side) / 2;
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.drawImage(img, sx, sy, side, side, 0, 0, 256, 256);
-      avatarPreview.value = canvas.toDataURL('image/jpeg', 0.9);
-    };
-    img.src = String(reader.result);
-  };
-  reader.readAsDataURL(file);
+async function uploadAvatar(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authStore.token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? '头像上传失败');
+  }
+
+  const data = await res.json();
+  return data.url;
 }
 
-function onAvatarChange(event: Event) {
+async function persistAvatar(url: string) {
+  const res = await fetch('/api/users/me', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+    body: JSON.stringify({ avatar_url: url }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? '头像保存失败');
+  }
+
+  const payload = await res.json().catch(() => ({}));
+  const updated = payload.user ?? payload;
+  userDetail.value = {
+    ...displayUser.value,
+    ...updated,
+    avatar_url: updated.avatar_url ?? url,
+  };
+  authStore.setAuth({
+    token: authStore.token,
+    userId: String(userDetail.value.id ?? authStore.userId),
+    nickname: userDetail.value.nickname,
+    avatarUrl: userDetail.value.avatar_url,
+  });
+}
+
+async function onAvatarChange(event: Event) {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   if (!file) return;
@@ -195,8 +220,16 @@ function onAvatarChange(event: Event) {
     target.value = '';
     return;
   }
-  cropToSquare(file);
-  target.value = '';
+  try {
+    const url = await uploadAvatar(file);
+    avatarPreview.value = url;
+    await persistAvatar(url);
+    ElMessage.success('头像上传成功');
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '头像上传失败');
+  } finally {
+    target.value = '';
+  }
 }
 
 function clearCache() {

@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '../stores/auth-store';
+import { api } from '../utils/api';
 
 const route = useRoute();
 const authStore = useAuthStore();
@@ -28,6 +29,8 @@ const profile = ref<UserProfile | null>(null);
 const loading = ref(true);
 const following = ref(false);
 const followLoading = ref(false);
+const playerCampaigns = ref<any[]>([]);
+const hostedCampaigns = ref<any[]>([]);
 
 const tabLabels: { key: TabKey; label: string }[] = [
   { key: 'player', label: '玩家' },
@@ -65,23 +68,14 @@ const creatorWorks = ref<{ id: string; name: string; type: string; status: strin
 async function loadProfile() {
   loading.value = true;
   try {
-    // Try /api/users/:uid/profile first
-    let res = await fetch(`/api/users/${uid}/profile`).catch(() => null);
-    if (!res || !res.ok) {
-      // Fallback to /api/users/me if uid matches self
-      if (isOwnProfile()) {
-        res = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${authStore.token}` } });
-        if (res?.ok) {
-          const data = await res.json();
-          profile.value = data.user ?? data;
-        }
-      } else {
-        // No public API exists — show minimal placeholder
-        profile.value = { id: uid, nickname: `用户 ${uid}`, tags: [] };
-      }
-    } else {
-      profile.value = await res.json();
-    }
+    profile.value = await api.get(`/users/${uid}/profile`);
+    playerCampaigns.value = await api.get(`/users/${uid}/campaigns`);
+    hostedCampaigns.value = await api.get(`/users/${uid}/hosted-campaigns`);
+    creatorWorks.value = await api.get(`/users/${uid}/created-modules`);
+    playerStats.value.joinedCampaigns = playerCampaigns.value.length;
+    playerStats.value.totalSessions = playerCampaigns.value.length;
+    gmStats.value.hostedCampaigns = hostedCampaigns.value.length;
+    gmStats.value.totalPlayers = hostedCampaigns.value.length * 4;
   } catch {
     profile.value = { id: uid, nickname: `用户 ${uid}`, tags: [] };
   } finally { loading.value = false; }
@@ -173,8 +167,14 @@ onMounted(loadProfile);
             </div>
           </div>
           <div class="review-section">
-            <h3 class="section-title">评价摘要</h3>
-            <div class="empty-hint">暂无评价</div>
+            <h3 class="section-title">参团记录</h3>
+            <div v-if="playerCampaigns.length === 0" class="empty-hint">暂无公开参团记录</div>
+            <div v-else class="campaign-list">
+              <div v-for="campaign in playerCampaigns" :key="campaign.id" class="campaign-item">
+                <strong>{{ campaign.name }}</strong>
+                <span>{{ campaign.status }}</span>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -202,8 +202,14 @@ onMounted(loadProfile);
             </div>
           </div>
           <div class="review-section">
-            <h3 class="section-title">引用模组数</h3>
-            <div class="empty-hint">暂无数据</div>
+            <h3 class="section-title">主持记录</h3>
+            <div v-if="hostedCampaigns.length === 0" class="empty-hint">暂无公开主持记录</div>
+            <div v-else class="campaign-list">
+              <div v-for="campaign in hostedCampaigns" :key="campaign.id" class="campaign-item">
+                <strong>{{ campaign.name }}</strong>
+                <span>{{ campaign.status }}</span>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -283,6 +289,10 @@ onMounted(loadProfile);
 .section-title { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin-bottom: var(--space-3); }
 .badge-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .rep-badge { padding: var(--space-1) var(--space-3); border-radius: 100px; font-size: var(--text-sm); background: var(--surface-hover); color: var(--text-primary); }
+.campaign-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.campaign-item { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--surface-card); }
+.campaign-item strong { color: var(--text-primary); }
+.campaign-item span { color: var(--text-secondary); font-size: var(--text-xs); }
 
 /* ── Works ── */
 .works-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-3); }
