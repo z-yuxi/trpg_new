@@ -5,7 +5,7 @@ import SvgIcon from '../components/SvgIcon.vue';
 
 type MobileAssistantTab = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 
-const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string }>();
+const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null }>();
 const emit = defineEmits<{
   'toggle-gm-console': [];
   'export-log': [];
@@ -80,6 +80,9 @@ function handleBackToCampaigns() {
       <div class="room-info">
         <span class="room-name">{{ campaignName ?? '加载中...' }}</span>
         <code class="room-code" @click="copyCode" title="点击复制">{{ roomCode }}</code>
+        <span v-if="globalTime" class="story-time">
+          第{{ globalTime.day }}天 {{ String(globalTime.hour).padStart(2, '0') }}:{{ String(globalTime.minute).padStart(2, '0') }}
+        </span>
       </div>
       <div class="topbar-actions">
         <button v-if="isGm" class="icon-btn gm-btn desktop-action" @click="emit('toggle-gm-console')">
@@ -161,6 +164,7 @@ function handleBackToCampaigns() {
 .room-name { font-weight: 600; font-size: var(--text-base); }
 .room-code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); cursor: pointer; letter-spacing: 2px; }
 .room-code:hover { color: var(--color-accent); }
+.story-time { font-size: var(--text-xs); color: var(--color-text-muted); background: var(--color-card-bg); border: 1px solid var(--color-card-border); border-radius: var(--radius-sm); padding: 2px 8px; font-family: var(--font-mono); }
 .topbar-actions { display: flex; align-items: center; gap: var(--space-2); }
 .desktop-action { display: flex; }
 .icon-btn {

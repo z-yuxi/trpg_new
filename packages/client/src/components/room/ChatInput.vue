@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 
 const props = defineProps<{
@@ -10,6 +10,7 @@ const props = defineProps<{
   authDisplayName?: string;
   selectedIdentityKey?: string;
   prefillText?: string;
+  rulesetCommands?: Array<{ name: string; description: string; paramHint?: string }>;
 }>();
 
 const emit = defineEmits<{
@@ -69,6 +70,55 @@ const messageType = ref<'narrative' | 'ooc'>('narrative');
 const showDicePanel = ref(false);
 const customDice = ref('');
 
+// ── 指令自动补全 ───────────────────────────────────────────────────────────
+const showCommandList = ref(false);
+const commandHighlight = ref(0);
+
+const filteredCommands = computed(() => {
+  if (!content.value.startsWith('/')) return [];
+  const filter = content.value.slice(1).toLowerCase();
+  const commands = props.rulesetCommands ?? [];
+  if (!filter) return commands.slice(0, 12);
+  return commands.filter(c => c.name.toLowerCase().startsWith(filter) || c.description.toLowerCase().includes(filter)).slice(0, 12);
+});
+
+watch(content, (val) => {
+  if (val.startsWith('/') && filteredCommands.value.length > 0) {
+    showCommandList.value = true;
+    commandHighlight.value = 0;
+  } else {
+    showCommandList.value = false;
+  }
+});
+
+function selectCommand(cmd: { name: string; description: string; paramHint?: string }) {
+  content.value = '/' + cmd.name + (cmd.paramHint ? ' ' + cmd.paramHint : ' ');
+  showCommandList.value = false;
+  nextTick(() => {
+    const el = document.querySelector('.chat-input-area .text-input') as HTMLTextAreaElement | null;
+    el?.focus();
+  });
+}
+
+function onCommandKeydown(e: KeyboardEvent) {
+  if (!showCommandList.value || filteredCommands.value.length === 0) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    commandHighlight.value = (commandHighlight.value + 1) % filteredCommands.value.length;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    commandHighlight.value = (commandHighlight.value - 1 + filteredCommands.value.length) % filteredCommands.value.length;
+  } else if (e.key === 'Tab' || e.key === 'Enter') {
+    if (showCommandList.value) {
+      e.preventDefault();
+      const selected = filteredCommands.value[commandHighlight.value];
+      if (selected) selectCommand(selected);
+    }
+  } else if (e.key === 'Escape') {
+    showCommandList.value = false;
+  }
+}
+
 const quickDice = ['1d20', '1d100', '2d6', '3d6', '4d6'];
 
 function send() {
@@ -94,6 +144,9 @@ function rollCustom() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // 先处理补全列表快捷键
+  onCommandKeydown(e);
+  if (e.defaultPrevented) return;
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     send();
@@ -109,6 +162,21 @@ function onKeydown(e: KeyboardEvent) {
       <div class="dice-custom">
         <input v-model="customDice" placeholder="自定义 如 2d10+3" @keydown.enter="rollCustom" />
         <button @click="rollCustom">掷</button>
+      </div>
+    </div>
+
+    <!-- 指令补全浮层 -->
+    <div v-if="showCommandList && filteredCommands.length > 0" class="command-list">
+      <div
+        v-for="(cmd, idx) in filteredCommands"
+        :key="cmd.name"
+        class="command-item"
+        :class="{ highlighted: idx === commandHighlight }"
+        @mousedown.prevent="selectCommand(cmd)"
+      >
+        <span class="command-name">/{{ cmd.name }}</span>
+        <span v-if="cmd.paramHint" class="command-param">{{ cmd.paramHint }}</span>
+        <span class="command-desc">{{ cmd.description }}</span>
       </div>
     </div>
 
@@ -165,7 +233,7 @@ function onKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
-.chat-input-area { border-top: 1px solid var(--color-card-border); padding: var(--space-3); background: var(--color-card-bg); }
+.chat-input-area { position: relative; border-top: 1px solid var(--color-card-border); padding: var(--space-3); background: var(--color-card-bg); }
 .dice-panel {
   display: flex; flex-wrap: wrap; gap: var(--space-2);
   padding: var(--space-3); border: 1px solid var(--color-card-border);
@@ -262,4 +330,34 @@ function onKeydown(e: KeyboardEvent) {
 }
 .send-btn:hover:not(:disabled) { background: var(--color-accent-hover); }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 指令补全列表 */
+.command-list {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.12);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 200;
+  margin-bottom: 4px;
+}
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--color-card-border);
+}
+.command-item:last-child { border-bottom: none; }
+.command-item:hover, .command-item.highlighted { background: var(--color-page-bg); }
+.command-name { font-family: var(--font-mono); color: var(--color-accent); font-weight: 600; flex-shrink: 0; }
+.command-param { font-family: var(--font-mono); color: var(--color-text-secondary); font-size: var(--text-xs); flex-shrink: 0; }
+.command-desc { color: var(--color-text-muted); font-size: var(--text-xs); flex: 1; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 </style>

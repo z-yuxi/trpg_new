@@ -15,6 +15,7 @@ const props = defineProps<{
   roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
   authDisplayName?: string;
   selectedIdentityKey?: string;
+  rulesetCommands?: Array<{ name: string; description: string; paramHint?: string }>;
 }>();
 
 const messageStore = useMessageStore();
@@ -53,8 +54,12 @@ function handleSend(content: string, messageType: string, senderIdentity?: strin
 
 function handleCommand(commandStr: string) {
   const tempId = uuidv4();
-  messageStore.addPendingMessage(commandStr, tempId, 'narrative');
-  socketClient.sendMessage({ content: commandStr, metadata: { temp_id: tempId } });
+  messageStore.addPendingMessage(commandStr, tempId, 'dice');
+  socketClient.sendMessage({
+    content: commandStr,
+    message_type: 'command',
+    metadata: { temp_id: tempId },
+  });
 }
 
 function handleRetry(tempId: string) {
@@ -94,6 +99,7 @@ onMounted(() => {
       :roleplayable-npcs="props.roleplayableNpcs"
       :auth-display-name="props.authDisplayName"
       :selected-identity-key="props.selectedIdentityKey"
+      :ruleset-commands="props.rulesetCommands"
       @send="handleSend"
       @command="handleCommand"
     />

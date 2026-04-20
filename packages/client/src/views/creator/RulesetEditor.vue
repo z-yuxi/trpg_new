@@ -79,7 +79,7 @@ function switchMode(to: EditorMode) {
 // ── form data ─────────────────────────────────────────────────────────
 const formName = ref(isNew ? (route.query.name as string) ?? '新规则包' : '');
 const formVersion = ref('0.1.0');
-const formStatus = ref<'draft' | 'published'>('draft');
+const formStatus = ref<'draft' | 'published' | 'deprecated'>('draft');
 const checkMode = ref<'roll_under' | 'roll_over' | 'dice_pool'>('roll_under');
 const defaultDice = ref('1d100');
 const successFormula = ref('roll <= skill');

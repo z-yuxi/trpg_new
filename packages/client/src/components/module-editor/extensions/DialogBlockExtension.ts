@@ -30,7 +30,8 @@ export const DialogBlockExtension = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(DialogBlockView);
+    return VueNodeViewRenderer(DialogBlockView as any);
   },
 });
+
 

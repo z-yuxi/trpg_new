@@ -214,25 +214,44 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
     },
   },
 
-  /** ti：临时疯狂（掷 1d10 查疯狂效果表） */
+  /** ti：幕间成长（掷 1d10 作为成长骰，服务层负责批量处理所有已标记技能） */
   ti: {
-    description: '临时疯狂（掷 1d10 查询疯狂效果表）',
+    description: '幕间成长（掷 1d10，技能成长量）',
     graph: {
       nodes: [
-        { node_id: 'dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d10' } } },
+        { node_id: 'growth_dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d10' } } },
       ],
-      output_node_id: 'dice',
+      output_node_id: 'growth_dice',
     },
   },
 
-  /** li：长期疯狂（掷 1d10 查长期疯狂效果表） */
+  /** li：灵感检定（1d100 > 技能值 = 成功，反向检定）；/li 侦查 */
   li: {
-    description: '长期疯狂（掷 1d10 查询长期疯狂效果表）',
+    description: '灵感检定（1d100 > 技能值为成功，反向检定）',
+    param_map: [{ positional: 0, key: 'field_name' }],
     graph: {
       nodes: [
-        { node_id: 'dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d10' } } },
+        { node_id: 'dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d100' } } },
+        {
+          node_id: 'reader',
+          atom_type: 'character_skill_reader',
+          inputs: {
+            character_data: { type: 'static', value: null },
+            field_type: { type: 'static', value: 'skill' },
+            field_name: { type: 'static', value: '' },
+          },
+        },
+        {
+          node_id: 'cmp',
+          atom_type: 'threshold_compare',
+          inputs: {
+            value: { type: 'ref', node_id: 'dice', output_key: 'total' },
+            threshold: { type: 'ref', node_id: 'reader', output_key: 'value' },
+            operator: { type: 'static', value: '>' },
+          },
+        },
       ],
-      output_node_id: 'dice',
+      output_node_id: 'cmp',
     },
   },
 

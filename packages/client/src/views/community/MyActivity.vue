@@ -71,7 +71,7 @@ onMounted(fetchActivity);
 
           <div class="timeline-content">
             <div class="item-header">
-              <TTag color="info" size="sm">发布了帖子</TTag>
+              <TTag color="default" size="sm">发布了帖子</TTag>
               <span class="item-time">{{ formatTime(thread.created_at) }}</span>
             </div>
             <div class="item-title clickable" @click="router.push(`/community/thread/${thread.id}`)">{{ thread.title }}</div>

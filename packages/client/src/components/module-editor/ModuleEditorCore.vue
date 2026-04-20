@@ -90,26 +90,28 @@ const editor = useEditor({
     emit('update:modelValue', JSON.stringify(editor.getJSON()));
     emit('wordCount', editor.storage['characterCount'].characters());
   },
-  onKeyDown({ event }) {
-    if (slashMenuVisible.value) {
-      if (event.key === 'ArrowDown') {
-        slashActiveIndex.value = (slashActiveIndex.value + 1) % filteredSlashItems.value.length;
-        return true;
+  editorProps: {
+    handleKeyDown(_view: unknown, event: KeyboardEvent): boolean {
+      if (slashMenuVisible.value) {
+        if (event.key === 'ArrowDown') {
+          slashActiveIndex.value = (slashActiveIndex.value + 1) % filteredSlashItems.value.length;
+          return true;
+        }
+        if (event.key === 'ArrowUp') {
+          slashActiveIndex.value = (slashActiveIndex.value - 1 + filteredSlashItems.value.length) % filteredSlashItems.value.length;
+          return true;
+        }
+        if (event.key === 'Enter') {
+          applySlashItem(filteredSlashItems.value[slashActiveIndex.value]!);
+          return true;
+        }
+        if (event.key === 'Escape') {
+          closeSlashMenu();
+          return true;
+        }
       }
-      if (event.key === 'ArrowUp') {
-        slashActiveIndex.value = (slashActiveIndex.value - 1 + filteredSlashItems.value.length) % filteredSlashItems.value.length;
-        return true;
-      }
-      if (event.key === 'Enter') {
-        applySlashItem(filteredSlashItems.value[slashActiveIndex.value]!);
-        return true;
-      }
-      if (event.key === 'Escape') {
-        closeSlashMenu();
-        return true;
-      }
-    }
-    return false;
+      return false;
+    },
   },
 });
 
@@ -125,7 +127,7 @@ watch(() => props.modelValue, (val) => {
   const parsed = val ? tryParse(val) : '';
   const current = JSON.stringify(editor.value.getJSON());
   if (JSON.stringify(parsed) !== current) {
-    editor.value.commands.setContent(parsed, false);
+    editor.value.commands.setContent(parsed);
   }
 });
 

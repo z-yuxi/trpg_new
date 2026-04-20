@@ -85,6 +85,10 @@ export interface CharacterSceneState {
   campaign_id: string;
   current_spatial_scene_id: string | null;
   personal_story_time: StoryTime;
+  derived_current: Record<string, { current: number; max: number; temp?: number }> | null;
+  temporary_effects: Array<{ name: string; value: number; source?: string }> | null;
+  equipment: string[] | null;
+  skill_growth_marks: Record<string, boolean> | null;
 }
 
 // ===== 角色实例（运行时） =====
@@ -270,9 +274,9 @@ export enum PlatformPresetCommand {
   sc = 'sc',
   /** 成长检定 */
   en = 'en',
-  /** 临时疯狂 */
+  /** 幕间成长（批量 en 所有已标记技能） */
   ti = 'ti',
-  /** 长期疯狂 */
+  /** 灵感检定（反向检定，> 值为成功） */
   li = 'li',
   /** 先攻（短别名） */
   init = 'init',

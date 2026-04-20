@@ -4,6 +4,7 @@ import type { GridToken } from '@trpg/shared';
 import { authMiddleware } from '../middleware/auth';
 import { campaignService, scheduledMoveService } from '../services/campaign-service';
 import { clueService } from '../services/clue-service';
+import { characterInstanceService } from '../services/character-sheet-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { generateId } from '@trpg/shared';
@@ -139,6 +140,118 @@ router.post('/:id/scenes', async (req, res) => {
   }
 });
 
+// PUT /api/campaigns/:id/scenes/:sceneId — 编辑场景
+router.put('/:id/scenes/:sceneId', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const updates: Record<string, unknown> = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.type !== undefined) updates.type = req.body.type;
+    if (req.body.history_visibility !== undefined) updates.history_visibility = req.body.history_visibility;
+    await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).update(updates);
+    const scene = await db('scenes').where({ id: req.params.sceneId }).first();
+    res.json(scene);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// DELETE /api/campaigns/:id/scenes/:sceneId — 删除场景（无角色在场才可删）
+router.delete('/:id/scenes/:sceneId', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    // 检查是否有角色当前在此场景
+    const occupants = await db('character_scene_states')
+      .where({ current_spatial_scene_id: req.params.sceneId }).count('id as cnt').first();
+    if (Number(occupants?.cnt ?? 0) > 0) {
+      res.status(409).json({ error: '场景中仍有角色，无法删除' }); return;
+    }
+    await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).delete();
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  }
+});
+
+// POST /api/campaigns/:id/characters/:characterId/join — 角色加入战团（实例化）
+router.post('/:id/characters/:characterId/join', async (req, res) => {
+  try {
+    const { id: campaignId, characterId } = req.params;
+    const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+    const character = await db('character_sheets').where({ id: characterId }).select('user_id').first();
+    if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
+    // 允许：本人 或 GM
+    if (character['user_id'] !== req.user!.id && campaign['gm_user_id'] !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const instance = await characterInstanceService.getOrCreate({
+      character_id: characterId,
+      campaign_id: campaignId,
+      user_id: character['user_id'] as string,
+    });
+    res.status(201).json(instance);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Join campaign failed' });
+  }
+});
+
+// POST /api/campaigns/:id/scenes/:sceneId/join — 角色进入场景
+router.post('/:id/scenes/:sceneId/join', async (req, res) => {
+  try {
+    const { id: campaignId, sceneId } = req.params;
+    const { character_id } = req.body;
+    if (!character_id) { res.status(400).json({ error: 'character_id required' }); return; }
+    // 鉴权：GM 或角色所有者
+    const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+    const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
+    if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id && character.user_id !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const { joinScene } = await import('../services/scene-participation.js');
+    await joinScene(character_id, campaignId, sceneId);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Join scene failed' });
+  }
+});
+
+// POST /api/campaigns/:id/scenes/:sceneId/leave — 角色离开场景
+router.post('/:id/scenes/:sceneId/leave', async (req, res) => {
+  try {
+    const { id: campaignId, sceneId } = req.params;
+    const { character_id } = req.body;
+    if (!character_id) { res.status(400).json({ error: 'character_id required' }); return; }
+    const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+    const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
+    if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id && character.user_id !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const { leaveScene } = await import('../services/scene-participation.js');
+    await leaveScene(character_id, campaignId, sceneId);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Leave scene failed' });
+  }
+});
+
+// GET /api/campaigns/:id/scenes/:sceneId/participants — 场景参与者列表
+router.get('/:id/scenes/:sceneId/participants', async (req, res) => {
+  try {
+    const { getParticipants } = await import('../services/scene-participation.js');
+    const participants = await getParticipants(req.params.sceneId!);
+    res.json(participants);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
 // POST /api/campaigns/:id/scenes/connections
 router.post('/:id/scenes/connections', async (req, res) => {
   try {
@@ -231,9 +344,37 @@ router.get('/:id/messages', async (req, res) => {
     if (req.query.after_id) {
       query = (query as any).where('id', '>', String(req.query.after_id));
     }
-    if (req.query.scene_id) {
-      query = query.where({ scene_id: req.query.scene_id });
+    const sceneId = req.query.scene_id as string | undefined;
+    if (sceneId) {
+      query = query.where({ scene_id: sceneId });
+
+      // history_visibility 限制（非 GM）
+      if (!isGm && sceneId) {
+        const scene = await db('scenes').where({ id: sceneId }).select('history_visibility', 'visible_history_count').first().catch(() => null);
+        if (scene && scene.history_visibility !== 'all') {
+          // 查询用户角色进入该场景的时间（scene_participations）
+          if (scene.history_visibility === 'none') {
+            // 只返回用户加入后产生的消息
+            const joinRecord = await db('scene_participations')
+              .whereIn('character_id', userCharIds.length ? userCharIds : ['__none__'])
+              .where({ scene_id: sceneId })
+              .orderBy('joined_at', 'asc')
+              .first()
+              .catch(() => null);
+            if (joinRecord?.joined_at) {
+              query = query.where('created_at', '>=', joinRecord.joined_at);
+            }
+          } else if (scene.history_visibility === 'recent') {
+            const limit = scene.visible_history_count ?? 20;
+            query = db('chat_messages')
+              .where({ campaign_id: campaignId, scene_id: sceneId })
+              .orderBy('id', 'desc')
+              .limit(limit);
+          }
+        }
+      }
     }
+
     const messages = await query;
 
     // 序列化并按可见性过滤
@@ -253,8 +394,14 @@ router.get('/:id/messages', async (req, res) => {
           const msgType = (msg as Record<string, unknown>)['message_type'] as string;
           if (msgType === 'system' || msgType === 'announcement') return true;
           if (msg['visible_to'] === null) return true;
-          return (msg['visible_to'] as string[]).some((cid) => userCharIds.includes(cid));
+          return (msg['visible_to'] as string[]).some((cid) => userCharIds.includes(cid) || cid === '*' || cid === userId);
         });
+
+    // 按 id 升序排（recent 模式是 desc 查询，需要翻转）
+    if (req.query.scene_id && !isGm) {
+      const scene = await db('scenes').where({ id: req.query.scene_id }).select('history_visibility').first().catch(() => null);
+      if (scene?.history_visibility === 'recent') filtered.reverse();
+    }
 
     res.json(filtered);
   } catch (err: any) {
@@ -279,6 +426,35 @@ router.get('/:id/position-history', async (req, res) => {
       .where({ campaign_id: req.params.id })
       .orderBy('created_at', 'desc');
     res.json(history);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// GET /api/campaigns/:id/my-virtual-scenes — 当前用户参与的 virtual 场景 ID 列表
+router.get('/:id/my-virtual-scenes', async (req, res) => {
+  try {
+    const campaignId = req.params.id!;
+    const userId = req.user!.id;
+    // 当前用户在本团的角色
+    const charRows = await db('character_sheets')
+      .where({ user_id: userId })
+      .join('character_scene_states', 'character_sheets.id', 'character_scene_states.character_id')
+      .where('character_scene_states.campaign_id', campaignId)
+      .select('character_sheets.id as char_id');
+    const charIds = (charRows as { char_id: string }[]).map((r) => r.char_id);
+    if (charIds.length === 0) { res.json([]); return; }
+
+    // 查询参与的 virtual 场景
+    const pRows = await db('scene_participations as sp')
+      .join('scenes as s', 's.id', 'sp.scene_id')
+      .whereIn('sp.character_id', charIds)
+      .whereNull('sp.left_at')
+      .where('s.type', 'virtual')
+      .where('s.campaign_id', campaignId)
+      .select('sp.scene_id');
+    const sceneIds = [...new Set((pRows as { scene_id: string }[]).map((r) => r.scene_id))];
+    res.json(sceneIds);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }
@@ -414,6 +590,99 @@ router.get('/:id/scheduled-moves', async (req, res) => {
     res.json(moves);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// ── 时间/移动 REST API ──────────────────────────────────────────────────────
+
+// POST /api/campaigns/:id/time/advance — GM 推进故事时间
+router.post('/:id/time/advance', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { advanceTime } = await import('../services/time.js');
+    const result = await advanceTime(req.params.id, req.body.delta ?? {}, req.user!.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Time advance failed' });
+  }
+});
+
+// GET /api/campaigns/:id/moves — 获取移动列表
+router.get('/:id/moves', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { listMoves } = await import('../services/movement.js');
+    const moves = await listMoves(req.params.id, req.query.status as string | undefined);
+    res.json(moves);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// POST /api/campaigns/:id/moves/request — 玩家预约移动
+router.post('/:id/moves/request', async (req, res) => {
+  try {
+    const { character_id, to_scene_id, execute_at_story } = req.body;
+    if (!character_id || !to_scene_id || !execute_at_story) { res.status(400).json({ error: 'Missing fields' }); return; }
+    const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!character || !campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (character.user_id !== req.user!.id && campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    const { requestMove } = await import('../services/movement.js');
+    const move = await requestMove(character_id, req.params.id, to_scene_id, execute_at_story);
+    res.status(201).json(move);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Request failed' });
+  }
+});
+
+// POST /api/campaigns/:id/moves/:moveId/approve — GM 批准移动
+router.post('/:id/moves/:moveId/approve', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { approveMove } = await import('../services/movement.js');
+    const move = await approveMove(req.params.moveId!, req.user!.id);
+    if (!move) { res.status(404).json({ error: 'Move not found' }); return; }
+    res.json(move);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Approve failed' });
+  }
+});
+
+// POST /api/campaigns/:id/moves/:moveId/reject — GM 拒绝移动
+router.post('/:id/moves/:moveId/reject', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { rejectMove } = await import('../services/movement.js');
+    const move = await rejectMove(req.params.moveId!, req.user!.id);
+    if (!move) { res.status(404).json({ error: 'Move not found' }); return; }
+    res.json(move);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Reject failed' });
+  }
+});
+
+// POST /api/campaigns/:id/moves/force — GM 强制立即移动
+router.post('/:id/moves/force', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { character_id, to_scene_id } = req.body;
+    if (!character_id || !to_scene_id) { res.status(400).json({ error: 'Missing fields' }); return; }
+    const { forceMove } = await import('../services/movement.js');
+    const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Force move failed' });
   }
 });
 

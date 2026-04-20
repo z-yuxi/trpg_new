@@ -26,7 +26,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'time' | 'scenes' | 'npcs' | 'broadcast' | 'grid' | 'trajectory'>('time');
+const activeTab = ref<'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'broadcast' | 'grid' | 'trajectory'>('time');
 const activeGridSceneId = ref('');
 
 function padZ(n: number) { return String(n).padStart(2, '0'); }
@@ -35,8 +35,8 @@ function formatTime(t: StoryTime) { return `第${t.day}日 ${padZ(t.hour)}:${pad
 // ─── Tab 1: 时间控制 ─────────────────────────────────────────────────────────
 const showTimeConfirm = ref(false);
 const pendingTime = ref<StoryTime | null>(null);
-const pendingScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; execute_at_story: StoryTime }[]>([]);
-const currentScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; execute_at_story: StoryTime }[]>([]);
+const pendingScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; to_scene_id?: string; execute_at_story: StoryTime }[]>([]);
+const currentScheduledMoves = ref<{ id: string; character_name?: string; to_scene_name?: string; to_scene_id?: string; execute_at_story: StoryTime }[]>([]);
 const loadingMoves = ref(false);
 const customDayDelta = ref(0);
 const customHourDelta = ref(0);
@@ -59,7 +59,7 @@ async function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: num
   showTimeConfirm.value = true;
   loadingMoves.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/scheduled-moves?status=pending`, {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/moves?status=pending`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
     if (res.ok) {
@@ -76,7 +76,7 @@ async function askAdvanceTime(dayDelta: number, hourDelta: number, minDelta: num
 async function loadPendingScheduledMoves() {
   loadingMoves.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/scheduled-moves?status=pending`, {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/moves?status=pending`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
     if (!res.ok) return;
@@ -88,15 +88,47 @@ async function loadPendingScheduledMoves() {
   }
 }
 
-function approveMove(moveId: string) {
-  socketClient.gmApproveMove(moveId);
-  currentScheduledMoves.value = currentScheduledMoves.value.filter((move) => move.id !== moveId);
+async function approveMove(moveId: string) {
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/moves/${moveId}/approve`, {
+      method: 'POST', headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '批准失败');
+    currentScheduledMoves.value = currentScheduledMoves.value.filter((m) => m.id !== moveId);
+    ElMessage.success('移动已批准');
+  } catch (e: any) { ElMessage.error(e.message ?? '批准失败'); }
 }
 
-function approveAllMoves() {
-  currentScheduledMoves.value.forEach((move) => socketClient.gmApproveMove(move.id));
-  currentScheduledMoves.value = [];
-  ElMessage.success('已批量批准当前待审批移动');
+async function approveAllMoves() {
+  for (const move of currentScheduledMoves.value) {
+    await approveMove(move.id);
+  }
+}
+
+// 拒绝移动
+const showRejectDialog = ref(false);
+const rejectMoveId = ref('');
+const rejectReason = ref('');
+
+function openRejectMove(moveId: string) {
+  rejectMoveId.value = moveId;
+  rejectReason.value = '';
+  showRejectDialog.value = true;
+}
+
+async function submitRejectMove() {
+  if (!rejectMoveId.value) return;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/moves/${rejectMoveId.value}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify({ reason: rejectReason.value }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '拒绝失败');
+    currentScheduledMoves.value = currentScheduledMoves.value.filter((m) => m.id !== rejectMoveId.value);
+    showRejectDialog.value = false;
+    ElMessage.success('已拒绝该移动申请');
+  } catch (e: any) { ElMessage.error(e.message ?? '拒绝失败'); }
 }
 
 function confirmAdvanceTime() {
@@ -138,7 +170,7 @@ const forceMoveSceneId = ref('');
 async function submitForceMoveScene() {
   if (!forceMoveCharId.value || !forceMoveSceneId.value) return;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/force-move`, {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/moves/force`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
       body: JSON.stringify({ character_id: forceMoveCharId.value, to_scene_id: forceMoveSceneId.value }),
@@ -147,6 +179,57 @@ async function submitForceMoveScene() {
     ElMessage.success('强制移动成功');
     showForceMoveScene.value = false;
   } catch (e: any) { ElMessage.error(e.message ?? '移动失败'); }
+}
+
+// 编辑场景
+const showEditScene = ref(false);
+const editingSceneId = ref('');
+const editSceneForm = ref({ name: '', type: 'spatial' as 'spatial' | 'virtual' | 'lobby', description: '', history_visibility: 'all' as 'none' | 'recent' | 'all' });
+const sceneEditLoading = ref(false);
+
+function openEditScene(scene: any) {
+  editingSceneId.value = scene.id;
+  editSceneForm.value = { name: scene.name, type: scene.type, description: scene.description ?? '', history_visibility: scene.history_visibility ?? 'all' };
+  showEditScene.value = true;
+}
+
+async function saveSceneEdit() {
+  if (!editSceneForm.value.name.trim()) { ElMessage.warning('场景名不能为空'); return; }
+  sceneEditLoading.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/scenes/${editingSceneId.value}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+      body: JSON.stringify(editSceneForm.value),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '更新失败');
+    showEditScene.value = false;
+    ElMessage.success('场景已更新，刷新页面生效');
+  } catch (e: any) { ElMessage.error(e.message ?? '更新失败'); }
+  finally { sceneEditLoading.value = false; }
+}
+
+// 删除场景
+const showDeleteSceneConfirm = ref(false);
+const deletingSceneId = ref('');
+const deletingSceneName = ref('');
+
+function openDeleteScene(scene: any) {
+  deletingSceneId.value = scene.id;
+  deletingSceneName.value = scene.name;
+  showDeleteSceneConfirm.value = true;
+}
+
+async function confirmDeleteScene() {
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/scenes/${deletingSceneId.value}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '删除失败');
+    showDeleteSceneConfirm.value = false;
+    ElMessage.success('场景已删除，刷新页面生效');
+  } catch (e: any) { ElMessage.error(e.message ?? '删除失败'); }
 }
 
 // ─── Tab 3: NPC 控制 ─────────────────────────────────────────────────────────
@@ -334,7 +417,7 @@ onMounted(() => {
 <template>
   <div class="gm-console">
     <div class="console-tabs">
-      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'trajectory',icon:'icon-history',label:'轨迹'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
+      <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'moves',icon:'icon-history',label:'移动'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'clue',icon:'icon-scroll',label:'线索'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'trajectory',icon:'icon-history',label:'轨迹'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
         <SvgIcon :name="tab.icon" :size="14" /><span>{{tab.label}}</span>
       </button>
     </div>
@@ -343,8 +426,11 @@ onMounted(() => {
       <div v-if="activeTab==='time'" class="tab-pane">
         <div class="time-display"><span class="time-big">{{formatTime(globalStoryTime)}}</span></div>
         <div class="quick-btns">
-          <button class="q-btn" @click="askAdvanceTime(0,0,30)">+30分钟</button>
-          <button class="q-btn" @click="askAdvanceTime(0,1,0)">+1小时</button>
+          <button class="q-btn" @click="askAdvanceTime(0,0,10)">+10分</button>
+          <button class="q-btn" @click="askAdvanceTime(0,0,30)">+30分</button>
+          <button class="q-btn" @click="askAdvanceTime(0,1,0)">+1时</button>
+          <button class="q-btn" @click="askAdvanceTime(0,6,0)">+6时</button>
+          <button class="q-btn" @click="askAdvanceTime(1,0,0)">+1天</button>
           <button class="q-btn accent" @click="askAdvanceTime(customDayDelta,customHourDelta,customMinDelta)">自定义推进</button>
         </div>
         <div class="custom-row">
@@ -352,32 +438,57 @@ onMounted(() => {
           <div class="delta-field"><input v-model.number="customHourDelta" type="number" min="0" max="23"/><label>时</label></div>
           <div class="delta-field"><input v-model.number="customMinDelta" type="number" min="0" max="59"/><label>分</label></div>
         </div>
-        <div class="pending-moves-panel">
-          <div class="pending-moves-head">
-            <span class="section-label">待审批移动</span>
+      </div>
+      <!-- Tab 2: 移动审批 -->
+      <div v-else-if="activeTab==='moves'" class="tab-pane">
+        <div class="pane-header">
+          <span class="pane-count">待审批移动（{{ currentScheduledMoves.length }}）</span>
+          <div class="pane-actions">
+            <button class="sm-btn" @click="loadPendingScheduledMoves" :disabled="loadingMoves">刷新</button>
             <button class="sm-btn accent" :disabled="currentScheduledMoves.length===0" @click="approveAllMoves">全部批准</button>
           </div>
-          <div v-if="currentScheduledMoves.length===0" class="moves-hint">当前无待审批移动</div>
-          <div v-for="move in currentScheduledMoves" :key="move.id" class="move-preview-row">
-            <div>
-              <div class="move-char">{{ move.character_name || '未命名角色' }}</div>
-              <div class="move-scene">→ {{ move.to_scene_name || move.to_scene_id }} · {{ formatTime(move.execute_at_story) }}</div>
-            </div>
-            <button class="sm-btn" @click="approveMove(move.id)">批准</button>
+        </div>
+        <div v-if="loadingMoves" class="moves-hint">加载中...</div>
+        <div v-else-if="currentScheduledMoves.length===0" class="empty-hint">暂无待审批移动</div>
+        <div v-else v-for="move in currentScheduledMoves" :key="move.id" class="move-preview-row">
+          <div class="move-info">
+            <div class="move-char">{{ move.character_name || '未命名角色' }}</div>
+            <div class="move-scene">→ {{ move.to_scene_name || move.to_scene_id }} · {{ move.execute_at_story ? formatTime(move.execute_at_story) : '—' }}</div>
+          </div>
+          <div class="move-btns">
+            <button class="sm-btn accent" @click="approveMove(move.id)">批准</button>
+            <button class="sm-btn danger" @click="openRejectMove(move.id)">拒绝</button>
           </div>
         </div>
+        <div class="pane-header" style="margin-top:12px">
+          <span class="pane-count">强制移动角色</span>
+        </div>
+        <div class="force-move-row">
+          <select v-model="forceMoveCharId" class="field-input"><option value="">选择角色</option><option v-for="c in characters" :key="c.id" :value="c.id">{{c.name}}</option></select>
+          <select v-model="forceMoveSceneId" class="field-input"><option value="">目标场景</option><option v-for="s in spatialScenes" :key="s.id" :value="s.id">{{s.name}}</option></select>
+          <button class="sm-btn accent" :disabled="!forceMoveCharId||!forceMoveSceneId" @click="submitForceMoveScene">执行</button>
+        </div>
       </div>
-      <!-- Tab 2: 场景 -->
+      <!-- Tab 3: 场景 -->
       <div v-else-if="activeTab==='scenes'" class="tab-pane">
         <div class="pane-header">
           <span class="pane-count">共{{scenes.length}}个场景</span>
           <div class="pane-actions">
-            <button class="sm-btn" @click="showForceMoveScene=true">强制移动</button>
             <button class="sm-btn accent" @click="showNewScene=true">+ 新建场景</button>
           </div>
         </div>
-        <table class="data-table"><thead><tr><th>名称</th><th>类型</th><th>描述</th></tr></thead>
-          <tbody><tr v-for="s in scenes" :key="s.id"><td class="td-name">{{s.name}}</td><td><span class="type-tag" :class="s.type">{{typeLabel[s.type]??s.type}}</span></td><td class="td-desc">{{s.description||'—'}}</td></tr></tbody>
+        <table class="data-table"><thead><tr><th>名称</th><th>类型</th><th>历史</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr v-for="s in scenes" :key="s.id">
+              <td class="td-name">{{s.name}}</td>
+              <td><span class="type-tag" :class="s.type">{{typeLabel[s.type]??s.type}}</span></td>
+              <td class="td-vis">{{s.history_visibility??'all'}}</td>
+              <td class="td-actions">
+                <button class="sm-btn" @click="openEditScene(s)">编辑</button>
+                <button class="sm-btn danger" @click="openDeleteScene(s)">删除</button>
+              </td>
+            </tr>
+          </tbody>
         </table>
         <div v-if="scenes.length===0" class="empty-hint">暂无场景</div>
         <SceneRoadmap :campaign-id="campaignId" :scenes="scenes" :is-gm="true" style="margin-top:var(--space-3)" />
@@ -431,14 +542,9 @@ onMounted(() => {
           :current-time="globalStoryTime"
         />
       </div>
-      <!-- Tab 6: 广播 -->
-      <div v-else-if="activeTab==='broadcast'" class="tab-pane broadcast-pane">
-        <div class="section-label">全员广播</div>
-        <div class="broadcast-row">
-          <textarea v-model="broadcastContent" class="broadcast-input" placeholder="输入公告内容，发送后自动添加 [GM公告] 前缀" rows="2"/>
-          <button class="sm-btn accent" @click="sendBroadcast" :disabled="!broadcastContent.trim()">发送</button>
-        </div>
-        <div class="section-label" style="margin-top:12px">线索发放</div>
+      <!-- Tab: 线索分发 -->
+      <div v-else-if="activeTab==='clue'" class="tab-pane broadcast-pane">
+        <div class="section-label">新建线索</div>
         <input v-model="clueForm.title" class="field-input" placeholder="线索标题"/>
         <textarea v-model="clueForm.content" class="field-input" placeholder="线索内容..." rows="2" style="margin-top:6px;resize:vertical"/>
         <div class="section-label" style="margin-top:6px">文字主题</div>
@@ -458,6 +564,14 @@ onMounted(() => {
             <ClueCard :title="c.title" :content="c.content" :theme="c.theme" />
             <button class="sm-btn" @click="openEditClue(c)">编辑</button>
           </div>
+        </div>
+      </div>
+      <!-- Tab: 广播 -->
+      <div v-else-if="activeTab==='broadcast'" class="tab-pane broadcast-pane">
+        <div class="section-label">全员广播</div>
+        <div class="broadcast-row">
+          <textarea v-model="broadcastContent" class="broadcast-input" placeholder="输入公告内容，发送后自动添加 [GM公告] 前缀" rows="2"/>
+          <button class="sm-btn accent" @click="sendBroadcast" :disabled="!broadcastContent.trim()">发送</button>
         </div>
       </div>
     </div>
@@ -505,6 +619,38 @@ onMounted(() => {
       <select v-model="forceMoveSceneId" class="field-input"><option value="">请选择</option><option v-for="s in spatialScenes" :key="s.id" :value="s.id">{{s.name}}</option></select>
     </div>
     <template #footer><button class="dlg-btn" @click="showForceMoveScene=false">取消</button><button class="dlg-btn accent" @click="submitForceMoveScene">确认移动</button></template>
+  </ElDialog>
+  <!-- 拒绝移动 -->
+  <ElDialog v-model="showRejectDialog" title="拒绝移动申请" width="360px">
+    <div class="form-body">
+      <label class="form-label">拒绝原因（选填）</label>
+      <textarea v-model="rejectReason" class="field-input" rows="2" placeholder="请输入拒绝理由..."/>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showRejectDialog=false">取消</button><button class="dlg-btn danger" @click="submitRejectMove">确认拒绝</button></template>
+  </ElDialog>
+  <!-- 编辑场景 -->
+  <ElDialog v-model="showEditScene" title="编辑场景" width="420px">
+    <div class="form-body">
+      <label class="form-label">场景名称 *</label><input v-model="editSceneForm.name" class="field-input"/>
+      <label class="form-label" style="margin-top:12px">场景类型</label>
+      <div class="type-btns">
+        <button v-for="t in (['spatial','virtual','lobby'] as const)" :key="t" class="type-btn" :class="{active:editSceneForm.type===t}" @click="editSceneForm.type=t">{{typeLabel[t]}}</button>
+      </div>
+      <label class="form-label" style="margin-top:12px">历史可见性</label>
+      <select v-model="editSceneForm.history_visibility" class="field-input">
+        <option value="all">all — 可查看全部历史</option>
+        <option value="recent">recent — 仅最近历史</option>
+        <option value="none">none — 不可查看历史</option>
+      </select>
+      <label class="form-label" style="margin-top:12px">描述</label>
+      <textarea v-model="editSceneForm.description" class="field-input" rows="2" style="resize:vertical"/>
+    </div>
+    <template #footer><button class="dlg-btn" @click="showEditScene=false">取消</button><button class="dlg-btn accent" @click="saveSceneEdit" :disabled="sceneEditLoading">保存</button></template>
+  </ElDialog>
+  <!-- 删除场景确认 -->
+  <ElDialog v-model="showDeleteSceneConfirm" title="确认删除场景" width="360px">
+    <p>确定删除场景 <strong>{{deletingSceneName}}</strong>？此操作不可撤销。场景中不能有角色。</p>
+    <template #footer><button class="dlg-btn" @click="showDeleteSceneConfirm=false">取消</button><button class="dlg-btn danger" @click="confirmDeleteScene">确认删除</button></template>
   </ElDialog>
   <!-- 新建NPC -->
   <ElDialog v-model="showNewNpc" title="新建NPC" width="500px">
@@ -634,4 +780,11 @@ onMounted(() => {
 .radio-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: var(--text-sm); }
 .dlg-btn { padding: 6px 16px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm); }
 .dlg-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); margin-left: var(--space-2); }
+.dlg-btn.danger { background: #b91c1c; color: #fff; border-color: #b91c1c; margin-left: var(--space-2); }
+.move-info { flex: 1; }
+.move-btns { display: flex; gap: var(--space-2); flex-shrink: 0; }
+.force-move-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.force-move-row .field-input { flex: 1; min-width: 120px; }
+.td-vis { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; }
+.td-actions { display: flex; gap: 4px; white-space: nowrap; }
 </style>

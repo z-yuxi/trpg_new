@@ -143,7 +143,7 @@ onMounted(fetchThreads);
         <div class="col-title title-cell">
           <div class="title-tags">
             <TTag v-if="t.is_pinned" size="sm" color="warning">置顶</TTag>
-            <TTag v-if="t.is_locked" size="sm" color="info">锁帖</TTag>
+            <TTag v-if="t.is_locked" size="sm" color="default">锁帖</TTag>
           </div>
           <span class="thread-title">{{ t.title }}</span>
         </div>

@@ -1,7 +1,9 @@
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
-import { characterSheetService } from '../services/character-sheet-service';
+import { characterSheetService, characterInstanceService } from '../services/character-sheet-service';
 import { exportCSON, importCSON } from '@trpg/shared';
+import { db } from '../db';
+import { io } from '../app';
 
 const router: IRouter = Router();
 
@@ -95,6 +97,88 @@ router.post('/:id/export', async (req, res) => {
     res.json({ cson_text });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Export failed' });
+  }
+});
+
+// GET /api/characters/:id/instance?campaign_id=xxx — 获取团内实例数据
+router.get('/:id/instance', async (req, res) => {
+  try {
+    const { campaign_id } = req.query;
+    if (!campaign_id) { res.status(400).json({ error: 'campaign_id is required' }); return; }
+    const sheet = await characterSheetService.findById(req.params.id);
+    if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
+    // 允许：角色所有者 或 该团 GM
+    const campaign = await db('campaigns').where({ id: campaign_id as string }).select('gm_user_id').first();
+    if (sheet.user_id !== req.user!.id && campaign?.['gm_user_id'] !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const instance = await characterInstanceService.getInstance(req.params.id, campaign_id as string);
+    if (!instance) { res.status(404).json({ error: 'Instance not found' }); return; }
+    res.json(instance);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// PUT /api/characters/:id/instance/:campaignId — 更新团内实例（HP/MP/SAN/装备等）
+router.put('/:id/instance/:campaignId', async (req, res) => {
+  try {
+    const { id, campaignId } = req.params;
+    const sheet = await characterSheetService.findById(id);
+    if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
+    const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+    // 允许：角色所有者 或 GM
+    if (sheet.user_id !== req.user!.id && campaign?.['gm_user_id'] !== req.user!.id) {
+      res.status(403).json({ error: 'Forbidden' }); return;
+    }
+    const { derived_current, temporary_effects, equipment } = req.body;
+    const updated = await characterInstanceService.updateInstance(id, campaignId, {
+      derived_current,
+      temporary_effects,
+      equipment,
+    });
+
+    // 检测派生值是否超出 max，截断并广播
+    const truncatedFields: string[] = [];
+    const dc = updated.derived_current ?? {};
+    for (const [k, v] of Object.entries(dc)) {
+      if (v.current > v.max) {
+        truncatedFields.push(k.toUpperCase());
+        dc[k] = { ...v, current: v.max };
+      }
+    }
+    if (truncatedFields.length > 0) {
+      await characterInstanceService.updateInstance(id, campaignId, { derived_current: dc });
+    }
+
+    // 广播 character_state_sync 到同战团所有客户端
+    const roomNsp = io.of('/room');
+    roomNsp.to(`campaign:${campaignId}`).emit('character_state_sync' as any, {
+      character_id: id,
+      derived_current: dc,
+      truncated_fields: truncatedFields,
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// POST /api/characters/:id/grow — 技能成长同步到模板
+router.post('/:id/grow', async (req, res) => {
+  try {
+    const { skill_name, new_value, campaign_id } = req.body;
+    if (!skill_name || new_value === undefined || !campaign_id) {
+      res.status(400).json({ error: 'skill_name, new_value, campaign_id are required' }); return;
+    }
+    const sheet = await characterSheetService.findById(req.params.id);
+    if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
+    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    await characterInstanceService.growSkill(req.params.id, campaign_id as string, skill_name as string, Number(new_value));
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Grow failed' });
   }
 });
 

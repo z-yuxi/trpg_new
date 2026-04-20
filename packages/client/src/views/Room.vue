@@ -7,6 +7,7 @@ import LeftSidebar from '../components/room/LeftSidebar.vue';
 import ChatArea from '../components/room/ChatArea.vue';
 import AssistantDesk from '../components/room/AssistantDesk.vue';
 import GMConsole from '../components/room/GMConsole.vue';
+import CharacterCardModal from '../components/room/CharacterCardModal.vue';
 import TButton from '../components/base/TButton.vue';
 import { useCampaignStore } from '../stores/campaign-store';
 import { useAuthStore } from '../stores/auth-store';
@@ -41,6 +42,14 @@ const selectedCharacter = ref<any>(null);
 const showForceMoveDialog = ref(false);
 const selectedForceCharacterId = ref('');
 const forceMoveTargetSceneId = ref('');
+// 角色卡 Modal
+const showCharCardModal = ref(false);
+const charCardModalId = ref('');
+const charCardModalName = ref('');
+const charCardModalAttrs = ref<Record<string, number>>({});
+const charCardModalIsOwner = ref(false);
+// 跨团技能同步提示（本次会话内不重复）
+const skillSyncDismissed = ref(false);
 
 const unreadCounts = computed(() => messageStore.unreadCounts);
 const currentScene = computed(() => scenes.value.find((scene) => scene.id === currentSceneId.value));
@@ -50,16 +59,17 @@ const activeSpatialCharacters = computed(() => {
   return roomCharacters.value.filter((char) => char.sceneId === currentSceneId.value);
 });
 
-const myVirtualSceneIds = computed(() => {
-  const ids = new Set<string>();
-  roomCharacters.value
-    .filter((char) => char.userId === authStore.userId)
-    .forEach((char) => {
-      const scene = scenes.value.find((item) => item.id === char.sceneId);
-      if (scene?.type === 'virtual') ids.add(scene.id);
-    });
-  return [...ids];
-});
+const myVirtualSceneIds = ref<string[]>([]);
+
+async function fetchMyVirtualScenes() {
+  try {
+    const { api } = await import('../utils/api');
+    const ids = await api.get<string[]>(`/campaigns/${campaignId}/my-virtual-scenes`);
+    myVirtualSceneIds.value = ids ?? [];
+  } catch {
+    myVirtualSceneIds.value = [];
+  }
+}
 
 const moveTargetOptions = computed(() => scenes.value.filter((scene) => scene.type === 'spatial' || scene.type === 'lobby'));
 
@@ -90,11 +100,29 @@ function handleMobileAssistantOpen(tab: 'cmds' | 'map' | 'dice' | 'secret' | 'br
   mobileAssistantTab.value = tab;
 }
 
-function normalizeRulesetCommands(raw: unknown): Array<{ name: string; description: string }> {
-  const mapped = new Map<string, { name: string; description: string }>();
+/** 平台预置命令的参数提示 */
+const PRESET_PARAM_HINTS: Record<string, string> = {
+  ra: '<属性名>',
+  rc: '<技能名> [hard|extreme]',
+  sc: '',
+  en: '<技能名>',
+  ti: '',
+  li: '<技能名>',
+  init: '',
+  ds: '<伤害公式>',
+  roll: '<骰子表达式>',
+  check: '<阈值>',
+  initiative: '',
+  r: '<骰子表达式>',
+  rh: '<骰子表达式>',
+  nn: '<旁白内容>',
+};
+
+function normalizeRulesetCommands(raw: unknown): Array<{ name: string; description: string; paramHint?: string }> {
+  const mapped = new Map<string, { name: string; description: string; paramHint?: string }>();
 
   PLATFORM_PRESET_COMMAND_NAMES.forEach((name) => {
-    mapped.set(name, { name, description: '平台预置命令' });
+    mapped.set(name, { name, description: '平台预置命令', paramHint: PRESET_PARAM_HINTS[name] });
   });
 
   if (Array.isArray(raw)) {
@@ -105,6 +133,7 @@ function normalizeRulesetCommands(raw: unknown): Array<{ name: string; descripti
       mapped.set(command.name, {
         name: command.name,
         description: command.description ?? mapped.get(command.name)?.description ?? '',
+        paramHint: mapped.get(command.name)?.paramHint,
       });
     });
     return [...mapped.values()];
@@ -170,13 +199,63 @@ async function loadRoomCharacters() {
       if (!currentSceneId.value && myChar.scene_id) {
         switchScene(myChar.scene_id);
       }
+      // 检测跨团技能同步（模板 vs 实例，差异 >= 5 点）
+      if (!skillSyncDismissed.value) {
+        checkSkillSync(myChar.id);
+      }
     }
   } catch {
     ElMessage.error('角色列表加载失败');
   }
 }
 
+async function checkSkillSync(charId: string) {
+  try {
+    const [templateRes, instanceRes] = await Promise.all([
+      fetch(`/api/characters/${charId}`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
+      fetch(`/api/characters/${charId}/instance?campaign_id=${campaignId}`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
+    ]);
+    if (!templateRes.ok || !instanceRes.ok) return;
+    const template = await templateRes.json();
+    const instance = await instanceRes.json();
+    const templateSkills: Record<string, number> = template.skills ?? {};
+    // instance 没有单独的 skills（存在模板中），检测 derived_current 是否过期
+    // 这里主要对比技能 growth_marks：若有待成长标记，提示同步
+    const growthMarks: Record<string, boolean> = instance.skill_growth_marks ?? {};
+    if (Object.keys(growthMarks).length > 0) {
+      const markedSkills = Object.keys(growthMarks).join('、');
+      ElMessage({
+        type: 'warning',
+        duration: 0,
+        showClose: true,
+        message: `角色有未同步的技能成长标记（${markedSkills}），可使用 /ti 指令进行幕间成长`,
+      });
+      skillSyncDismissed.value = true;
+    }
+  } catch { /* ignore */ }
+}
+
 async function viewCharacter(characterIdToView: string) {
+  // 如果是团成员角色，优先打开团内角色卡 Modal
+  const char = roomCharacters.value.find(c => c.id === characterIdToView);
+  if (char) {
+    charCardModalId.value = characterIdToView;
+    charCardModalName.value = char.name;
+    charCardModalIsOwner.value = char.userId === authStore.userId;
+    // 尝试加载属性
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/characters/${characterIdToView}`, {
+        headers: { Authorization: `Bearer ${authStore.token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        charCardModalAttrs.value = data.attributes ?? {};
+      }
+    } catch { /* ignore, modal can still show */ }
+    showCharCardModal.value = true;
+    return;
+  }
+  // 回退：显示简单对话框
   try {
     const res = await fetch(`/api/campaigns/${campaignId}/characters/${characterIdToView}`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
@@ -263,6 +342,7 @@ onMounted(async () => {
     if (npcsRes.ok) npcs.value = await npcsRes.json();
 
     await loadRoomCharacters();
+    if (!isGm.value) await fetchMyVirtualScenes();
   } catch {
     // ignore bootstrap errors
   }
@@ -273,6 +353,14 @@ onMounted(async () => {
 
   socketClient.onTimeAdvanced((data) => {
     globalTime.value = data.new_time;
+    // 检查是否有自己角色的移动被执行，弹出"到达场景"提示
+    const executedMoves: Array<{ character_id: string; to_scene_id: string }> = data.executed_moves ?? data.triggered_moves ?? [];
+    const myMove = executedMoves.find((m) => m.character_id === characterId.value);
+    if (myMove) {
+      const targetScene = scenes.value.find((s) => s.id === myMove.to_scene_id);
+      const sceneName = targetScene?.name ?? '目标场景';
+      ElMessage.success(`你已到达「${sceneName}」`);
+    }
   });
 
   socketClient.onPositionChanged((data) => {
@@ -283,6 +371,17 @@ onMounted(async () => {
 
     if (data.character_id === characterId.value) {
       switchScene(data.to_scene_id);
+    }
+  });
+
+  // 角色状态同步（HP/MP/SAN 等）
+  (socketClient as any).on?.('character_state_sync', (data: {
+    character_id: string;
+    derived_current?: Record<string, { current: number; max: number }>;
+    truncated_fields?: string[];
+  }) => {
+    if (data.character_id === characterId.value && data.truncated_fields?.length) {
+      ElMessage.warning(`${data.truncated_fields.join('、')} 超过上限，已自动截断`);
     }
   });
 });
@@ -299,6 +398,7 @@ onUnmounted(() => {
       :campaign-name="campaignStore.currentCampaign?.name ?? '加载中...'"
       :room-code="campaignStore.currentCampaign?.room_code"
       :is-gm="isGm"
+      :global-time="globalTime"
       @toggle-gm-console="showGMConsole = !showGMConsole"
       @export-log="router.push(`/room/${campaignId}/export`)"
       @mobile-assistant-open="handleMobileAssistantOpen"
@@ -345,6 +445,7 @@ onUnmounted(() => {
           :roleplayable-npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, avatarUrl: npc.avatar_url }))"
           :auth-display-name="authStore.nickname"
           :selected-identity-key="selectedSenderIdentity"
+          :ruleset-commands="commands"
         />
       </template>
       <template #right-desk>
@@ -385,6 +486,19 @@ onUnmounted(() => {
         <TButton type="primary" @click="submitForceMove">确认移动</TButton>
       </template>
     </ElDialog>
+
+    <!-- 团内角色卡状态 Modal -->
+    <CharacterCardModal
+      :visible="showCharCardModal"
+      :character-id="charCardModalId"
+      :campaign-id="campaignId"
+      :character-name="charCardModalName"
+      :character-attrs="charCardModalAttrs"
+      :is-gm="isGm"
+      :is-owner="charCardModalIsOwner"
+      @close="showCharCardModal = false"
+      @updated="() => { showCharCardModal = false; }"
+    />
   </div>
 </template>
 

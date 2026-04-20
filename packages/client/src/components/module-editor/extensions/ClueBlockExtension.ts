@@ -34,7 +34,8 @@ export const ClueBlockExtension = Node.create({
   },
 
   addNodeView() {
-    return VueNodeViewRenderer(ClueBlockView);
+    return VueNodeViewRenderer(ClueBlockView as any);
   },
 });
+
 

@@ -293,10 +293,10 @@ async function handlePublish() {
   // Batch 4: 提交发布审核（draft → public_notice）
   if (!moduleId.value) return;
   try {
-    const res = await api.post(`/api/modules/${moduleId.value}/submit`);
+    const res = await api.post<{ status: string; public_notice_end_at?: string | Date | null }>(`/api/modules/${moduleId.value}/submit`);
     if (module.value) {
-      module.value.status = res.status;
-      module.value.public_notice_end_at = res.public_notice_end_at;
+      module.value.status = res.status as any;
+      module.value.public_notice_end_at = res.public_notice_end_at as any;
     }
   } catch (err) {
     console.error('提交失败', err);
@@ -307,8 +307,8 @@ async function handlePublish() {
 async function handleWithdraw() {
   if (!moduleId.value) return;
   try {
-    const res = await api.post(`/api/modules/${moduleId.value}/withdraw`);
-    if (module.value) module.value.status = res.status;
+    const res = await api.post<{ status: string }>(`/api/modules/${moduleId.value}/withdraw`);
+    if (module.value) module.value.status = res.status as any;
   } catch (err) {
     console.error('撤回失败', err);
   }

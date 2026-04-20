@@ -140,6 +140,138 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
       { key: 'result', label: '最终结果', type: 'any' },
     ],
   },
+
+  // ── P1 原子 ──────────────────────────────────────────────────────────────
+  resource_modify_batch: {
+    atom_type: 'resource_modify_batch',
+    label: '批量修改资源',
+    description: '同时修改 HP、SAN 等多个资源值',
+    category: 'effect',
+    icon: '⚡',
+    inputs: [
+      { key: 'modifications', label: '修改列表', type: 'any', required: true },
+      { key: 'current_values', label: '当前值映射', type: 'any' },
+      { key: 'min_values', label: '最小值映射', type: 'any' },
+      { key: 'max_values', label: '最大值映射', type: 'any' },
+    ],
+    outputs: [
+      { key: 'results', label: '修改结果列表', type: 'any' },
+    ],
+  },
+  table_lookup: {
+    atom_type: 'table_lookup',
+    label: '查表',
+    description: '从二维表格按 key 查找对应行',
+    category: 'table',
+    icon: '📊',
+    inputs: [
+      { key: 'table_data', label: '表格数据', type: 'any', required: true },
+      { key: 'lookup_key', label: '查找键', type: 'any', required: true },
+      { key: 'mode', label: '模式(exact/range/closest)', type: 'string' },
+    ],
+    outputs: [
+      { key: 'result_row', label: '匹配行', type: 'any' },
+      { key: 'found', label: '是否找到', type: 'boolean' },
+    ],
+  },
+  random_table: {
+    atom_type: 'random_table',
+    label: '随机表',
+    description: '按权重从条目列表中随机选取',
+    category: 'table',
+    icon: '🎰',
+    inputs: [
+      { key: 'table_entries', label: '条目列表', type: 'any', required: true },
+      { key: 'roll_expression', label: '骰子表达式(可选)', type: 'string' },
+    ],
+    outputs: [
+      { key: 'selected_entry', label: '选中条目', type: 'any' },
+      { key: 'roll_result', label: '骰点结果', type: 'number' },
+    ],
+  },
+  effect_apply: {
+    atom_type: 'effect_apply',
+    label: '施加效果',
+    description: '给角色施加临时状态效果',
+    category: 'effect',
+    icon: '✨',
+    inputs: [
+      { key: 'target_character_id', label: '目标角色ID', type: 'string', required: true },
+      { key: 'effect_name', label: '效果名称', type: 'string', required: true },
+      { key: 'duration_type', label: '持续类型', type: 'string' },
+      { key: 'duration_value', label: '持续值', type: 'number' },
+      { key: 'modifiers', label: '属性修改器', type: 'any' },
+    ],
+    outputs: [
+      { key: 'effect_id', label: '效果ID', type: 'string' },
+      { key: 'applied_success', label: '施加成功', type: 'boolean' },
+    ],
+  },
+  effect_remove: {
+    atom_type: 'effect_remove',
+    label: '移除效果',
+    description: '移除角色的临时状态效果',
+    category: 'effect',
+    icon: '🚫',
+    inputs: [
+      { key: 'target_character_id', label: '目标角色ID', type: 'string', required: true },
+      { key: 'effect_id', label: '效果ID(二选一)', type: 'string' },
+      { key: 'effect_name', label: '效果名称(二选一)', type: 'string' },
+    ],
+    outputs: [
+      { key: 'removed_success', label: '移除成功', type: 'boolean' },
+    ],
+  },
+  loop: {
+    atom_type: 'loop',
+    label: '循环',
+    description: '循环 N 次，每次对值做累加或累乘',
+    category: 'logic',
+    icon: '🔁',
+    inputs: [
+      { key: 'iterations', label: '循环次数', type: 'number', required: true },
+      { key: 'initial_value', label: '初始值', type: 'number' },
+      { key: 'step_value', label: '步长', type: 'number' },
+      { key: 'operation', label: '操作(add/mul)', type: 'string' },
+    ],
+    outputs: [
+      { key: 'iteration_results', label: '各次结果', type: 'any' },
+      { key: 'final_value', label: '最终值', type: 'number' },
+      { key: 'iterations_completed', label: '完成次数', type: 'number' },
+    ],
+  },
+  aggregate: {
+    atom_type: 'aggregate',
+    label: '聚合',
+    description: '对数组做 sum/min/max/avg/count/concat 聚合',
+    category: 'compute',
+    icon: '∑',
+    inputs: [
+      { key: 'values', label: '输入数组', type: 'any', required: true },
+      { key: 'operation', label: '操作', type: 'string', required: true },
+      { key: 'separator', label: '拼接分隔符(concat)', type: 'string' },
+    ],
+    outputs: [
+      { key: 'result', label: '聚合结果', type: 'any' },
+      { key: 'count', label: '元素数量', type: 'number' },
+    ],
+  },
+  conditional_branch: {
+    atom_type: 'conditional_branch',
+    label: '多分支条件',
+    description: 'switch-case 风格分支选择',
+    category: 'logic',
+    icon: '🌿',
+    inputs: [
+      { key: 'value', label: '输入值', type: 'any', required: true },
+      { key: 'branches', label: '分支列表', type: 'any', required: true },
+    ],
+    outputs: [
+      { key: 'matched_branch', label: '匹配分支索引', type: 'number' },
+      { key: 'matched_label', label: '匹配标签', type: 'string' },
+      { key: 'is_default', label: '是否默认', type: 'boolean' },
+    ],
+  },
 };
 
 // ── 类型兼容性校验 ─────────────────────────────────────────────────────────

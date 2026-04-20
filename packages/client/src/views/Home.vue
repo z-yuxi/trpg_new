@@ -38,7 +38,7 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
 onMounted(async () => {
   loading.value = true;
   try {
-    const headers = authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
+    const headers: HeadersInit = authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
     const [cRes, rRes, mRes, recRes] = await Promise.all([
       authStore.isLoggedIn ? fetch('/api/campaigns', { headers }) : Promise.resolve(null),
       fetch('/api/rulesets?limit=6'),

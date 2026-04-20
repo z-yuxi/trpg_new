@@ -5,6 +5,7 @@ import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import TTag from '../components/base/TTag.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { calcDerived, COC7_DEFAULT_DERIVED } from '@trpg/shared';
 
 /* ========== 类型 ========== */
 interface AttributeDef {
@@ -27,6 +28,7 @@ interface CardSchema {
   attributes?: Record<string, AttributeDef>;
   occupations?: OccupationDef[];
   skills?: Record<string, SkillDef>;
+  derived_formulas?: Record<string, { formula: string; label?: string; min?: number; max?: number } | string>;
 }
 interface RulesetOption {
   id: string;
@@ -66,6 +68,7 @@ const form = ref({
 
 const saving = ref(false);
 const saveError = ref('');
+const savedCharacterCode = ref('');
 const avatarUploading = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
@@ -79,6 +82,30 @@ const allocatedPoints = computed(() =>
   Object.values(form.value.skills).reduce((a, b) => a + b, 0)
 );
 const remainingPoints = computed(() => skillPoints.value - allocatedPoints.value);
+
+// 派生值实时计算
+const derivedValues = computed(() => {
+  const attrs = form.value.attributes;
+  if (Object.keys(attrs).length === 0) return {};
+  const formulas = (schema.value.derived_formulas ?? null) as Record<string, { formula: string; label?: string; min?: number; max?: number } | string> | null;
+  if (formulas && Object.keys(formulas).length > 0) {
+    return calcDerived(attrs, formulas);
+  }
+  // 回退：若规则集有 STR/CON/SIZ/POW 则用 COC7 默认公式
+  if ('CON' in attrs && 'SIZ' in attrs && 'POW' in attrs) {
+    return calcDerived(attrs, COC7_DEFAULT_DERIVED);
+  }
+  return {};
+});
+
+const derivedLabels = computed(() => {
+  const formulas = schema.value.derived_formulas ?? COC7_DEFAULT_DERIVED;
+  const result: Record<string, string> = {};
+  for (const [key, def] of Object.entries(formulas)) {
+    result[key] = typeof def === 'string' ? key : (def.label ?? key);
+  }
+  return result;
+});
 
 /* ========== 工具函数 ========== */
 function rollFormula(formula: string): number {
@@ -159,9 +186,18 @@ onMounted(async () => {
         form.value.attributes = data.attributes ?? {};
         form.value.skills = data.skills ?? {};
         form.value.background = data.background ?? '';
+        // 加载 schema 以支持派生值计算和步骤预览
+        const rs = rulesets.value.find(r => r.id === form.value.ruleset_id);
+        if (rs?.character_card_schema && typeof rs.character_card_schema === 'object') {
+          schema.value = rs.character_card_schema as CardSchema;
+        }
+        // 计算技能点（用于 Step 4 显示）
+        const occ = (schema.value.occupations ?? []).find(o => o.id === form.value.occupation_id);
+        const formula = occ?.skill_points_formula ?? 'EDU*4';
+        skillPoints.value = calcSkillPoints(formula, form.value.attributes);
       }
     } catch { /* ignore */ }
-    step.value = 5;
+    step.value = 6;  // 编辑模式直接到预览步骤，可回退修改
   }
 });
 
@@ -276,7 +312,14 @@ async function save() {
       body: JSON.stringify(payload),
     });
     if (res.ok) {
-      router.push('/personal/characters');
+      const saved = await res.json().catch(() => ({}));
+      savedCharacterCode.value = (saved as any).character_code ?? '';
+      if (isEditing) {
+        router.push('/personal/characters');
+      } else {
+        // 保存成功后留在第6步显示 character_code
+        step.value = 6;
+      }
     } else {
       const data = await res.json().catch(() => ({}));
       saveError.value = (data as any).error || '保存失败';
@@ -380,6 +423,17 @@ onBeforeRouteLeave(() => {
           <span class="attr-val">{{ val }}</span>
         </div>
       </div>
+
+      <!-- 派生属性展示 -->
+      <div v-if="Object.keys(derivedValues).length > 0" class="derived-panel">
+        <div class="derived-title">派生属性</div>
+        <div class="derived-grid">
+          <div v-for="(val, key) in derivedValues" :key="key" class="derived-item">
+            <span class="derived-label">{{ derivedLabels[key] ?? key }}</span>
+            <span class="derived-val">{{ val }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ========== STEP 4：分配技能点 ========== -->
@@ -446,7 +500,7 @@ onBeforeRouteLeave(() => {
             <div class="preview-name">{{ form.name || '未命名' }}</div>
             <div class="preview-meta">
               <TTag size="sm" color="default">{{ rulesets.find(r => r.id === form.ruleset_id)?.name ?? form.ruleset_id }}</TTag>
-              <TTag v-if="selectedOccupation" size="sm" color="info">{{ selectedOccupation.name }}</TTag>
+              <TTag v-if="selectedOccupation" size="sm" color="primary">{{ selectedOccupation.name }}</TTag>
             </div>
             <button class="avatar-upload-btn" type="button" @click="openAvatarPicker">
               {{ avatarUploading ? '上传中...' : '上传头像' }}
@@ -479,16 +533,26 @@ onBeforeRouteLeave(() => {
       </div>
 
       <div v-if="saveError" class="save-error">{{ saveError }}</div>
+
+      <!-- 保存成功后显示 character_code -->
+      <div v-if="savedCharacterCode" class="saved-success">
+        <div class="saved-code-label">角色卡已创建成功</div>
+        <div class="saved-code-row">
+          <span class="code-tag">#{{ savedCharacterCode }}</span>
+          <span class="code-hint">这是不可更改的公开分享码，其他玩家可用此码导入你的角色卡</span>
+        </div>
+        <TButton type="primary" size="sm" @click="router.push('/personal/characters')">  前往角色列表</TButton>
+      </div>
     </div>
 
     <!-- 底部导航 -->
     <div class="step-nav">
-      <TButton v-if="step > 1" type="secondary" @click="prevStep">上一步</TButton>
+      <TButton v-if="step > 1 && !savedCharacterCode" type="secondary" @click="prevStep">上一步</TButton>
       <div style="flex:1" />
       <TButton v-if="step < TOTAL_STEPS" type="primary" :disabled="step === 1 && !form.ruleset_id" @click="nextStep">
         下一步
       </TButton>
-      <TButton v-else type="primary" :loading="saving" @click="save">
+      <TButton v-else-if="!savedCharacterCode" type="primary" :loading="saving" @click="save">
         确认保存
       </TButton>
     </div>
@@ -736,6 +800,56 @@ onBeforeRouteLeave(() => {
 .preview-text { font-size: var(--text-sm); color: var(--text-body); line-height: var(--leading-relaxed); }
 
 .save-error { color: var(--color-danger, #dc2626); font-size: var(--text-sm); }
+
+/* ===== 派生属性 ===== */
+.derived-panel {
+  background: var(--surface-hover);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.derived-title { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-secondary); }
+.derived-grid { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.derived-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+}
+.derived-label { font-size: var(--text-xs); color: var(--text-muted); }
+.derived-val { font-size: var(--text-lg); font-weight: var(--font-bold); color: var(--color-primary); }
+
+/* ===== 保存成功 character_code ===== */
+.saved-success {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-success, #16a34a) 8%, transparent);
+  border: 1px solid var(--color-success, #16a34a);
+  border-radius: var(--radius-lg);
+}
+.saved-code-label { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-success, #16a34a); }
+.saved-code-row { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.code-tag {
+  font-family: monospace;
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.1em;
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  padding: 2px 10px;
+  border-radius: var(--radius-md);
+}
+.code-hint { font-size: var(--text-xs); color: var(--text-muted); }
 
 /* ===== 底部导航 ===== */
 .step-nav {

@@ -14,6 +14,7 @@ const categories: { key: string; label: string }[] = [
   { key: 'compute', label: '计算' },
   { key: 'logic', label: '逻辑' },
   { key: 'effect', label: '效果' },
+  { key: 'table', label: '查表' },
   { key: 'output', label: '输出' },
 ];
 
@@ -43,6 +44,7 @@ const categoryColors: Record<string, string> = {
   compute: '#7b68ee',
   logic: '#f39c12',
   effect: '#e74c3c',
+  table: '#8e44ad',
   output: '#27ae60',
 };
 </script>

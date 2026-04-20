@@ -7,6 +7,15 @@ import { ResultCollectorAtom } from './atoms/result-collector';
 import { CharacterSkillReaderAtom } from './atoms/character-skill-reader';
 import { ResourceModifyAtom } from './atoms/resource-modify';
 import { FormulaEvalAtom } from './atoms/formula-eval';
+// P1 原子
+import { ResourceModifyBatchAtom } from './atoms/resource-modify-batch';
+import { TableLookupAtom } from './atoms/table-lookup';
+import { RandomTableAtom } from './atoms/random-table';
+import { EffectApplyAtom } from './atoms/effect-apply';
+import { EffectRemoveAtom } from './atoms/effect-remove';
+import { LoopAtom } from './atoms/loop';
+import { AggregateAtom } from './atoms/aggregate';
+import { ConditionalBranchAtom } from './atoms/conditional-branch';
 
 export class AtomRegistry {
   private atoms = new Map<string, new () => AtomNode>();
@@ -42,3 +51,12 @@ globalRegistry.register('result_collector', ResultCollectorAtom);
 globalRegistry.register('character_skill_reader', CharacterSkillReaderAtom);
 globalRegistry.register('resource_modify', ResourceModifyAtom);
 globalRegistry.register('formula_eval', FormulaEvalAtom);
+// P1 原子
+globalRegistry.register('resource_modify_batch', ResourceModifyBatchAtom);
+globalRegistry.register('table_lookup', TableLookupAtom);
+globalRegistry.register('random_table', RandomTableAtom);
+globalRegistry.register('effect_apply', EffectApplyAtom);
+globalRegistry.register('effect_remove', EffectRemoveAtom);
+globalRegistry.register('loop', LoopAtom);
+globalRegistry.register('aggregate', AggregateAtom);
+globalRegistry.register('conditional_branch', ConditionalBranchAtom);

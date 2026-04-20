@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElCheckbox } from 'element-plus';
+import { ElMessage, ElCheckbox, ElCheckboxGroup } from 'element-plus';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 
@@ -30,7 +30,7 @@ const isExporting = ref(false);
 const hasResult = ref(false);
 
 // 全选/取消全选
-const handleSelectAll = (val: boolean) => {
+const handleSelectAll = (val: string | number | boolean) => {
   if (val) {
     selectedSceneIds.value = scenes.value.map((s) => s.id);
   } else {
@@ -225,11 +225,13 @@ onMounted(() => {
             <ElCheckbox v-model="allScenesSelected" @change="handleSelectAll">全部场景</ElCheckbox>
           </label>
           <div v-if="!allScenesSelected" class="scene-list">
+            <ElCheckboxGroup v-model="selectedSceneIds" @change="handleSceneChange">
             <label v-for="scene in scenes" :key="scene.id" class="scene-item">
-              <ElCheckbox v-model="selectedSceneIds" :value="scene.id" @change="handleSceneChange">
+              <ElCheckbox :value="scene.id">
                 {{ scene.name }}
               </ElCheckbox>
             </label>
+            </ElCheckboxGroup>
           </div>
         </div>
       </div>

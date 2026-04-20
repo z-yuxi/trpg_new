@@ -5,6 +5,8 @@ import { redis, RedisKeys } from '../db/redis';
 import { db } from '../db';
 import { computeVisibleTo, characterIdsToUserIds } from '../services/visibility';
 import { notificationService } from '../services/notification-service';
+import { rulesetService } from '../services/ruleset-service';
+import { resolveCommand } from '../engine/command-resolver';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -78,6 +80,14 @@ export function registerChatHandlers(
         return;
       }
 
+      // ── 指令消息处理 ──────────────────────────────────────────────────────
+      if (data.message_type === 'command') {
+        await handleCommandMessage(
+          roomNsp, campaignId, characterId, userId, data.content, data.metadata
+        );
+        return;
+      }
+
       // 从 character_scene_states 查询当前角色所在场景
       let sceneId = '';
       if (characterId) {
@@ -125,7 +135,17 @@ export function registerChatHandlers(
 
       // 自动计算 visible_to（若客户端未显式指定）
       if (!data.visible_to) {
-        message.visible_to = await computeVisibleTo(sceneId, campaignId).catch(() => null);
+        const msgType = message.message_type;
+        // OOC / system / announcement → 全体可见（visible_to = null）
+        if (msgType === 'ooc' || msgType === 'system' || msgType === 'announcement') {
+          message.visible_to = null;
+        } else if (data.metadata?.gm_hidden) {
+          // GM 隐藏消息 → 只有 GM 可见
+          const campaignRow2 = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first().catch(() => null);
+          message.visible_to = campaignRow2 ? [campaignRow2.gm_user_id] : null;
+        } else {
+          message.visible_to = await computeVisibleTo(sceneId, campaignId).catch(() => null);
+        }
       }
 
       await db('chat_messages').insert({
@@ -262,7 +282,27 @@ export function registerChatHandlers(
         old_time: currentTime,
         new_time: newTime,
         triggered_moves: triggeredMoves,
+        executed_moves: triggeredMoves, // 兼容字段
       });
+
+      // 广播系统消息提示时间推进
+      const padZ = (n: number) => String(n).padStart(2, '0');
+      const timeStr = `第${newTime.day}天 ${padZ(newTime.hour)}:${padZ(newTime.minute)}`;
+      const sysMsg = {
+        id: generateId(),
+        campaign_id: campaignId,
+        sender_user_id: userId,
+        sender_character_id: null,
+        content: `[系统] 故事时间推进到 ${timeStr}`,
+        message_type: 'system',
+        scene_id: null,
+        visible_to: null,
+        story_time: JSON.stringify(newTime),
+        metadata: null,
+        created_at: new Date().toISOString(),
+      };
+      await db('chat_messages').insert(sysMsg);
+      roomNsp.to(`campaign:${campaignId}`).emit('new_message', sysMsg);
       } catch (err) {
         console.error('[gm_advance_time] handler error:', err);
       }
@@ -420,4 +460,165 @@ export function registerChatHandlers(
       }
     });
   });
+}
+
+// ── 指令消息处理辅助函数 ──────────────────────────────────────────────────
+
+async function handleCommandMessage(
+  roomNsp: Namespace<ClientToServerEvents, ServerToClientEvents>,
+  campaignId: string,
+  characterId: string,
+  userId: string,
+  commandStr: string,
+  metadata?: Record<string, unknown> | null,
+): Promise<void> {
+  try {
+    // 获取团的 ruleset_id 和全局故事时间
+    const campaign = await db('campaigns')
+      .where({ id: campaignId })
+      .select('ruleset_id', 'global_story_time', 'gm_user_id')
+      .first();
+
+    if (!campaign?.ruleset_id) {
+      // 没有关联规则集，退回为普通叙述消息
+      await broadcastTextFallback(roomNsp, campaignId, characterId, userId, commandStr, metadata);
+      return;
+    }
+
+    // 通过 rulesetService 执行指令（含三层解析 + 角色数据注入）
+    let execResult;
+    try {
+      execResult = await rulesetService.executeCommand(campaign.ruleset_id as string, {
+        command: commandStr,
+        context: characterId ? { character_id: characterId, campaign_id: campaignId } : undefined,
+      });
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      if (e.code === 'NOT_FOUND') {
+        // 命令未找到，作为普通文本发送
+        await broadcastTextFallback(roomNsp, campaignId, characterId, userId, commandStr, metadata);
+        return;
+      }
+      throw err;
+    }
+
+    // 解析故事时间
+    let storyTime: StoryTime | null = null;
+    if (campaign.global_story_time) {
+      try {
+        storyTime = typeof campaign.global_story_time === 'string'
+          ? JSON.parse(campaign.global_story_time)
+          : campaign.global_story_time;
+      } catch { /* ignore */ }
+    }
+
+    // 获取角色所在场景
+    let sceneId = '';
+    if (characterId) {
+      const sceneState = await db('character_scene_states')
+        .where({ character_id: characterId, campaign_id: campaignId })
+        .select('current_spatial_scene_id')
+        .first()
+        .catch(() => null);
+      sceneId = sceneState?.current_spatial_scene_id ?? '';
+    }
+
+    // 构建骰子消息
+    const messageId = snowflake.nextId();
+    const diceLines = execResult.dice_rolls.map((r) =>
+      `[${r.expression}] = ${r.value}${r.detail ? ` (${r.detail})` : ''}`
+    );
+    const resultLine = execResult.result;
+    const displayContent = [
+      `> ${commandStr}`,
+      ...diceLines,
+      resultLine,
+    ].join('\n');
+
+    const diceMessage: ChatMessage = {
+      id: messageId,
+      scene_id: sceneId,
+      campaign_id: campaignId,
+      sender_user_id: userId,
+      sender_character_id: characterId || null,
+      content: displayContent,
+      message_type: 'dice',
+      story_time: storyTime,
+      visible_to: null,
+      client_timestamp: Date.now(),
+      created_at: new Date(),
+      metadata: {
+        ...(metadata ?? {}),
+        command: commandStr,
+        dice_rolls: execResult.dice_rolls,
+        result: execResult.result,
+        success: execResult.success,
+      },
+    };
+
+    // 写入 DB
+    await db('chat_messages').insert({
+      id: BigInt(diceMessage.id),
+      scene_id: diceMessage.scene_id,
+      campaign_id: diceMessage.campaign_id,
+      sender_user_id: diceMessage.sender_user_id,
+      sender_character_id: diceMessage.sender_character_id,
+      content: diceMessage.content,
+      message_type: diceMessage.message_type,
+      story_time: diceMessage.story_time ? JSON.stringify(diceMessage.story_time) : null,
+      visible_to: null,
+      client_timestamp: diceMessage.client_timestamp,
+      created_at: diceMessage.created_at,
+      metadata: JSON.stringify(diceMessage.metadata),
+    });
+
+    await redis.lpush(RedisKeys.messageBuffer(campaignId), JSON.stringify(diceMessage));
+    await redis.ltrim(RedisKeys.messageBuffer(campaignId), 0, 199);
+
+    // 全团广播
+    roomNsp.to(`campaign:${campaignId}`).emit('new_message', diceMessage);
+  } catch (err) {
+    console.error('[handleCommandMessage] error:', err);
+  }
+}
+
+/** 命令未识别时作为普通叙述文本发送 */
+async function broadcastTextFallback(
+  roomNsp: Namespace<ClientToServerEvents, ServerToClientEvents>,
+  campaignId: string,
+  characterId: string,
+  userId: string,
+  content: string,
+  metadata?: Record<string, unknown> | null,
+): Promise<void> {
+  const messageId = snowflake.nextId();
+  const fallbackMsg: ChatMessage = {
+    id: messageId,
+    scene_id: '',
+    campaign_id: campaignId,
+    sender_user_id: userId,
+    sender_character_id: characterId || null,
+    content,
+    message_type: 'narrative',
+    story_time: null,
+    visible_to: null,
+    client_timestamp: Date.now(),
+    created_at: new Date(),
+    metadata: metadata ?? null,
+  };
+  await db('chat_messages').insert({
+    id: BigInt(fallbackMsg.id),
+    scene_id: fallbackMsg.scene_id,
+    campaign_id: fallbackMsg.campaign_id,
+    sender_user_id: fallbackMsg.sender_user_id,
+    sender_character_id: fallbackMsg.sender_character_id,
+    content: fallbackMsg.content,
+    message_type: fallbackMsg.message_type,
+    story_time: null,
+    visible_to: null,
+    client_timestamp: fallbackMsg.client_timestamp,
+    created_at: fallbackMsg.created_at,
+    metadata: metadata ? JSON.stringify(metadata) : null,
+  });
+  roomNsp.to(`campaign:${campaignId}`).emit('new_message', fallbackMsg);
 }
