@@ -6,6 +6,7 @@ import ClueCard from '../ClueCard.vue';
 import GridMap from './GridMap.vue';
 import TrajectoryMatrix from './TrajectoryMatrix.vue';
 import SceneRoadmap from './SceneRoadmap.vue';
+import GmClueLibrary from './GmClueLibrary.vue';
 import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
 import { useAuthStore } from '../../stores/auth-store';
@@ -17,6 +18,10 @@ const props = defineProps<{
   scenes: Scene[];
   npcs: CampaignNpc[];
   characters: { id: string; name: string; sceneId?: string }[];
+  /** 独立页面模式：不显示折叠面板外层，占满父容器高度 */
+  standalone?: boolean;
+  /** 默认打开的 Tab（用于从路由跳转时预选） */
+  defaultTab?: 'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'broadcast' | 'grid' | 'trajectory';
 }>();
 
 const emit = defineEmits<{
@@ -27,7 +32,7 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'broadcast' | 'grid' | 'trajectory'>('time');
+const activeTab = ref<'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'broadcast' | 'grid' | 'trajectory'>(props.defaultTab ?? 'time');
 const activeGridSceneId = ref('');
 
 function padZ(n: number) { return String(n).padStart(2, '0'); }
@@ -593,7 +598,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="gm-console">
+  <div class="gm-console" :class="{ 'gm-console--standalone': standalone }">
     <div class="console-tabs">
       <button v-for="tab in ([{key:'time',icon:'icon-clock',label:'时间'},{key:'moves',icon:'icon-history',label:'移动'},{key:'scenes',icon:'icon-grid',label:'场景'},{key:'npcs',icon:'icon-npc',label:'NPC'},{key:'clue',icon:'icon-scroll',label:'线索'},{key:'grid',icon:'icon-grid',label:'地图'},{key:'trajectory',icon:'icon-history',label:'轨迹'},{key:'broadcast',icon:'icon-broadcast',label:'广播'}] as const)" :key="tab.key" class="console-tab" :class="{active:activeTab===tab.key}" @click="activeTab=tab.key">
         <SvgIcon :name="tab.icon" :size="14" /><span>{{tab.label}}</span>
@@ -763,16 +768,12 @@ onMounted(() => {
           </template>
         </div>
         <div v-if="localClues.length>0" style="margin-top:8px">
-          <div class="section-label">已发放</div>
-          <div v-for="c in localClues" :key="c.id" class="clue-item">
-            <ClueCard :clue-id="c.id" :title="c.title" :content="c.content" :theme="c.theme" :created-at="c.created_at" />
-            <div class="clue-actions">
-              <div class="clue-audience">{{ clueAudienceLabel(c) }}</div>
-              <button class="sm-btn" @click="prepareRevealClue(c)">再次发放</button>
-              <button class="sm-btn" @click="openEditClue(c)">编辑</button>
-              <button class="sm-btn danger" @click="deleteClue(c)">删除</button>
-            </div>
-          </div>
+          <div class="section-label">线索库（点击编辑样式）</div>
+          <GmClueLibrary
+            :campaign-id="campaignId"
+            :characters="characters"
+            ref="gmClueLibraryRef"
+          />
         </div>
       </div>
       <!-- Tab: 广播 -->
@@ -911,6 +912,7 @@ onMounted(() => {
 
 <style scoped>
 .gm-console { background: var(--color-card-bg); border-bottom: 2px solid var(--color-accent); display: flex; flex-direction: column; }
+.gm-console--standalone { border-bottom: none; height: 100%; overflow: hidden; }
 .console-tabs { display: flex; border-bottom: 1px solid var(--color-card-border); padding: 0 var(--space-3); background: var(--color-page-bg); }
 .console-tab { display: flex; align-items: center; gap: 5px; padding: var(--space-2) var(--space-3); border: none; background: none; cursor: pointer; color: var(--color-text-secondary); font-size: var(--text-xs); border-bottom: 2px solid transparent; transition: color var(--transition-fast); }
 .console-tab.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }

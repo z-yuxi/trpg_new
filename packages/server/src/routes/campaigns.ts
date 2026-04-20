@@ -1045,6 +1045,33 @@ router.post('/:id/clues/:clueId/reveal', async (req, res) => {
   }
 });
 
+// PATCH /api/campaigns/:id/clues/:clueId/style
+router.patch('/:id/clues/:clueId/style', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update clue style' }); return; }
+
+    const validThemes = ['river', 'blur', 'fragment', 'wave', 'ancient', 'blood', 'ash', 'cyber'];
+    const { theme } = req.body;
+    if (!theme || !validThemes.includes(theme)) {
+      res.status(400).json({ error: `Invalid theme. Must be one of: ${validThemes.join(', ')}` });
+      return;
+    }
+
+    const updated = await db('campaign_clues')
+      .where({ id: req.params.clueId, campaign_id: req.params.id })
+      .update({ theme });
+
+    if (!updated) { res.status(404).json({ error: 'Clue not found' }); return; }
+
+    const clue = await db('campaign_clues').where({ id: req.params.clueId }).first();
+    res.json(clue);
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+  }
+});
+
 // DELETE /api/campaigns/:id/clues/:clueId
 router.delete('/:id/clues/:clueId', async (req, res) => {
   try {

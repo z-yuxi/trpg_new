@@ -350,7 +350,7 @@ onMounted(() => {
           <div class="preview-meta">
             <span>文件名：{{ previewFileName }}</span>
             <span>消息数：{{ previewTotalMessages }}</span>
-            <span>预览行数：{{ previewLineCount }}</span>
+            <span>前100行预览（共{{ previewLineCount }}行）</span>
           </div>
           <textarea class="preview-box" readonly :value="previewText" />
         </div>

@@ -159,6 +159,13 @@ async function loadScenes() {
   if (res.ok) scenes.value = await res.json();
 }
 
+function handleAdvanceTime(minutes: number) {
+  const base = globalTime.value ?? { day: 1, hour: 8, minute: 0 };
+  const total = base.minute + minutes + base.hour * 60 + (base.day - 1) * 1440;
+  const newTime = { day: Math.floor(total / 1440) + 1, hour: Math.floor((total % 1440) / 60), minute: total % 60 };
+  socketClient.gmAdvanceTime({ custom_time: newTime });
+}
+
 async function handleSceneCreated(s: any) {
   // 同步更新（Vue 批量处理，避免中间状态导致私密场/公共场 computed 漏掉新场景）
   scenes.value.push(s);
@@ -401,10 +408,16 @@ onUnmounted(() => {
       :is-gm="isGm"
       :mobile-view="mobileView"
       :global-time="globalTime"
+      :campaign-id="campaignId"
+      :pending-moves-count="pendingMoves.length"
+      :npcs="npcs"
       @toggle-gm-console="showGMConsole = !showGMConsole"
       @export-log="router.push(`/room/${campaignId}/export`)"
       @mobile-assistant-open="handleMobileAssistantOpen"
       @update:mobile-view="mobileView = $event"
+      @advance-time="handleAdvanceTime"
+      @play-as-npc="(id) => { selectedSenderIdentity = `npc:${id}`; }"
+      @open-approve="showGMConsole = true"
     >
       <template #gm-console>
         <transition name="gm-slide">

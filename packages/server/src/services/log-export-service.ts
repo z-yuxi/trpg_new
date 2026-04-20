@@ -317,9 +317,10 @@ function renderTextDocument(params: {
   return lines.join('\n');
 }
 
-function buildPreviewText(messages: ExportMessage[], title: string): string {
+function buildPreviewText(messages: ExportMessage[], title: string, maxLines = 100): string {
   const lines: string[] = [`# ${title}`, ''];
-  for (const message of messages.slice(0, 50)) {
+  for (const message of messages) {
+    if (lines.length >= maxLines) break;
     const timeLabel = message.storyTime ? formatStoryTime(message.storyTime) : formatClock(message.createdAt);
     lines.push(`[${timeLabel}] ${message.sceneName} / ${message.speaker}`);
     lines.push(message.content);
@@ -638,7 +639,7 @@ export async function exportCampaignLog(options: ExportCampaignLogOptions): Prom
     viewerCharacters,
     selectedScenes,
   });
-  const previewText = buildPreviewText(sortedMessages.slice(0, options.previewLimit ?? 50), title);
+  const previewText = buildPreviewText(sortedMessages, title, options.previewLimit ?? 100);
 
   if (options.format === 'ilf') {
     const ilfDoc = buildILFDocument({

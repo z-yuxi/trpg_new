@@ -40,6 +40,12 @@ const routes = [
     meta: { requiresAuth: true, title: '跑团房间' },
   },
   {
+    path: '/campaign/:campaignId/gm/:module',
+    name: 'GMManagement',
+    component: () => import('../views/GMManagement.vue'),
+    meta: { requiresAuth: true, title: 'GM 管理' },
+  },
+  {
     path: '/room/:id/export',
     name: 'LogExport',
     component: () => import('../views/LogExport.vue'),
@@ -61,9 +67,9 @@ const routes = [
       { path: 'workshop/:id/edit', name: 'RulesetEditor', component: () => import('../views/creator/RulesetEditor.vue') },
       { path: 'modules', name: 'ModuleList', component: () => import('../views/creator/ModuleList.vue') },
       { path: 'modules/:id/edit', name: 'ModuleEditor', component: () => import('../views/creator/ModuleEditor.vue') },
-      { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/DevPlaceholder.vue') },
+      { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/CreatorAssets.vue') },
       { path: 'dashboard', name: 'CreatorDashboard', component: () => import('../views/creator/DashboardHome.vue') },
-      { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/DevPlaceholder.vue') },
+      { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/CreatorProducts.vue') },
     ],
   },
   {

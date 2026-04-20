@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { RecruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
+import { postCommentService } from '../services/post-comment-service';
 import { db } from '../db';
 
 const router: IRouter = Router();
@@ -239,6 +240,163 @@ router.put('/:id', authMiddleware, async (req, res) => {
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// ─── 贴吧式楼层评论系统 ──────────────────────────────────────────────────────
+
+// 获取主楼层列表（分页，每楼附带最近3条楼中楼预览）
+router.get('/:id/floors', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize ?? 20)));
+    const result = await postCommentService.getFloorsWithComments(req.params.id, page, pageSize, req.user?.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// 新增主楼层
+router.post('/:id/floors', authMiddleware, async (req, res) => {
+  const schema = z.object({ content: z.string().min(1).max(2000) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    // 校验帖子存在
+    const post = await db('recruitment_posts').where({ id: req.params.id }).first();
+    if (!post) {
+      res.status(404).json({ error: 'Post not found' });
+      return;
+    }
+    const floor = await postCommentService.createFloor(req.params.id, req.user!.id, parsed.data.content);
+    // 通知帖主（非本人发楼才通知）
+    if ((post as Record<string, unknown>)['poster_id'] !== req.user!.id) {
+      notificationService.createNotification({
+        userId: (post as Record<string, unknown>)['poster_id'] as string,
+        type: 'social',
+        title: '你的招募帖有新回复',
+        content: `有人在《${(post as Record<string, unknown>)['title'] as string}》下发了新楼。`,
+        metadata: { post_id: req.params.id },
+      }).catch(() => {});
+    }
+    res.status(201).json(floor);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Create floor failed' });
+  }
+});
+
+// 软删除主楼层
+router.delete('/:id/floors/:floorId', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.deleteFloor(req.params.floorId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    const status = err.message === '无权删除' ? 403 : err.message === '楼层不存在' ? 404 : 500;
+    res.status(status).json({ error: err?.message ?? 'Delete failed' });
+  }
+});
+
+// 获取指定楼层的全部楼中楼（分页）
+router.get('/:id/floors/:floorId/comments', optionalAuthMiddleware, async (req, res) => {
+  try {
+    const page = Math.max(1, Number(req.query.page ?? 1));
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20)));
+    const result = await postCommentService.getFloorComments(req.params.floorId, page, pageSize, req.user?.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// 新增楼中楼
+router.post('/:id/floors/:floorId/comments', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    content: z.string().min(1).max(1000),
+    parent_comment_id: z.string().optional().nullable(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const comment = await postCommentService.createComment(
+      req.params.floorId,
+      req.user!.id,
+      parsed.data.content,
+      parsed.data.parent_comment_id ?? undefined,
+    );
+    // 通知楼主（非本人）
+    const floor = await db('post_replies').where({ id: req.params.floorId }).select('user_id').first();
+    if (floor && (floor as Record<string, unknown>)['user_id'] !== req.user!.id) {
+      notificationService.createNotification({
+        userId: (floor as Record<string, unknown>)['user_id'] as string,
+        type: 'social',
+        title: '你的楼层有新评论',
+        content: '有人回复了你的楼层。',
+        metadata: { post_id: req.params.id, reply_id: req.params.floorId },
+      }).catch(() => {});
+    }
+    res.status(201).json(comment);
+  } catch (err: any) {
+    const status = err.message === '楼层不存在' || err.message === '被回复的评论不存在' ? 404
+      : err.message === '不允许跨楼层回复' || err.message === '该楼层已删除，无法回复' ? 400 : 500;
+    res.status(status).json({ error: err?.message ?? 'Create comment failed' });
+  }
+});
+
+// 删除楼中楼
+router.delete('/:id/floors/:floorId/comments/:commentId', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.deleteComment(req.params.commentId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    const status = err.message === '无权删除' ? 403 : err.message === '评论不存在' ? 404 : 500;
+    res.status(status).json({ error: err?.message ?? 'Delete failed' });
+  }
+});
+
+// 点赞主楼层
+router.post('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.likeFloor(req.params.floorId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Like failed' });
+  }
+});
+
+// 取消点赞主楼层
+router.delete('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.unlikeFloor(req.params.floorId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Unlike failed' });
+  }
+});
+
+// 点赞楼中楼
+router.post('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.likeComment(req.params.commentId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Like failed' });
+  }
+});
+
+// 取消点赞楼中楼
+router.delete('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, async (req, res) => {
+  try {
+    await postCommentService.unlikeComment(req.params.commentId, req.user!.id);
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? 'Unlike failed' });
   }
 });
 

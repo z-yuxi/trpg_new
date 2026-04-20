@@ -409,3 +409,69 @@ type SnowflakeId = string;  // 如 "1234567890123456789"
 
 ---
 
+
+
+-- ========== 社区评论系统（贴吧模式） ==========
+
+-- 主楼层表（对主题帖的直接回复）
+-- 说明：1楼为帖子正文，存储于 posts 表，此表楼层号从 2 起分配。
+CREATE TABLE post_replies (
+  id VARCHAR(64) PRIMARY KEY,
+  post_id VARCHAR(64) NOT NULL,          -- 关联的招募帖ID（外键逻辑：post_id 必须存在于 posts 表，建议在应用层校验；如数据库性能允许，可添加 FOREIGN KEY）
+  user_id VARCHAR(64) NOT NULL,
+  floor_number INT NOT NULL,              -- 楼层号（从2开始，1 预留给帖子正文）
+  content TEXT NOT NULL,
+  like_count INT DEFAULT 0,              -- 冗余字段，与 floor_likes 表保持同步；更新时须在同一事务内完成，或使用触发器
+  reply_count INT DEFAULT 0,             -- 冗余字段（楼中楼数量），与 reply_comments 表保持同步；同上
+  is_original_post BOOLEAN DEFAULT FALSE, -- 标记该条是否为楼主原帖内容（仅 posts 表正文映射时使用，通常为 FALSE）
+  deleted BOOLEAN DEFAULT FALSE,          -- 软删除标记：deleted=TRUE 时前端显示"该楼层已删除"，楼层号保留
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,  -- MySQL 语法；PostgreSQL 需使用触发器实现等效功能
+  INDEX idx_post_floor (post_id, floor_number),
+  INDEX idx_post_created (post_id, created_at)
+);
+
+-- 楼中楼表（单楼层下的二级评论）
+-- 设计限制：parent_comment_id 只能指向 post_replies 中的记录（一级回复），
+-- 不允许指向 reply_comments 中的记录，应用层须强制校验，确保嵌套层数 ≤ 1。
+CREATE TABLE reply_comments (
+  id VARCHAR(64) PRIMARY KEY,
+  reply_id VARCHAR(64) NOT NULL,           -- 关联的主楼层ID（外键逻辑：须存在于 post_replies 表）
+  user_id VARCHAR(64) NOT NULL,
+  parent_comment_id VARCHAR(64) NULL,      -- 可选：指定回复的是楼中楼中哪条评论（仅用于 @提及展示，不增加嵌套层数）
+  content TEXT NOT NULL,
+  like_count INT DEFAULT 0,
+  deleted BOOLEAN DEFAULT FALSE,           -- 楼中楼软删除（可改为物理删除，需在产品层统一）
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_reply (reply_id, created_at)
+);
+
+-- 楼层点赞记录表（防重复点赞）
+CREATE TABLE floor_likes (
+  id VARCHAR(64) PRIMARY KEY,
+  reply_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_floor (reply_id, user_id)
+);
+
+-- 楼中楼点赞记录表（防重复点赞）
+CREATE TABLE comment_likes (
+  id VARCHAR(64) PRIMARY KEY,
+  comment_id VARCHAR(64) NOT NULL,
+  user_id VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_comment (comment_id, user_id)
+);
+
+/*
+设计决策说明：
+1. floor_number 采用物理存储（非实时计算），避免因软删除导致楼层号混乱。
+2. like_count / reply_count 为冗余计数，须在事务中与点赞/评论操作同步更新（或使用触发器），防止数据不一致。
+3. parent_comment_id 仅用于标记"回复了楼中楼中的哪条"，不构成新的嵌套层；应用层在写入时须校验 parent_comment_id 不指向 reply_comments 记录。
+4. ON UPDATE CURRENT_TIMESTAMP 为 MySQL 5.7+ 专有语法；若使用 PostgreSQL，需改为：
+   updated_at TIMESTAMPTZ DEFAULT NOW()，并建立触发器：
+   CREATE TRIGGER set_updated_at BEFORE UPDATE ON <table> FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+5. 外键约束出于性能考虑未在 DDL 中显式声明，应在应用层或 ORM 层保证数据一致性。
+*/

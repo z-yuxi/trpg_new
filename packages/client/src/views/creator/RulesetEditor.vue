@@ -394,6 +394,10 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 
 <template>
   <div class="editor">
+    <!-- 移动端只读提示 -->
+    <div class="mobile-readonly-banner">
+      <span>📱 规则包编辑器在移动端为只读模式，请在 PC 端进行编辑</span>
+    </div>
     <!-- Header -->
     <div class="editor-header">
       <button class="back-btn" @click="router.back()">← 返回工坊</button>
@@ -669,6 +673,17 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 
 <style scoped>
 .editor { display: flex; flex-direction: column; height: 100%; }
+.mobile-readonly-banner {
+  display: none;
+  background: #fef3c7; color: #92400e;
+  padding: 8px 16px; font-size: var(--text-sm); text-align: center;
+  border-bottom: 1px solid #fcd34d;
+}
+@media (max-width: 768px) {
+  .mobile-readonly-banner { display: block; }
+  .editor-header .mode-tabs,
+  .save-btn, .action-btn { pointer-events: none; opacity: 0.5; }
+}
 .l3-canvas-container { flex: 1; overflow: hidden; min-height: 0; }
 .versions-container { flex: 1; overflow: auto; min-height: 0; }
 

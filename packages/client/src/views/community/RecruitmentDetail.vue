@@ -10,10 +10,10 @@ import {
   ElCheckboxGroup,
   ElCheckbox,
   ElDivider,
-} from 'element-plus';
-import TCard from '../../components/base/TCard.vue';
+} from 'element-plus';import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
+import FloorSystem from '../../components/community/FloorSystem.vue';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { formatRecruitmentValue, hasRecruitmentValue, resolveRecruitmentFields } from '../../utils/recruitment-fields';
@@ -41,7 +41,6 @@ const showGroupDialog = ref(false);
 const selectedApplicationIds = ref<string[]>([]);
 const groupModuleName = ref('待定');
 
-const commentContent = ref('');
 
 const postId = computed(() => String(route.params.id || ''));
 const isOwner = computed(() => !!detail.value && detail.value.poster_id === authStore.userId);
@@ -132,22 +131,6 @@ async function reviewApplication(applicationId: string, action: 'approve' | 'rej
     await loadDetail();
   } catch (err: any) {
     ElMessage.error(err?.message ?? '操作失败');
-  }
-}
-
-async function submitComment() {
-  if (!commentContent.value.trim()) {
-    ElMessage.warning('评论内容不能为空');
-    return;
-  }
-  try {
-    await api.post(`/recruitment/${postId.value}/comments`, {
-      content: commentContent.value.trim(),
-    });
-    commentContent.value = '';
-    await loadDetail();
-  } catch (err: any) {
-    ElMessage.error(err?.message ?? '评论失败');
   }
 }
 
@@ -250,21 +233,13 @@ onMounted(async () => {
     </TCard>
 
     <TCard v-if="detail" padding="md" class="section-card">
-      <h2>评论区</h2>
-      <div class="comment-input" v-if="authStore.token">
-        <ElInput v-model="commentContent" type="textarea" :rows="3" maxlength="1000" placeholder="写下你的评论" />
-        <TButton type="primary" @click="submitComment">发表评论</TButton>
-      </div>
-      <div v-if="!detail.comments || detail.comments.length === 0" class="empty">暂无评论</div>
-      <div v-else class="comment-list">
-        <div v-for="c in detail.comments" :key="c.id" class="comment-item">
-          <div class="comment-head">
-            <strong>{{ c.user_nickname || c.user_id }}</strong>
-            <span>{{ formatDate(c.created_at) }}</span>
-          </div>
-          <div>{{ c.content }}</div>
-        </div>
-      </div>
+      <h2>讨论区</h2>
+      <FloorSystem
+        :postId="postId"
+        :postContent="detail.description || '（帖子描述）'"
+        :postAuthorNickname="detail.poster_nickname"
+        :postCreatedAt="detail.created_at"
+      />
     </TCard>
 
     <ElDialog v-model="showApplyDialog" title="申请加入" width="520px">
@@ -359,20 +334,6 @@ onMounted(async () => {
 .status.approved { color: #059669; }
 .status.rejected { color: #dc2626; }
 .app-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
-.comment-input { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
-.comment-list { display: flex; flex-direction: column; gap: var(--space-3); }
-.comment-item {
-  padding: var(--space-3);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
-}
-.comment-head {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
 .empty { color: var(--color-text-muted); padding: var(--space-3) 0; }
 .group-checks { display: flex; flex-direction: column; gap: var(--space-2); }
 .apply-hint { margin-bottom: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }

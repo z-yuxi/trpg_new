@@ -6,12 +6,15 @@ import SvgIcon from '../components/SvgIcon.vue';
 type MobileAssistantTab = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 type MobileView = 'chat' | 'scenes' | 'assistant' | 'gm';
 
-const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null; mobileView?: MobileView }>();
+const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null; mobileView?: MobileView; pendingMovesCount?: number; npcs?: Array<{ id: string; name: string }> }>();
 const emit = defineEmits<{
   'toggle-gm-console': [];
   'export-log': [];
   'mobile-assistant-open': [tab: MobileAssistantTab];
   'update:mobileView': [view: MobileView];
+  'advance-time': [minutes: number];
+  'play-as-npc': [npcId: string];
+  'open-approve': [];
 }>();
 const router = useRouter();
 
@@ -67,6 +70,30 @@ function handleBackToCampaigns() {
   if (!confirmed) return;
   router.push('/campaigns');
 }
+
+const showNpcMenu = ref(false);
+const showGmMenu = ref(false);
+
+function toggleNpcMenu() { showNpcMenu.value = !showNpcMenu.value; showGmMenu.value = false; }
+function toggleGmMenu() { showGmMenu.value = !showGmMenu.value; showNpcMenu.value = false; }
+
+const gmMenuItems = [
+  { key: 'scenes', label: '场景管理' },
+  { key: 'npcs', label: 'NPC 管理' },
+  { key: 'clues', label: '线索库' },
+  { key: 'timeline', label: '轨迹矩阵' },
+  { key: 'map', label: '网格地图' },
+];
+
+function openGmPage(module: string) {
+  showGmMenu.value = false;
+  if (props.campaignId) router.push(`/campaign/${props.campaignId}/gm/${module}`);
+}
+
+function playAsNpc(npcId: string) {
+  showNpcMenu.value = false;
+  emit('play-as-npc', npcId);
+}
 </script>
 
 <template>
@@ -87,10 +114,45 @@ function handleBackToCampaigns() {
         </span>
       </div>
       <div class="topbar-actions">
-        <button v-if="isGm" class="icon-btn gm-btn desktop-action" @click="emit('toggle-gm-console')">
-          <SvgIcon name="icon-settings" :size="18" />
-          <span>GM 控制台</span>
-        </button>
+        <!-- GM 快捷操作（仅 GM 可见） -->
+        <template v-if="isGm">
+          <button class="icon-btn quick-time desktop-action" @click="emit('advance-time', 30)" title="快进 30 分钟">+30m</button>
+          <button class="icon-btn quick-time desktop-action" @click="emit('advance-time', 60)" title="快进 1 小时">+1h</button>
+          <button class="icon-btn approve-btn desktop-action" @click="emit('open-approve')">
+            审批
+            <span v-if="pendingMovesCount" class="badge">{{ pendingMovesCount }}</span>
+          </button>
+          <!-- NPC 扮演下拉 -->
+          <div class="dropdown-wrap" v-if="npcs?.length">
+            <button class="icon-btn desktop-action" @click="toggleNpcMenu">
+              NPC
+              <SvgIcon name="icon-caret-down" :size="12" />
+            </button>
+            <ul v-if="showNpcMenu" class="dropdown-menu">
+              <li v-for="npc in npcs" :key="npc.id" @click="playAsNpc(npc.id)">{{ npc.name }}</li>
+            </ul>
+          </div>
+          <!-- GM 管理页面下拉 -->
+          <div class="dropdown-wrap">
+            <button class="icon-btn gm-btn desktop-action" @click="toggleGmMenu">
+              <SvgIcon name="icon-settings" :size="16" />
+              GM
+              <SvgIcon name="icon-caret-down" :size="12" />
+            </button>
+            <ul v-if="showGmMenu" class="dropdown-menu">
+              <li v-for="item in gmMenuItems" :key="item.key" @click="openGmPage(item.key)">{{ item.label }}</li>
+            </ul>
+          </div>
+          <!-- 移动端仅显示：+30m 和 审批 -->
+          <button class="icon-btn quick-time mobile-action" @click="emit('advance-time', 30)">+30m</button>
+          <button class="icon-btn approve-btn mobile-action" @click="emit('open-approve')">
+            审批
+            <span v-if="pendingMovesCount" class="badge">{{ pendingMovesCount }}</span>
+          </button>
+          <button class="icon-btn mobile-action" @click="handleQuickMore">
+            <SvgIcon name="icon-settings" :size="18" />
+          </button>
+        </template>
         <button v-if="isGm" class="icon-btn export-btn desktop-action" @click="emit('export-log')" aria-label="导出日志">
           <SvgIcon name="icon-scroll" :size="18" />
           <span>导出日志</span>
@@ -161,6 +223,7 @@ function handleBackToCampaigns() {
 .story-time { font-size: var(--text-xs); color: var(--color-text-muted); background: var(--color-card-bg); border: 1px solid var(--color-card-border); border-radius: var(--radius-sm); padding: 2px 8px; font-family: var(--font-mono); }
 .topbar-actions { display: flex; align-items: center; gap: var(--space-2); }
 .desktop-action { display: flex; }
+.mobile-action { display: none; }
 .icon-btn {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 10px; border: none; background: none; cursor: pointer;
@@ -170,6 +233,28 @@ function handleBackToCampaigns() {
 .icon-btn:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
 .gm-btn { background: #fef3c7; color: #92400e; }
 .export-btn { background: var(--surface-hover); color: var(--color-text-secondary); }
+.quick-time { font-weight: 600; font-family: var(--font-mono); }
+.approve-btn { position: relative; }
+.badge {
+  position: absolute; top: 2px; right: 2px;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  background: var(--color-error, #ef4444); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px;
+  text-align: center; padding: 0 3px;
+}
+.dropdown-wrap { position: relative; }
+.dropdown-menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 130px; background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border); border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,.15); z-index: 200;
+  padding: 4px 0; list-style: none; margin: 0;
+}
+.dropdown-menu li {
+  padding: 8px 16px; font-size: var(--text-sm); cursor: pointer;
+  color: var(--color-text-secondary);
+}
+.dropdown-menu li:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
 .back-btn { margin-right: 2px; }
 
 .room-body {
@@ -240,9 +325,14 @@ function handleBackToCampaigns() {
     display: none;
   }
 
+  .mobile-action {
+    display: flex;
+  }
+
   .icon-btn {
     padding: 8px;
-    min-width: 40px;
+    min-width: 44px;
+    min-height: 44px;
     justify-content: center;
   }
 
