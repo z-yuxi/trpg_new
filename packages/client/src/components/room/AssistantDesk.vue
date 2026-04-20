@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { ElDialog } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
+import ClueCard from '../ClueCard.vue';
 import GridMap from './GridMap.vue';
 import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
@@ -98,8 +99,43 @@ function formatStoryTime(storyTime: StoryTime | null | undefined): string {
   return `第${storyTime.day}日 ${String(storyTime.hour).padStart(2, '0')}:${String(storyTime.minute).padStart(2, '0')}`;
 }
 
+type NotebookClue = {
+  id: string;
+  title: string;
+  content: string;
+  theme: string;
+  created_at: string | Date;
+};
+
+const notebookClues = ref<NotebookClue[]>([]);
+const notebookLoading = ref(false);
+const clueSearch = ref('');
+const clueTheme = ref('');
+const expandedClueId = ref('');
+
+async function loadNotebookClues() {
+  notebookLoading.value = true;
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (res.ok) notebookClues.value = await res.json();
+  } catch {
+    notebookClues.value = [];
+  } finally {
+    notebookLoading.value = false;
+  }
+}
+
+const filteredNotebookClues = computed(() => notebookClues.value.filter((clue) => {
+  const q = clueSearch.value.trim().toLowerCase();
+  const matchedSearch = !q || clue.title.toLowerCase().includes(q) || clue.content.toLowerCase().includes(q);
+  const matchedTheme = !clueTheme.value || clue.theme === clueTheme.value;
+  return matchedSearch && matchedTheme;
+}));
+
 // ── tabs ──────────────────────────────────────────────────────────────
-type TabKey = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
+type TabKey = 'cmds' | 'clues' | 'map' | 'dice' | 'secret' | 'broadcast';
 const activeTab = ref<TabKey>('cmds');
 const currentScene = computed(() => props.scenes.find((scene) => scene.id === props.currentSceneId) ?? null);
 
@@ -111,6 +147,12 @@ watch(
   },
   { immediate: true },
 );
+
+watch(activeTab, (tab) => {
+  if (tab === 'clues' && notebookClues.value.length === 0) {
+    loadNotebookClues();
+  }
+});
 
 // ── commands ──────────────────────────────────────────────────────────
 function useCommand(cmd: { name: string }) {
@@ -218,6 +260,9 @@ function fmt(d: any): string {
       <button class="desk-tab" :class="{ active: activeTab === 'cmds' }" @click="activeTab = 'cmds'" title="指令">
         <SvgIcon name="icon-list" :size="16" />
       </button>
+      <button class="desk-tab" :class="{ active: activeTab === 'clues' }" @click="activeTab = 'clues'" title="线索笔记本">
+        <SvgIcon name="icon-scroll" :size="16" />
+      </button>
       <button class="desk-tab" :class="{ active: activeTab === 'map' }" @click="activeTab = 'map'" title="地图">
         <SvgIcon name="icon-grid" :size="16" />
       </button>
@@ -247,6 +292,42 @@ function fmt(d: any): string {
           <button class="cmd-use-btn" @click="useCommand(cmd)">使用</button>
         </div>
         <div v-if="commands.length === 0" class="empty-hint">暂无可用指令</div>
+      </div>
+
+      <div v-else-if="activeTab === 'clues'" class="clue-notebook">
+        <div class="filter-bar">
+          <input v-model="clueSearch" class="filter-input" placeholder="搜索线索标题或内容" />
+          <select v-model="clueTheme" class="filter-input">
+            <option value="">全部主题</option>
+            <option value="river">river</option>
+            <option value="blur">blur</option>
+            <option value="fragment">fragment</option>
+            <option value="wave">wave</option>
+            <option value="ancient">ancient</option>
+            <option value="blood">blood</option>
+            <option value="ash">ash</option>
+            <option value="cyber">cyber</option>
+          </select>
+        </div>
+        <div v-if="notebookLoading" class="empty-hint">线索加载中...</div>
+        <template v-else>
+          <div v-for="clue in filteredNotebookClues" :key="clue.id" class="notebook-item">
+            <button class="notebook-toggle" @click="expandedClueId = expandedClueId === clue.id ? '' : clue.id">
+              <span class="notebook-title">{{ clue.title }}</span>
+              <span class="notebook-theme">{{ clue.theme }}</span>
+            </button>
+            <div v-if="expandedClueId === clue.id" class="notebook-card">
+              <ClueCard
+                :clue-id="clue.id"
+                :title="clue.title"
+                :content="clue.content"
+                :theme="clue.theme"
+                :created-at="clue.created_at"
+              />
+            </div>
+          </div>
+          <div v-if="filteredNotebookClues.length === 0" class="empty-hint">暂无已获得线索</div>
+        </template>
       </div>
 
       <div v-else-if="activeTab === 'map'" class="map-tab">
@@ -378,6 +459,14 @@ function fmt(d: any): string {
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .cmd-use-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+/* 线索笔记本 */
+.clue-notebook { display: flex; flex-direction: column; gap: var(--space-2); }
+.notebook-item { border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-card); overflow: hidden; }
+.notebook-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); background: transparent; border: none; cursor: pointer; text-align: left; color: var(--text-primary); padding: var(--space-2) var(--space-3); }
+.notebook-title { font-size: var(--text-sm); font-weight: 600; }
+.notebook-theme { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; }
+.notebook-card { padding: var(--space-2); border-top: 1px solid var(--border-default); }
 
 .map-tab { min-height: 280px; }
 

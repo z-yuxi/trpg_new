@@ -34,6 +34,8 @@ class ForumService {
   async listThreads(params: {
     board: ForumBoard;
     sort?: ThreadSort;
+    keyword?: string;
+    days?: number;
     page?: number;
     limit?: number;
   }): Promise<{ data: ForumThread[]; total: number }> {
@@ -46,17 +48,39 @@ class ForumService {
         .where('t.board', board)
         .select(
           't.id', 't.board', 't.author_id', 'u.nickname as author_nickname',
-          't.title', 't.view_count', 't.reply_count',
+          't.title', 't.content', 't.view_count', 't.reply_count',
           't.is_pinned', 't.is_locked', 't.last_reply_at', 't.created_at',
         );
 
     let q = base();
+    if (params.keyword) {
+      const kw = `%${params.keyword}%`;
+      q = q.where((builder) => {
+        builder.where('t.title', 'like', kw).orWhere('t.content', 'like', kw);
+      });
+    }
+    if (params.days && Number.isFinite(params.days) && params.days > 0) {
+      const since = new Date(Date.now() - params.days * 24 * 60 * 60 * 1000);
+      q = q.where('t.created_at', '>=', since);
+    }
     if (sort === 'newest') q = q.orderBy('t.is_pinned', 'desc').orderBy('t.created_at', 'desc');
     else if (sort === 'hottest') q = q.orderBy('t.is_pinned', 'desc').orderBy('t.reply_count', 'desc');
     else q = q.orderBy('t.is_pinned', 'desc').orderBy('t.last_reply_at', 'desc');
 
+    let countQuery = db('forum_threads').where({ board });
+    if (params.keyword) {
+      const kw = `%${params.keyword}%`;
+      countQuery = countQuery.where((builder) => {
+        builder.where('title', 'like', kw).orWhere('content', 'like', kw);
+      });
+    }
+    if (params.days && Number.isFinite(params.days) && params.days > 0) {
+      const since = new Date(Date.now() - params.days * 24 * 60 * 60 * 1000);
+      countQuery = countQuery.where('created_at', '>=', since);
+    }
+
     const [total, rows] = await Promise.all([
-      db('forum_threads').where({ board }).count('id as count').first().then((r) =>
+      countQuery.count('id as count').first().then((r) =>
         Number((r as Record<string, unknown>)?.['count'] ?? 0)
       ),
       q.limit(Math.min(limit, 50)).offset(offset),

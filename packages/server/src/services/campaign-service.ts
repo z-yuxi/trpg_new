@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
-import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, ScheduledMove, StoryTime } from '@trpg/shared';
+import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, GridOverlay, ScheduledMove, StoryTime } from '@trpg/shared';
 
 function rowToCampaign(row: Record<string, unknown>): Campaign {
   return {
@@ -51,6 +51,9 @@ function rowToGridMap(row: Record<string, unknown>): GridMap {
     tokens: typeof row['tokens'] === 'string'
       ? JSON.parse(row['tokens'] as string)
       : (row['tokens'] as GridToken[]),
+    overlays: typeof row['overlays'] === 'string'
+      ? JSON.parse(row['overlays'] as string)
+      : (Array.isArray(row['overlays']) ? row['overlays'] : []) as GridOverlay[],
     updated_at: row['updated_at'] as Date,
   };
 }
@@ -174,6 +177,7 @@ export class CampaignService {
       cell_size: 48,
       background_image_url: null,
       tokens: JSON.stringify([]),
+      overlays: JSON.stringify([]),
     });
 
     const created = await db('campaign_grid_maps').where({ id }).first();
@@ -183,7 +187,7 @@ export class CampaignService {
   async updateGridMap(
     campaign_id: string,
     scene_id: string,
-    updates: Partial<Pick<GridMap, 'cols' | 'rows' | 'cell_size' | 'background_image_url' | 'tokens'>>
+    updates: Partial<Pick<GridMap, 'cols' | 'rows' | 'cell_size' | 'background_image_url' | 'tokens' | 'overlays'>>
   ): Promise<GridMap> {
     const current = await this.getGridMap(campaign_id, scene_id);
 
@@ -195,6 +199,7 @@ export class CampaignService {
         cell_size: updates.cell_size ?? current.cell_size,
         background_image_url: updates.background_image_url ?? current.background_image_url,
         tokens: JSON.stringify(updates.tokens ?? current.tokens),
+        overlays: JSON.stringify(updates.overlays ?? current.overlays),
         updated_at: db.fn.now(),
       });
 

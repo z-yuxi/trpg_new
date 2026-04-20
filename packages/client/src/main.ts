@@ -2,6 +2,8 @@ import './styles/tokens.css';
 import './styles/theme-day.css';
 import './styles/theme-night.css';
 import './styles/text-art.css';
+import './styles/clue-themes.css';
+import './styles/responsive.css';
 import './styles/mobile.css';
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
   ElTabs,
   ElTabPane,
@@ -13,19 +13,28 @@ import {
   ElMessage,
   ElCheckboxGroup,
   ElCheckbox,
+  ElSwitch,
 } from 'element-plus';
 import RecruitmentBoard from './RecruitmentBoard.vue';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
+import {
+  createRecruitmentMetadata,
+  hasRecruitmentValue,
+  resolveRecruitmentFields,
+  type RecruitmentField,
+} from '../../utils/recruitment-fields';
 
 interface RulesetOption {
   id: string;
   name: string;
+  character_card_schema?: unknown;
+  recruitment_fields?: unknown;
 }
 
 const authStore = useAuthStore();
-const activeTab = ref<'gm_recruit' | 'player_seek'>('gm_recruit');
+const activeTab = ref<'gm_recruit' | 'player_seek' | 'mine'>('gm_recruit');
 const boardVersion = ref(1);
 
 const showPostDialog = ref(false);
@@ -43,16 +52,25 @@ const postForm = ref({
   schedule_text: '',
   description: '',
   tags: [] as string[],
+  metadata: {} as Record<string, unknown>,
 });
 
 const titleLeft = computed(() => 50 - postForm.value.title.length);
 const descLeft = computed(() => 2000 - postForm.value.description.length);
+const currentRuleset = computed(() => rulesets.value.find((item) => item.id === postForm.value.ruleset_id) ?? null);
+const currentRecruitmentFields = computed<RecruitmentField[]>(() => resolveRecruitmentFields(currentRuleset.value));
 
 async function loadRulesets() {
   try {
-    const result = await api.get<Array<{ id: string; name: string }>>('/rulesets');
-    if (Array.isArray(result) && result.length > 0) {
-      rulesets.value = result.map((item) => ({ id: item.id, name: item.name }));
+    const result = await api.get<{ data?: RulesetOption[] } | RulesetOption[]>('/rulesets');
+    const items = Array.isArray(result) ? result : result.data ?? [];
+    if (Array.isArray(items) && items.length > 0) {
+      rulesets.value = items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        character_card_schema: item.character_card_schema,
+        recruitment_fields: item.recruitment_fields,
+      }));
     }
   } catch {
     // ignore
@@ -75,7 +93,23 @@ function resetPostForm() {
     schedule_text: '',
     description: '',
     tags: [],
+    metadata: {},
   };
+}
+
+function syncRecruitmentMetadata(forceReset = false) {
+  const fields = currentRecruitmentFields.value;
+  if (fields.length === 0) {
+    postForm.value.metadata = {};
+    return;
+  }
+
+  const defaults = createRecruitmentMetadata(fields);
+  postForm.value.metadata = fields.reduce<Record<string, unknown>>((result, field) => {
+    const currentValue = postForm.value.metadata[field.name];
+    result[field.name] = !forceReset && currentValue !== undefined ? currentValue : defaults[field.name];
+    return result;
+  }, {});
 }
 
 function openPostDialog() {
@@ -111,6 +145,9 @@ async function submitPost() {
       schedule_text: postForm.value.schedule_text.trim() || null,
       description: postForm.value.description.trim() || null,
       tags: postForm.value.tags,
+      metadata: Object.fromEntries(
+        Object.entries(postForm.value.metadata).filter(([, value]) => hasRecruitmentValue(value))
+      ),
     });
     ElMessage.success('发布成功');
     showPostDialog.value = false;
@@ -121,6 +158,14 @@ async function submitPost() {
     submitLoading.value = false;
   }
 }
+
+watch(() => postForm.value.ruleset_id, () => {
+  syncRecruitmentMetadata(true);
+});
+
+watch(currentRecruitmentFields, () => {
+  syncRecruitmentMetadata(false);
+});
 
 onMounted(loadRulesets);
 </script>
@@ -134,10 +179,28 @@ onMounted(loadRulesets);
 
     <ElTabs v-model="activeTab">
       <ElTabPane label="GM 招玩家" name="gm_recruit">
-        <RecruitmentBoard :key="`gm-${boardVersion}`" type="gm_recruit" :rulesets="rulesets" />
+        <RecruitmentBoard :key="`gm-${boardVersion}`" fixed-type="gm_recruit" :rulesets="rulesets" />
       </ElTabPane>
       <ElTabPane label="玩家求组" name="player_seek">
-        <RecruitmentBoard :key="`player-${boardVersion}`" type="player_seek" :rulesets="rulesets" />
+        <RecruitmentBoard :key="`player-${boardVersion}`" fixed-type="player_seek" :rulesets="rulesets" />
+      </ElTabPane>
+      <ElTabPane label="我的" name="mine">
+        <div class="mine-grid">
+          <div class="mine-section">
+            <div class="mine-head">
+              <h3>我发布的招募</h3>
+              <span>集中查看自己开的帖</span>
+            </div>
+            <RecruitmentBoard :key="`mine-posted-${boardVersion}`" mine="posted" :rulesets="rulesets" />
+          </div>
+          <div class="mine-section">
+            <div class="mine-head">
+              <h3>我的申请</h3>
+              <span>跟踪 pending / approved / rejected 状态</span>
+            </div>
+            <RecruitmentBoard :key="`mine-applied-${boardVersion}`" mine="applied" :rulesets="rulesets" />
+          </div>
+        </div>
       </ElTabPane>
     </ElTabs>
 
@@ -185,6 +248,65 @@ onMounted(loadRulesets);
             <ElCheckbox v-for="tag in tagOptions" :key="tag" :label="tag">{{ tag }}</ElCheckbox>
           </ElCheckboxGroup>
         </ElFormItem>
+
+        <div v-if="currentRecruitmentFields.length" class="field-panel">
+          <div class="field-panel__title">规则集附加要求</div>
+          <div class="field-panel__desc">这些字段会写入招募帖 metadata，并在详情页中展示。</div>
+          <div class="field-grid">
+            <ElFormItem v-for="field in currentRecruitmentFields" :key="field.name" :label="field.label">
+              <ElInput
+                v-if="field.type === 'text'"
+                v-model="postForm.metadata[field.name]"
+                :placeholder="field.placeholder || `请输入${field.label}`"
+              />
+              <ElInputNumber
+                v-else-if="field.type === 'number'"
+                v-model="postForm.metadata[field.name]"
+                :min="0"
+                controls-position="right"
+                style="width:100%"
+              />
+              <ElSwitch
+                v-else-if="field.type === 'boolean'"
+                v-model="postForm.metadata[field.name]"
+                inline-prompt
+                active-text="是"
+                inactive-text="否"
+              />
+              <ElSelect
+                v-else-if="field.type === 'select'"
+                v-model="postForm.metadata[field.name]"
+                :multiple="field.multiple"
+                clearable
+                style="width:100%"
+              >
+                <ElOption
+                  v-for="option in field.options || []"
+                  :key="typeof option === 'string' ? option : option.value"
+                  :label="typeof option === 'string' ? option : option.label"
+                  :value="typeof option === 'string' ? option : option.value"
+                />
+              </ElSelect>
+              <div v-else-if="field.type === 'number_range'" class="range-row">
+                <ElInputNumber
+                  v-model="(postForm.metadata[field.name] as Record<string, number | null>).min"
+                  :min="0"
+                  controls-position="right"
+                  :placeholder="field.minLabel || '最低'"
+                  style="width:100%"
+                />
+                <span class="range-split">-</span>
+                <ElInputNumber
+                  v-model="(postForm.metadata[field.name] as Record<string, number | null>).max"
+                  :min="0"
+                  controls-position="right"
+                  :placeholder="field.maxLabel || '最高'"
+                  style="width:100%"
+                />
+              </div>
+            </ElFormItem>
+          </div>
+        </div>
       </ElForm>
 
       <template #footer>
@@ -208,6 +330,36 @@ onMounted(loadRulesets);
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
 }
+.mine-grid { display: flex; flex-direction: column; gap: var(--space-4); }
+.mine-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-secondary) 88%, transparent);
+}
+.mine-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.mine-head h3 { margin: 0; font-size: var(--text-lg); }
+.mine-head span { color: var(--text-muted); font-size: var(--text-sm); }
 .hint { margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); }
-@media (max-width: 640px) { .grid-row { grid-template-columns: 1fr; } }
+.field-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-primary, #2563eb) 6%, var(--color-bg-secondary));
+}
+.field-panel__title { font-size: var(--text-base); font-weight: 700; color: var(--text-primary); }
+.field-panel__desc { color: var(--text-muted); font-size: var(--text-sm); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.range-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--space-2); align-items: center; }
+.range-split { color: var(--text-muted); }
+@media (max-width: 640px) {
+  .grid-row,
+  .field-grid { grid-template-columns: 1fr; }
+  .mine-head { flex-direction: column; align-items: flex-start; }
+}
 </style>

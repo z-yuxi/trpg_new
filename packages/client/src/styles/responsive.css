@@ -1,0 +1,50 @@
+:root {
+  --breakpoint-mobile: 640px;
+  --breakpoint-tablet: 1024px;
+  --page-padding: 24px;
+  --content-max-width: 1200px;
+  --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body,
+#app {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.responsive-shell {
+  width: min(100%, var(--content-max-width));
+  margin: 0 auto;
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --page-padding: 20px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --page-padding: 16px;
+  }
+
+  .mobile-stack {
+    grid-template-columns: 1fr !important;
+    flex-direction: column !important;
+  }
+
+  .mobile-scroll-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-scroll-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-single-column {
+    grid-template-columns: 1fr !important;
+  }
+}

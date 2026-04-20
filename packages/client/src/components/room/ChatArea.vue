@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue';
+import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue';
 import { v4 as uuidv4 } from 'uuid';
 import MessageItem from './MessageItem.vue';
 import ChatInput from './ChatInput.vue';
@@ -21,10 +21,51 @@ const props = defineProps<{
 const messageStore = useMessageStore();
 const authStore = useAuthStore();
 const listRef = ref<HTMLElement>();
+const scrollTop = ref(0);
+const viewportHeight = ref(0);
+const estimatedItemSize = 88;
+const overscan = 10;
+
+const useVirtualList = computed(() => messageStore.currentMessages.length > 200);
+const startIndex = computed(() => {
+  if (!useVirtualList.value) return 0;
+  return Math.max(0, Math.floor(scrollTop.value / estimatedItemSize) - overscan);
+});
+const endIndex = computed(() => {
+  if (!useVirtualList.value) return messageStore.currentMessages.length;
+  const visibleCount = Math.ceil(viewportHeight.value / estimatedItemSize) + overscan * 2;
+  return Math.min(messageStore.currentMessages.length, startIndex.value + visibleCount);
+});
+const visibleMessages = computed(() => {
+  if (!useVirtualList.value) return messageStore.currentMessages;
+  return messageStore.currentMessages.slice(startIndex.value, endIndex.value);
+});
+const topSpacer = computed(() => useVirtualList.value ? startIndex.value * estimatedItemSize : 0);
+const bottomSpacer = computed(() => useVirtualList.value
+  ? Math.max(0, (messageStore.currentMessages.length - endIndex.value) * estimatedItemSize)
+  : 0);
+
+function syncViewportHeight() {
+  viewportHeight.value = listRef.value?.clientHeight ?? 0;
+}
+
+function scrollToBottom(force = false) {
+  if (!listRef.value) return;
+  const nearBottom = listRef.value.scrollHeight - listRef.value.scrollTop - listRef.value.clientHeight < 120;
+  if (force || nearBottom) {
+    listRef.value.scrollTop = listRef.value.scrollHeight;
+  }
+}
+
+function handleScroll() {
+  scrollTop.value = listRef.value?.scrollTop ?? 0;
+}
 
 watch(() => messageStore.currentMessages.length, async () => {
+  const shouldAutoScroll = !listRef.value || listRef.value.scrollHeight - listRef.value.scrollTop - listRef.value.clientHeight < 120;
   await nextTick();
-  if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight;
+  syncViewportHeight();
+  if (shouldAutoScroll) scrollToBottom(true);
 });
 
 function handleSend(content: string, messageType: string, senderIdentity?: string) {
@@ -73,23 +114,33 @@ function handleRetry(tempId: string) {
 onMounted(() => {
   socketClient.onNewMessage((msg) => messageStore.addServerMessage(msg));
   socketClient.onMissedMessages((data) => messageStore.addMissedMessages(data.messages));
-  if (listRef.value) listRef.value.scrollTop = listRef.value.scrollHeight;
+  syncViewportHeight();
+  scrollToBottom(true);
+  window.addEventListener('resize', syncViewportHeight);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', syncViewportHeight);
 });
 </script>
 
 <template>
   <div class="chat-area">
-    <div ref="listRef" class="message-list">
+    <div ref="listRef" class="message-list" @scroll="handleScroll">
       <div v-if="messageStore.currentMessages.length === 0" class="empty-chat">
         <p>暂无消息，开始对话吧</p>
       </div>
-      <MessageItem
-        v-for="msg in messageStore.currentMessages"
-        :key="msg.id || msg._tempId"
-        :message="msg"
-        :is-own="msg.sender_user_id === authStore.userId"
-        @retry="handleRetry"
-      />
+      <template v-else>
+        <div v-if="topSpacer" :style="{ height: `${topSpacer}px` }" aria-hidden="true"></div>
+        <MessageItem
+          v-for="msg in visibleMessages"
+          :key="msg.id || msg._tempId"
+          :message="msg"
+          :is-own="msg.sender_user_id === authStore.userId"
+          @retry="handleRetry"
+        />
+        <div v-if="bottomSpacer" :style="{ height: `${bottomSpacer}px` }" aria-hidden="true"></div>
+      </template>
     </div>
     <ChatInput
       :prefill-text="props.prefillText"
@@ -108,6 +159,12 @@ onMounted(() => {
 
 <style scoped>
 .chat-area { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.message-list { flex: 1; overflow-y: auto; padding: var(--space-4); }
+.message-list { flex: 1; overflow-y: auto; padding: var(--space-4); contain: layout paint; }
 .empty-chat { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-8); }
+
+@media (max-width: 768px) {
+  .message-list {
+    padding: var(--space-3);
+  }
+}
 </style>

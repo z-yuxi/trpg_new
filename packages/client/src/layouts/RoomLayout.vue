@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
 
 type MobileAssistantTab = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
+type MobileView = 'chat' | 'scenes' | 'assistant' | 'gm';
 
-const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null }>();
+const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null; mobileView?: MobileView }>();
 const emit = defineEmits<{
   'toggle-gm-console': [];
   'export-log': [];
   'mobile-assistant-open': [tab: MobileAssistantTab];
+  'update:mobileView': [view: MobileView];
 }>();
 const router = useRouter();
 
 const leftVisible = ref(true);
 const rightVisible = ref(true);
 const isMobile = ref(false);
-const mobilePanel = ref<'left' | 'right' | null>(null);
+const currentMobileView = computed<MobileView>(() => props.mobileView ?? 'chat');
 
 function updateMobile() { isMobile.value = window.innerWidth < 768; }
 
@@ -33,7 +35,7 @@ function copyCode() {
 
 function toggleLeftPanel() {
   if (isMobile.value) {
-    mobilePanel.value = mobilePanel.value === 'left' ? null : 'left';
+    emit('update:mobileView', 'scenes');
     return;
   }
   leftVisible.value = !leftVisible.value;
@@ -41,7 +43,7 @@ function toggleLeftPanel() {
 
 function toggleRightPanel() {
   if (isMobile.value) {
-    mobilePanel.value = mobilePanel.value === 'right' ? null : 'right';
+    emit('update:mobileView', 'assistant');
     return;
   }
   rightVisible.value = !rightVisible.value;
@@ -49,15 +51,15 @@ function toggleRightPanel() {
 
 function openAssistantTab(tab: MobileAssistantTab) {
   emit('mobile-assistant-open', tab);
-  mobilePanel.value = 'right';
+  emit('update:mobileView', 'assistant');
 }
 
 function handleQuickMore() {
   if (props.isGm) {
-    emit('toggle-gm-console');
+    emit('update:mobileView', 'gm');
     return;
   }
-  mobilePanel.value = 'left';
+  emit('update:mobileView', 'scenes');
 }
 
 function handleBackToCampaigns() {
@@ -100,7 +102,7 @@ function handleBackToCampaigns() {
     </header>
 
     <!-- GM 控制台面板（下拉，推挤聊天区，仅GM可见） -->
-    <div class="gm-console-wrap">
+    <div v-if="!isMobile" class="gm-console-wrap">
       <slot name="gm-console" />
     </div>
 
@@ -111,9 +113,11 @@ function handleBackToCampaigns() {
         <slot name="left-sidebar" />
       </aside>
 
-      <!-- 中央聊天区 -->
       <main class="room-main">
-        <slot name="chat-area" />
+        <slot v-if="!isMobile || currentMobileView === 'chat'" name="chat-area" />
+        <slot v-else-if="currentMobileView === 'scenes'" name="left-sidebar" />
+        <slot v-else-if="currentMobileView === 'assistant'" name="right-desk" />
+        <slot v-else-if="currentMobileView === 'gm' && isGm" name="gm-console" />
       </main>
 
       <!-- 右侧助手台 -->
@@ -122,22 +126,12 @@ function handleBackToCampaigns() {
       </aside>
     </div>
 
-    <div v-if="isMobile && mobilePanel" class="mobile-overlay" @click="mobilePanel = null" />
-
-    <aside v-if="isMobile" class="mobile-drawer left-drawer" :class="{ open: mobilePanel === 'left' }">
-      <slot name="left-sidebar" />
-    </aside>
-
-    <aside v-if="isMobile" class="mobile-drawer right-drawer" :class="{ open: mobilePanel === 'right' }">
-      <slot name="right-desk" />
-    </aside>
-
     <!-- 移动端底部快捷栏 -->
     <div v-if="isMobile" class="mobile-quick-bar">
-      <button class="quick-btn" @click="openAssistantTab('dice')"><SvgIcon name="icon-dice" :size="20" /><span>骰子</span></button>
-      <button class="quick-btn" @click="openAssistantTab('cmds')"><SvgIcon name="icon-scroll" :size="20" /><span>角色卡</span></button>
-      <button class="quick-btn" @click="openAssistantTab('cmds')"><SvgIcon name="icon-list" :size="20" /><span>命令</span></button>
-      <button class="quick-btn" @click="handleQuickMore"><SvgIcon name="icon-settings" :size="20" /><span>更多</span></button>
+      <button class="quick-btn" :class="{ active: currentMobileView === 'chat' }" @click="emit('update:mobileView', 'chat')"><SvgIcon name="icon-send" :size="20" /><span>聊天</span></button>
+      <button class="quick-btn" :class="{ active: currentMobileView === 'scenes' }" @click="emit('update:mobileView', 'scenes')"><SvgIcon name="icon-list" :size="20" /><span>场景</span></button>
+      <button class="quick-btn" :class="{ active: currentMobileView === 'assistant' }" @click="openAssistantTab('cmds')"><SvgIcon name="icon-scroll" :size="20" /><span>助理台</span></button>
+      <button v-if="isGm" class="quick-btn" :class="{ active: currentMobileView === 'gm' }" @click="handleQuickMore"><SvgIcon name="icon-settings" :size="20" /><span>GM</span></button>
     </div>
   </div>
 </template>
@@ -194,35 +188,6 @@ function handleBackToCampaigns() {
 .room-sidebar.right { width: 320px; border-right: none; border-left: 1px solid var(--color-card-border); }
 .room-sidebar.hidden { width: 0; opacity: 0; overflow: hidden; }
 .room-main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-.mobile-overlay {
-  position: fixed;
-  inset: var(--navbar-height) 0 calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px)) 0;
-  background: rgba(15, 23, 42, 0.42);
-  z-index: 180;
-}
-.mobile-drawer {
-  position: fixed;
-  top: var(--navbar-height);
-  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
-  width: var(--mobile-drawer-width);
-  max-width: 100%;
-  background: var(--color-card-bg);
-  z-index: 190;
-  box-shadow: var(--shadow-xl);
-  transition: transform var(--transition-normal);
-  overflow: hidden;
-}
-.mobile-drawer.left-drawer {
-  left: 0;
-  transform: translateX(-100%);
-}
-.mobile-drawer.right-drawer {
-  right: 0;
-  transform: translateX(100%);
-}
-.mobile-drawer.open {
-  transform: translateX(0);
-}
 
 /* 移动端 */
 .mobile .room-sidebar { display: none; }
@@ -241,7 +206,8 @@ function handleBackToCampaigns() {
   gap: 2px; border: none; background: none; cursor: pointer;
   color: var(--color-text-secondary); font-size: var(--text-xs);
 }
-.quick-btn:hover { color: var(--color-accent); }
+.quick-btn:hover,
+.quick-btn.active { color: var(--color-accent); }
 .gm-console-wrap { flex-shrink: 0; overflow: hidden; }
 
 @media (max-width: 768px) {
@@ -283,6 +249,10 @@ function handleBackToCampaigns() {
   .gm-console-wrap {
     max-height: 56vh;
     overflow-y: auto;
+  }
+
+  .room-main {
+    background: var(--color-card-bg);
   }
 }
 </style>

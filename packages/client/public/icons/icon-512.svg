@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title>TRPG Platform Icon</title>
+  <desc>Stylized TRPG platform icon</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#102542"/>
+      <stop offset="100%" stop-color="#1f6feb"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <path d="M120 152h272v58H264v154h-60V210H120z" fill="#f8fafc"/>
+  <circle cx="358" cy="328" r="52" fill="#f59e0b"/>
+  <path d="M350 298h16v22h22v16h-22v22h-16v-22h-22v-16h22z" fill="#102542"/>
+</svg>

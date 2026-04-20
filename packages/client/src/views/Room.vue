@@ -23,6 +23,7 @@ const messageStore = useMessageStore();
 
 const campaignId = route.params.id as string;
 const showGMConsole = ref(false);
+const mobileView = ref<'chat' | 'scenes' | 'assistant' | 'gm'>('chat');
 
 const scenes = ref<any[]>([]);
 const npcs = ref<any[]>([]);
@@ -398,15 +399,17 @@ onUnmounted(() => {
       :campaign-name="campaignStore.currentCampaign?.name ?? '加载中...'"
       :room-code="campaignStore.currentCampaign?.room_code"
       :is-gm="isGm"
+      :mobile-view="mobileView"
       :global-time="globalTime"
       @toggle-gm-console="showGMConsole = !showGMConsole"
       @export-log="router.push(`/room/${campaignId}/export`)"
       @mobile-assistant-open="handleMobileAssistantOpen"
+      @update:mobile-view="mobileView = $event"
     >
       <template #gm-console>
         <transition name="gm-slide">
           <GMConsole
-            v-if="isGm && showGMConsole"
+            v-if="isGm && (showGMConsole || mobileView === 'gm')"
             :campaign-id="campaignId"
             :global-story-time="globalTime"
             :scenes="scenes"

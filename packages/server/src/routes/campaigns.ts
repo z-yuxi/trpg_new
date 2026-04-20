@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
-import type { GridToken } from '@trpg/shared';
+import type { GridToken, StoryTime } from '@trpg/shared';
 import { authMiddleware } from '../middleware/auth';
 import { campaignService, scheduledMoveService } from '../services/campaign-service';
 import { clueService } from '../services/clue-service';
@@ -19,6 +19,30 @@ const createSchema = z.object({
   ruleset_id: z.string().min(1),
   module_id: z.string().optional(),
 });
+
+function parseStoryTime(value: unknown): StoryTime | null {
+  try {
+    if (!value) return null;
+    if (typeof value === 'string') return JSON.parse(value) as StoryTime;
+    if (typeof value === 'object') return value as StoryTime;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function toStoryMinutes(time: StoryTime): number {
+  return (time.day - 1) * 24 * 60 + time.hour * 60 + time.minute;
+}
+
+function addStoryMinutes(base: StoryTime, deltaMinutes: number): StoryTime {
+  let total = toStoryMinutes(base) + deltaMinutes;
+  if (total < 0) total = 0;
+  const day = Math.floor(total / (24 * 60)) + 1;
+  const hour = Math.floor((total % (24 * 60)) / 60);
+  const minute = total % 60;
+  return { day, hour, minute };
+}
 
 // POST /api/campaigns
 router.post('/', async (req, res) => {
@@ -252,25 +276,141 @@ router.get('/:id/scenes/:sceneId/participants', async (req, res) => {
   }
 });
 
-// POST /api/campaigns/:id/scenes/connections
-router.post('/:id/scenes/connections', async (req, res) => {
-  try {
-    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
-    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scene connections' }); return; }
+async function listSceneConnections(campaignId: string) {
+  return db('scene_connections as sc')
+    .leftJoin('scenes as fs', 'fs.id', 'sc.from_scene_id')
+    .leftJoin('scenes as ts', 'ts.id', 'sc.to_scene_id')
+    .where('sc.campaign_id', campaignId)
+    .select(
+      'sc.*',
+      'fs.name as from_scene_name',
+      'ts.name as to_scene_name',
+    )
+    .orderBy('sc.created_at', 'asc');
+}
+
+async function ensureCampaignGm(campaignId: string, userId: string) {
+  const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+  if (!campaign) return { ok: false as const, status: 404, error: 'Campaign not found' };
+  if (campaign.gm_user_id !== userId) return { ok: false as const, status: 403, error: 'Only GM can manage scene connections' };
+  return { ok: true as const };
+}
+
+async function upsertSceneConnection(req: any, res: any, isCreate: boolean) {
+  const auth = await ensureCampaignGm(req.params.id, req.user!.id);
+  if (!auth.ok) {
+    res.status(auth.status).json({ error: auth.error });
+    return;
+  }
+
+  const fromSceneId = req.body.from_scene_id;
+  const toSceneId = req.body.to_scene_id;
+  if (!fromSceneId || !toSceneId) {
+    res.status(400).json({ error: 'from_scene_id and to_scene_id are required' });
+    return;
+  }
+
+  const walkDuration = Number(req.body.walk_duration);
+  if (!Number.isFinite(walkDuration) || walkDuration <= 0) {
+    res.status(400).json({ error: 'walk_duration must be a positive number' });
+    return;
+  }
+
+  const payload = {
+    from_scene_id: fromSceneId,
+    to_scene_id: toSceneId,
+    walk_duration: walkDuration,
+    bike_duration: req.body.bike_duration == null ? null : Number(req.body.bike_duration),
+    drive_duration: req.body.drive_duration == null ? null : Number(req.body.drive_duration),
+    is_bidirectional: req.body.is_bidirectional ?? true,
+  };
+
+  if (isCreate) {
     const id = generateId();
-    await db('scene_connections').insert({ id, campaign_id: req.params.id, created_by: req.user!.id, ...req.body });
+    await db('scene_connections').insert({
+      id,
+      campaign_id: req.params.id,
+      created_by: req.user!.id,
+      ...payload,
+    });
     const conn = await db('scene_connections').where({ id }).first();
     res.status(201).json(conn);
+    return;
+  }
+
+  const updated = await db('scene_connections')
+    .where({ id: req.params.connId, campaign_id: req.params.id })
+    .update(payload);
+  if (!updated) {
+    res.status(404).json({ error: 'Connection not found' });
+    return;
+  }
+  const conn = await db('scene_connections').where({ id: req.params.connId }).first();
+  res.json(conn);
+}
+
+// POST /api/campaigns/:id/connections
+router.post('/:id/connections', async (req, res) => {
+  try {
+    await upsertSceneConnection(req, res, true);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Create failed' });
   }
 });
 
-// GET /api/campaigns/:id/scenes/connections
+// PUT /api/campaigns/:id/connections/:connId
+router.put('/:id/connections/:connId', async (req, res) => {
+  try {
+    await upsertSceneConnection(req, res, false);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// DELETE /api/campaigns/:id/connections/:connId
+router.delete('/:id/connections/:connId', async (req, res) => {
+  try {
+    const auth = await ensureCampaignGm(req.params.id, req.user!.id);
+    if (!auth.ok) {
+      res.status(auth.status).json({ error: auth.error });
+      return;
+    }
+
+    const deleted = await db('scene_connections')
+      .where({ id: req.params.connId, campaign_id: req.params.id })
+      .delete();
+    if (!deleted) {
+      res.status(404).json({ error: 'Connection not found' });
+      return;
+    }
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  }
+});
+
+// GET /api/campaigns/:id/connections
+router.get('/:id/connections', async (req, res) => {
+  try {
+    const connections = await listSceneConnections(req.params.id);
+    res.json(connections);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// 兼容旧路径
+router.post('/:id/scenes/connections', async (req, res) => {
+  try {
+    await upsertSceneConnection(req, res, true);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  }
+});
+
 router.get('/:id/scenes/connections', async (req, res) => {
   try {
-    const connections = await db('scene_connections').where({ campaign_id: req.params.id });
+    const connections = await listSceneConnections(req.params.id);
     res.json(connections);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
@@ -431,6 +571,86 @@ router.get('/:id/position-history', async (req, res) => {
   }
 });
 
+// GET /api/campaigns/:id/trajectory-matrix
+router.get('/:id/trajectory-matrix', async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+
+    const [campaign, characters, historyRows] = await Promise.all([
+      db('campaigns').where({ id: campaignId }).select('global_story_time').first(),
+      db('character_scene_states as css')
+        .join('character_sheets as cs', 'cs.id', 'css.character_id')
+        .where('css.campaign_id', campaignId)
+        .select('cs.id', 'cs.name')
+        .orderBy('cs.created_at', 'asc'),
+      db('position_history as ph')
+        .leftJoin('scenes as s', 's.id', 'ph.scene_id')
+        .where('ph.campaign_id', campaignId)
+        .select('ph.character_id', 'ph.scene_id', 'ph.story_time_entered', 'ph.story_time_left', 'ph.move_type', 's.name as scene_name')
+        .orderBy('ph.created_at', 'asc'),
+    ]);
+
+    const matrix: Record<string, Array<{
+      scene_id: string;
+      scene_name: string;
+      from_time: StoryTime;
+      to_time: StoryTime | null;
+      move_type: string;
+    }>> = {};
+
+    for (const char of characters as Array<{ id: string }>) {
+      matrix[char.id] = [];
+    }
+
+    let minMinutes = Number.POSITIVE_INFINITY;
+    let maxMinutes = Number.NEGATIVE_INFINITY;
+
+    for (const row of historyRows as Array<Record<string, unknown>>) {
+      const fromTime = parseStoryTime(row['story_time_entered']);
+      const toTime = parseStoryTime(row['story_time_left']);
+      if (!fromTime) continue;
+
+      const fromMin = toStoryMinutes(fromTime);
+      const toMin = toTime ? toStoryMinutes(toTime) : fromMin + 60;
+      minMinutes = Math.min(minMinutes, fromMin);
+      maxMinutes = Math.max(maxMinutes, toMin);
+
+      const charId = String(row['character_id']);
+      if (!matrix[charId]) matrix[charId] = [];
+      matrix[charId].push({
+        scene_id: String(row['scene_id']),
+        scene_name: String(row['scene_name'] ?? row['scene_id']),
+        from_time: fromTime,
+        to_time: toTime,
+        move_type: String(row['move_type'] ?? 'scheduled'),
+      });
+    }
+
+    const fallbackNow = parseStoryTime(campaign?.global_story_time) ?? { day: 1, hour: 8, minute: 0 };
+    if (!Number.isFinite(minMinutes)) {
+      minMinutes = toStoryMinutes(fallbackNow);
+      maxMinutes = minMinutes;
+    }
+
+    const axisStart = Math.floor(minMinutes / 60) * 60;
+    const axisEnd = Math.ceil(maxMinutes / 60) * 60;
+    const time_axis: Array<{ day: number; hour: number }> = [];
+    for (let m = axisStart; m <= axisEnd; m += 60) {
+      const day = Math.floor(m / (24 * 60)) + 1;
+      const hour = Math.floor((m % (24 * 60)) / 60);
+      time_axis.push({ day, hour });
+    }
+
+    res.json({
+      time_axis,
+      characters: (characters as Array<{ id: string; name: string }>).map((c) => ({ id: c.id, name: c.name })),
+      matrix,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
 // GET /api/campaigns/:id/my-virtual-scenes — 当前用户参与的 virtual 场景 ID 列表
 router.get('/:id/my-virtual-scenes', async (req, res) => {
   try {
@@ -547,29 +767,9 @@ router.post('/:id/force-move', async (req, res) => {
       res.status(400).json({ error: 'character_id and to_scene_id are required' }); return;
     }
 
-    const state = await db('character_scene_states')
-      .where({ character_id, campaign_id: req.params.id })
-      .first();
-    if (!state) { res.status(404).json({ error: 'Character not in campaign' }); return; }
-
-    const fromSceneId = state.current_spatial_scene_id ?? '';
-
-    await db('character_scene_states')
-      .where({ character_id, campaign_id: req.params.id })
-      .update({ current_spatial_scene_id: to_scene_id });
-
-    const { generateId } = await import('@trpg/shared');
-    await db('position_history').insert({
-      id: generateId(),
-      campaign_id: req.params.id,
-      character_id,
-      scene_id: to_scene_id,
-      story_time_entered: JSON.stringify({}),
-      story_time_left: null,
-      move_type: 'force_move',
-    });
-
-    res.json({ character_id, from_scene_id: fromSceneId, to_scene_id });
+    const { forceMove } = await import('../services/movement.js');
+    const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
+    res.json({ character_id, ...result });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Force move failed' });
   }
@@ -626,15 +826,58 @@ router.get('/:id/moves', async (req, res) => {
 // POST /api/campaigns/:id/moves/request — 玩家预约移动
 router.post('/:id/moves/request', async (req, res) => {
   try {
-    const { character_id, to_scene_id, execute_at_story } = req.body;
-    if (!character_id || !to_scene_id || !execute_at_story) { res.status(400).json({ error: 'Missing fields' }); return; }
+    const { character_id, to_scene_id } = req.body;
+    const transportMode = (req.body.transport_mode ?? 'walk') as 'walk' | 'bike' | 'drive';
+    if (!character_id || !to_scene_id) { res.status(400).json({ error: 'character_id and to_scene_id are required' }); return; }
+
     const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
-    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id', 'global_story_time').first();
     if (!character || !campaign) { res.status(404).json({ error: 'Not found' }); return; }
     if (character.user_id !== req.user!.id && campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const sceneState = await db('character_scene_states')
+      .where({ character_id, campaign_id: req.params.id })
+      .select('current_spatial_scene_id', 'personal_story_time')
+      .first();
+    if (!sceneState) { res.status(404).json({ error: 'Character not in campaign' }); return; }
+
+    const fromSceneId = sceneState.current_spatial_scene_id as string | null;
+    if (!fromSceneId) { res.status(400).json({ error: 'Character has no current scene' }); return; }
+
+    let travelDuration = 0;
+    if (fromSceneId !== to_scene_id) {
+      const direct = await db('scene_connections')
+        .where({ campaign_id: req.params.id, from_scene_id: fromSceneId, to_scene_id })
+        .first();
+      const reverse = await db('scene_connections')
+        .where({ campaign_id: req.params.id, from_scene_id: to_scene_id, to_scene_id: fromSceneId, is_bidirectional: true })
+        .first();
+      const conn = direct ?? reverse;
+      if (!conn) {
+        res.status(400).json({ error: '没有到达该场景的已知路线' });
+        return;
+      }
+
+      if (transportMode === 'bike' && conn.bike_duration != null) travelDuration = Number(conn.bike_duration);
+      else if (transportMode === 'drive' && conn.drive_duration != null) travelDuration = Number(conn.drive_duration);
+      else travelDuration = Number(conn.walk_duration ?? 0);
+    }
+
+    const baseTime =
+      parseStoryTime(sceneState.personal_story_time) ??
+      parseStoryTime(campaign.global_story_time) ??
+      { day: 1, hour: 8, minute: 0 };
+    const executeAtStory = addStoryMinutes(baseTime, Math.max(0, travelDuration));
+
     const { requestMove } = await import('../services/movement.js');
-    const move = await requestMove(character_id, req.params.id, to_scene_id, execute_at_story);
-    res.status(201).json(move);
+    const move = await requestMove(character_id, req.params.id, to_scene_id, executeAtStory);
+    res.status(201).json({
+      ...move,
+      from_scene_id: fromSceneId,
+      transport_mode: transportMode,
+      travel_duration: travelDuration,
+      execute_at_story: executeAtStory,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Request failed' });
   }
@@ -691,10 +934,47 @@ router.get('/:id/clues', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can view clues' }); return; }
 
-    const clues = await clueService.listByCampaign(req.params.id);
+    let clues;
+    if (campaign.gm_user_id === req.user!.id) {
+      clues = await clueService.listByCampaign(req.params.id);
+    } else {
+      const charRows = await db('character_sheets as cs')
+        .join('character_scene_states as css', 'css.character_id', 'cs.id')
+        .where('css.campaign_id', req.params.id)
+        .where('cs.user_id', req.user!.id)
+        .select('cs.id');
+      const charIds = (charRows as Array<{ id: string }>).map((row) => row.id);
+      clues = await clueService.listVisibleToCharacters(req.params.id, charIds);
+    }
+
     res.json(clues);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// GET /api/campaigns/:id/clues/:clueId
+router.get('/:id/clues/:clueId', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+
+    const clue = await clueService.getById(req.params.clueId);
+    if (!clue || clue.campaign_id !== req.params.id) { res.status(404).json({ error: 'Clue not found' }); return; }
+
+    if (campaign.gm_user_id !== req.user!.id) {
+      const charRows = await db('character_sheets as cs')
+        .join('character_scene_states as css', 'css.character_id', 'cs.id')
+        .where('css.campaign_id', req.params.id)
+        .where('cs.user_id', req.user!.id)
+        .select('cs.id');
+      const charIds = (charRows as Array<{ id: string }>).map((row) => row.id);
+      const canView = clue.revealed_to == null || clue.revealed_to.some((id) => charIds.includes(id));
+      if (!canView) { res.status(403).json({ error: 'Forbidden' }); return; }
+    }
+
+    res.json(clue);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }
@@ -742,6 +1022,41 @@ router.put('/:id/clues/:clueId', async (req, res) => {
     res.json(clue);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// POST /api/campaigns/:id/clues/:clueId/reveal
+router.post('/:id/clues/:clueId/reveal', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can reveal clues' }); return; }
+
+    const characterIds = Array.isArray(req.body?.character_ids)
+      ? req.body.character_ids.filter((id: unknown) => typeof id === 'string' && id.length > 0)
+      : [];
+    if (characterIds.length === 0) { res.status(400).json({ error: 'character_ids is required' }); return; }
+
+    const clue = await clueService.revealToCharacters(req.params.clueId, characterIds);
+    if (!clue) { res.status(404).json({ error: 'Clue not found' }); return; }
+    res.json(clue);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Reveal failed' });
+  }
+});
+
+// DELETE /api/campaigns/:id/clues/:clueId
+router.delete('/:id/clues/:clueId', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can delete clues' }); return; }
+
+    const deleted = await clueService.delete(req.params.clueId);
+    if (!deleted) { res.status(404).json({ error: 'Clue not found' }); return; }
+    res.status(204).end();
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Delete failed' });
   }
 });
 

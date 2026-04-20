@@ -20,7 +20,7 @@ export interface AtomDef {
   atom_type: string;
   label: string;
   description: string;
-  category: 'data' | 'compute' | 'logic' | 'effect' | 'output';
+  category: 'data' | 'compute' | 'logic' | 'effect' | 'table' | 'output';
   icon: string;
   inputs: PortDef[];
   outputs: PortDef[];

@@ -78,7 +78,7 @@ export class SocketClient {
     this.roomSocket?.emit('gm_reject_move', { move_id: moveId });
   }
 
-  moveGridToken(campaignId: string, sceneId: string, token: { id: string; entity_type: 'character' | 'npc'; entity_id: string; label: string; x: number; y: number; color: string }): void {
+  moveGridToken(campaignId: string, sceneId: string, token: { id: string; entity_type: 'character' | 'npc' | 'object'; entity_id: string; label: string; x: number; y: number; color: string }): void {
     this.roomSocket?.emit('grid_token_moved', {
       campaign_id: campaignId,
       scene_id: sceneId,
@@ -126,8 +126,20 @@ export class SocketClient {
     this.userSocket?.on('unread_count_changed', handler);
   }
 
-  onGridTokenMoved(handler: (data: { campaign_id: string; scene_id: string; token: { id: string; entity_type: 'character' | 'npc'; entity_id: string; label: string; x: number; y: number; color: string } }) => void): void {
+  onGridTokenMoved(handler: (data: { campaign_id: string; scene_id: string; token: { id: string; entity_type: 'character' | 'npc' | 'object'; entity_id: string; label: string; x: number; y: number; color: string } }) => void): void {
     this.roomSocket?.on('grid_token_moved', handler);
+  }
+
+  markGridArea(campaignId: string, sceneId: string, overlays: Array<{ id: string; x: number; y: number; w: number; h: number; color: string; label?: string }>): void {
+    this.roomSocket?.emit('grid_area_marked', {
+      campaign_id: campaignId,
+      scene_id: sceneId,
+      overlays,
+    });
+  }
+
+  onGridAreaMarked(handler: (data: { campaign_id: string; scene_id: string; overlays: Array<{ id: string; x: number; y: number; w: number; h: number; color: string; label?: string }> }) => void): void {
+    this.roomSocket?.on('grid_area_marked', handler);
   }
 
   disconnect(): void {

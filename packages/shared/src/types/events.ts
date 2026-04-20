@@ -1,4 +1,4 @@
-import type { ChatMessage, StoryTime, CharacterInstance, GridToken, SnowflakeId } from './index';
+import type { ChatMessage, StoryTime, CharacterInstance, GridToken, GridOverlay, SnowflakeId } from './index';
 
 // ===== 通知类型 =====
 export type NotificationType = 'system' | 'transaction' | 'social' | 'audit';
@@ -40,6 +40,7 @@ export interface ServerToClientEvents {
   notification_new: (notification: UserNotification) => void;
   unread_count_changed: (data: { count: number }) => void;
   grid_token_moved: (data: { campaign_id: string; scene_id: string; token: GridToken }) => void;
+  grid_area_marked: (data: { campaign_id: string; scene_id: string; overlays: GridOverlay[] }) => void;
 }
 
 // ===== Client → Server 事件 =====
@@ -79,4 +80,5 @@ export interface ClientToServerEvents {
     scene_id: string;
     token: GridToken;
   }) => void;
+  grid_area_marked: (data: { campaign_id: string; scene_id: string; overlays: GridOverlay[] }) => void;
 }

@@ -1,14 +1,15 @@
 ﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { ElDialog, ElMessage } from 'element-plus';
+import { ElDialog, ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
 import GridMap from './GridMap.vue';
 import TrajectoryMatrix from './TrajectoryMatrix.vue';
 import SceneRoadmap from './SceneRoadmap.vue';
-import type { StoryTime, Scene, CampaignNpc, PositionHistory } from '@trpg/shared';
+import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
 import { useAuthStore } from '../../stores/auth-store';
+import { extractBlocks } from '../../utils/block-integrity-validator';
 
 const props = defineProps<{
   campaignId: string;
@@ -278,14 +279,110 @@ function sendBroadcast() {
 
 const THEMES = ['river','blur','fragment','wave','ancient','blood','ash','cyber'] as const;
 type ClueTheme = typeof THEMES[number];
+type CampaignClueRecord = {
+  id: string;
+  title: string;
+  content: string;
+  theme: ClueTheme;
+  created_at?: string;
+  revealed_to?: string[] | null;
+  is_revealed?: boolean;
+};
+type ModulePresetClue = {
+  id: string;
+  title: string;
+  content: string;
+  theme: ClueTheme;
+  revealMethod: string;
+};
 const clueForm = ref({ title: '', content: '', theme: 'river' as ClueTheme });
 const showClueTargetDialog = ref(false);
 const clueTargetAll = ref(true);
 const clueTargetCharId = ref('');
-const localClues = ref<{id:string;title:string;content:string;theme:ClueTheme}[]>([]);
+const clueDialogMode = ref<'create' | 'reveal'>('create');
+const localClues = ref<CampaignClueRecord[]>([]);
 const showEditClueDialog = ref(false);
 const editingClueId = ref('');
 const editClueForm = ref({ title: '', content: '', theme: 'river' as ClueTheme });
+const pendingRevealClueId = ref('');
+const pendingRevealCluePreview = ref<CampaignClueRecord | null>(null);
+const modulePresetClues = ref<ModulePresetClue[]>([]);
+const modulePresetLoading = ref(false);
+
+function normalizeClueTheme(value: unknown): ClueTheme {
+  return THEMES.includes(value as ClueTheme) ? (value as ClueTheme) : 'river';
+}
+
+function resetClueTargetDialog() {
+  showClueTargetDialog.value = false;
+  clueTargetAll.value = true;
+  clueTargetCharId.value = '';
+  clueDialogMode.value = 'create';
+  pendingRevealClueId.value = '';
+  pendingRevealCluePreview.value = null;
+}
+
+function clueAudienceLabel(clue: CampaignClueRecord): string {
+  if (clue.revealed_to == null) return '全员可见';
+  if (clue.revealed_to.length === 0) return '尚未指定角色';
+  return `已向 ${clue.revealed_to.length} 名角色开放`;
+}
+
+function applyLocalClueUpdate(updated: CampaignClueRecord) {
+  const next = localClues.value.map((clue) => (clue.id === updated.id ? updated : clue));
+  localClues.value = next;
+}
+
+function usePresetClue(clue: ModulePresetClue) {
+  clueForm.value = {
+    title: clue.title,
+    content: clue.content,
+    theme: clue.theme,
+  };
+  ElMessage.success('已载入模组线索');
+}
+
+async function loadModulePresetClues() {
+  modulePresetLoading.value = true;
+  try {
+    const campaignRes = await fetch(`/api/campaigns/${props.campaignId}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!campaignRes.ok) {
+      modulePresetClues.value = [];
+      return;
+    }
+
+    const campaign = await campaignRes.json() as { module_id?: string | null };
+    if (!campaign.module_id) {
+      modulePresetClues.value = [];
+      return;
+    }
+
+    const moduleRes = await fetch(`/api/modules/${campaign.module_id}`);
+    if (!moduleRes.ok) {
+      modulePresetClues.value = [];
+      return;
+    }
+
+    const moduleData = await moduleRes.json() as { content?: string | null };
+    const blocks = extractBlocks(moduleData.content ?? '');
+    modulePresetClues.value = blocks
+      .filter((block) => block.type === 'clue')
+      .map((block) => ({
+        id: block.id,
+        title: String(block.attrs['clue_name'] ?? '').trim(),
+        content: String(block.attrs['content'] ?? '').trim(),
+        theme: normalizeClueTheme(block.attrs['theme']),
+        revealMethod: String(block.attrs['reveal_method'] ?? 'gm_manual'),
+      }))
+      .filter((block) => block.title || block.content);
+  } catch {
+    modulePresetClues.value = [];
+  } finally {
+    modulePresetLoading.value = false;
+  }
+}
 
 async function loadClues() {
   try {
@@ -293,7 +390,7 @@ async function loadClues() {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
     if (!res.ok) return;
-    const clues = await res.json() as { id: string; title: string; content: string; theme: ClueTheme }[];
+    const clues = await res.json() as CampaignClueRecord[];
     localClues.value = clues;
   } catch {
     // ignore initial load failure
@@ -302,12 +399,52 @@ async function loadClues() {
 
 function prepareClue() {
   if (!clueForm.value.title.trim() || !clueForm.value.content.trim()) { ElMessage.warning('标题和内容不能为空'); return; }
+  clueDialogMode.value = 'create';
+  showClueTargetDialog.value = true;
+}
+
+function prepareRevealClue(clue: CampaignClueRecord) {
+  clueDialogMode.value = 'reveal';
+  pendingRevealClueId.value = clue.id;
+  pendingRevealCluePreview.value = clue;
+  clueTargetAll.value = clue.revealed_to == null;
+  clueTargetCharId.value = '';
   showClueTargetDialog.value = true;
 }
 
 async function sendClue() {
+  if (!clueTargetAll.value && !clueTargetCharId.value) {
+    ElMessage.warning('请选择要发放的角色');
+    return;
+  }
+
   try {
     const visibleTo = clueTargetAll.value ? null : [clueTargetCharId.value];
+
+    if (clueDialogMode.value === 'reveal' && pendingRevealClueId.value && pendingRevealCluePreview.value) {
+      const endpoint = `/api/campaigns/${props.campaignId}/clues/${pendingRevealClueId.value}`;
+      const res = await fetch(clueTargetAll.value ? endpoint : `${endpoint}/reveal`, {
+        method: clueTargetAll.value ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
+        body: JSON.stringify(clueTargetAll.value
+          ? { is_revealed: true, revealed_to: null }
+          : { character_ids: visibleTo }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? '发放失败');
+
+      const clue = await res.json() as CampaignClueRecord;
+      applyLocalClueUpdate(clue);
+      socketClient.sendMessage({
+        content: clue.id,
+        message_type: 'clue_card',
+        visible_to: visibleTo ?? undefined,
+        metadata: { clue_id: clue.id, theme: clue.theme, title: clue.title, content: clue.content },
+      });
+      resetClueTargetDialog();
+      ElMessage.success('线索已再次发放');
+      return;
+    }
+
     const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
@@ -323,15 +460,13 @@ async function sendClue() {
     const clue = await res.json() as { id: string; title: string; content: string; theme: ClueTheme };
     localClues.value.unshift(clue);
     socketClient.sendMessage({
-      content: clue.content,
+      content: clue.id,
       message_type: 'clue_card',
       visible_to: visibleTo ?? undefined,
-      metadata: { clue_id: clue.id, theme: clue.theme, title: clue.title },
+      metadata: { clue_id: clue.id, theme: clue.theme, title: clue.title, content: clue.content },
     });
     clueForm.value = { title: '', content: '', theme: 'river' };
-    showClueTargetDialog.value = false;
-    clueTargetAll.value = true;
-    clueTargetCharId.value = '';
+    resetClueTargetDialog();
     ElMessage.success('线索已发放');
   } catch (e: any) {
     ElMessage.error(e?.message ?? '发放失败');
@@ -367,13 +502,37 @@ async function saveClueEdit() {
     });
     if (!res.ok) throw new Error((await res.json()).error ?? '更新失败');
 
-    const updated = await res.json() as { id: string; title: string; content: string; theme: ClueTheme };
-    localClues.value = localClues.value.map((clue) => (clue.id === updated.id ? updated : clue));
+    const updated = await res.json() as CampaignClueRecord;
+    applyLocalClueUpdate(updated);
     showEditClueDialog.value = false;
     editingClueId.value = '';
     ElMessage.success('线索已更新');
   } catch (e: any) {
     ElMessage.error(e?.message ?? '更新失败');
+  }
+}
+
+async function deleteClue(clue: CampaignClueRecord) {
+  try {
+    await ElMessageBox.confirm(`确认删除线索“${clue.title}”吗？`, '删除线索', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/clues/${clue.id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? '删除失败');
+    localClues.value = localClues.value.filter((item) => item.id !== clue.id);
+    ElMessage.success('线索已删除');
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '删除失败');
   }
 }
 
@@ -391,22 +550,41 @@ const activeGridScene = computed(() => {
 });
 
 // ─── Tab 5: 轨迹矩阵 ─────────────────────────────────────────────────────────
-const trajectoryHistory = ref<PositionHistory[]>([]);
+type TrajectoryMatrixResponse = {
+  time_axis: Array<{ day: number; hour: number }>;
+  characters: Array<{ id: string; name: string }>;
+  matrix: Record<string, Array<{
+    scene_id: string;
+    scene_name: string;
+    from_time: StoryTime;
+    to_time: StoryTime | null;
+    move_type: string;
+  }>>;
+};
+
+const trajectoryData = ref<TrajectoryMatrixResponse>({
+  time_axis: [],
+  characters: [],
+  matrix: {},
+});
 const trajectoryLoading = ref(false);
 
 async function loadTrajectoryHistory() {
   trajectoryLoading.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/position-history`, {
+    const res = await fetch(`/api/campaigns/${props.campaignId}/trajectory-matrix`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
-    if (res.ok) trajectoryHistory.value = await res.json();
+    if (res.ok) {
+      trajectoryData.value = await res.json();
+    }
   } catch { /* ignore */ }
   finally { trajectoryLoading.value = false; }
 }
 
 onMounted(() => {
   loadClues();
+  loadModulePresetClues();
   loadPendingScheduledMoves();
   if (!activeGridSceneId.value && spatialScenes.value[0]?.id) {
     activeGridSceneId.value = spatialScenes.value[0].id;
@@ -491,7 +669,13 @@ onMounted(() => {
           </tbody>
         </table>
         <div v-if="scenes.length===0" class="empty-hint">暂无场景</div>
-        <SceneRoadmap :campaign-id="campaignId" :scenes="scenes" :is-gm="true" style="margin-top:var(--space-3)" />
+        <SceneRoadmap
+          :campaign-id="campaignId"
+          :scenes="scenes"
+          :characters="characters"
+          :is-gm="true"
+          style="margin-top:var(--space-3)"
+        />
       </div>
       <!-- Tab 3: NPC -->
       <div v-else-if="activeTab==='npcs'" class="tab-pane">
@@ -533,13 +717,15 @@ onMounted(() => {
             {{ trajectoryLoading ? '加载中...' : '刷新' }}
           </button>
         </div>
-        <div v-if="trajectoryHistory.length === 0 && !trajectoryLoading" class="empty-hint">暂无轨迹数据，点击刷新加载</div>
+        <div v-if="trajectoryData.time_axis.length === 0 && !trajectoryLoading" class="empty-hint">暂无轨迹数据，点击刷新加载</div>
         <TrajectoryMatrix
           v-else
-          :position-history="trajectoryHistory"
-          :scenes="scenes"
-          :characters="characters"
+          :campaign-id="campaignId"
+          :time-axis="trajectoryData.time_axis"
+          :matrix="trajectoryData.matrix"
+          :characters="trajectoryData.characters.length ? trajectoryData.characters : characters"
           :current-time="globalStoryTime"
+          :is-gm="true"
         />
       </div>
       <!-- Tab: 线索分发 -->
@@ -558,11 +744,34 @@ onMounted(() => {
           <button class="sm-btn accent" @click="prepareClue" style="margin-left:auto">发放线索</button>
         </div>
         <div v-if="clueForm.title" class="clue-preview-wrap"><ClueCard :title="clueForm.title" :content="clueForm.content||'...'" :theme="clueForm.theme"/></div>
+        <div style="margin-top:8px">
+          <div class="preset-head">
+            <div class="section-label">模组预设线索</div>
+            <button class="sm-btn" @click="loadModulePresetClues">刷新</button>
+          </div>
+          <div v-if="modulePresetLoading" class="empty-hint">模组线索加载中...</div>
+          <template v-else>
+            <div v-for="preset in modulePresetClues" :key="preset.id" class="preset-clue-item">
+              <div class="preset-clue-main">
+                <div class="preset-clue-title">{{ preset.title || '未命名线索' }}</div>
+                <div class="preset-clue-desc">{{ preset.content || '无内容' }}</div>
+                <div class="preset-clue-meta">{{ preset.theme }} / {{ preset.revealMethod }}</div>
+              </div>
+              <button class="sm-btn" @click="usePresetClue(preset)">载入</button>
+            </div>
+            <div v-if="modulePresetClues.length === 0" class="empty-hint">当前模组没有可用线索块</div>
+          </template>
+        </div>
         <div v-if="localClues.length>0" style="margin-top:8px">
           <div class="section-label">已发放</div>
           <div v-for="c in localClues" :key="c.id" class="clue-item">
-            <ClueCard :title="c.title" :content="c.content" :theme="c.theme" />
-            <button class="sm-btn" @click="openEditClue(c)">编辑</button>
+            <ClueCard :clue-id="c.id" :title="c.title" :content="c.content" :theme="c.theme" :created-at="c.created_at" />
+            <div class="clue-actions">
+              <div class="clue-audience">{{ clueAudienceLabel(c) }}</div>
+              <button class="sm-btn" @click="prepareRevealClue(c)">再次发放</button>
+              <button class="sm-btn" @click="openEditClue(c)">编辑</button>
+              <button class="sm-btn danger" @click="deleteClue(c)">删除</button>
+            </div>
           </div>
         </div>
       </div>
@@ -672,13 +881,17 @@ onMounted(() => {
     <template #footer><button class="dlg-btn" @click="showNewNpc=false">取消</button><button class="dlg-btn accent" @click="createNpc" :disabled="npcLoading">{{npcLoading?'创建中...':'创建NPC'}}</button></template>
   </ElDialog>
   <!-- 线索范围 -->
-  <ElDialog v-model="showClueTargetDialog" title="选择发放范围" width="360px">
+  <ElDialog v-model="showClueTargetDialog" :title="clueDialogMode === 'create' ? '选择发放范围' : '再次发放线索'" width="360px">
     <div class="form-body">
+      <div v-if="pendingRevealCluePreview" class="target-clue-preview">
+        <div class="target-clue-title">{{ pendingRevealCluePreview.title }}</div>
+        <div class="target-clue-desc">{{ pendingRevealCluePreview.content }}</div>
+      </div>
       <label class="radio-row"><input v-model="clueTargetAll" type="radio" :value="true"/><span>全员可见</span></label>
       <label class="radio-row" style="margin-top:8px"><input v-model="clueTargetAll" type="radio" :value="false"/><span>仅指定角色</span></label>
       <select v-if="!clueTargetAll" v-model="clueTargetCharId" class="field-input" style="margin-top:8px"><option value="">请选择</option><option v-for="c in characters" :key="c.id" :value="c.id">{{c.name}}</option></select>
     </div>
-    <template #footer><button class="dlg-btn" @click="showClueTargetDialog=false">取消</button><button class="dlg-btn accent" @click="sendClue">确认发放</button></template>
+    <template #footer><button class="dlg-btn" @click="resetClueTargetDialog">取消</button><button class="dlg-btn accent" @click="sendClue">确认发放</button></template>
   </ElDialog>
   <ElDialog v-model="showEditClueDialog" title="编辑线索" width="420px">
     <div class="form-body">
@@ -740,6 +953,8 @@ onMounted(() => {
 .broadcast-input { flex: 1; padding: var(--space-2); border: 1px solid var(--color-input-border); border-radius: var(--radius-md); background: var(--color-input-bg); font-size: var(--text-sm); resize: none; }
 .clue-item { display: flex; gap: var(--space-2); align-items: flex-start; margin-bottom: 6px; }
 .clue-item :deep(.clue-card) { flex: 1; }
+.clue-actions { width: 96px; display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.clue-audience { font-size: 10px; color: var(--color-text-muted); line-height: 1.4; }
 .clue-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 6px; }
 .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 4px; }
 .theme-card { border: 1px solid var(--color-card-border); border-radius: var(--radius-md); padding: 6px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; transition: border-color var(--transition-fast); }
@@ -747,6 +962,12 @@ onMounted(() => {
 .theme-card.selected { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent); }
 .theme-preview { font-size: 12px; font-weight: 600; line-height: 1.2; max-width: 100%; overflow: hidden; text-align: center; }
 .theme-card-name { font-size: 9px; color: var(--color-text-muted); text-align: center; }
+.preset-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.preset-clue-item { display: flex; gap: var(--space-2); align-items: center; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); padding: var(--space-2); margin-bottom: 6px; }
+.preset-clue-main { flex: 1; min-width: 0; }
+.preset-clue-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); }
+.preset-clue-desc { font-size: var(--text-xs); color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.preset-clue-meta { font-size: 10px; color: var(--color-text-muted); margin-top: 2px; text-transform: uppercase; }
 .time-confirm-body { font-size: var(--text-sm); display: flex; flex-direction: column; gap: var(--space-2); }
 .moves-hint { font-size: var(--text-xs); color: var(--color-text-muted); }
 .moves-list { display: flex; flex-direction: column; gap: 4px; }
@@ -755,6 +976,9 @@ onMounted(() => {
 .move-arrow { color: var(--color-text-muted); }
 .move-time { color: var(--color-text-muted); }
 .clue-preview-wrap { margin-top: 4px; }
+.target-clue-preview { margin-bottom: 8px; padding: var(--space-2); border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); }
+.target-clue-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); }
+.target-clue-desc { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px; }
 .pending-moves-panel { margin-top: var(--space-4); border-top: 1px solid var(--border-default); padding-top: var(--space-3); }
 .pending-moves-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
 .move-preview-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 0; border-bottom: 1px solid var(--border-default); }

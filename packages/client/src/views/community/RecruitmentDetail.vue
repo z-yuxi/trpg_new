@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ElMessage,
@@ -16,6 +16,7 @@ import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
+import { formatRecruitmentValue, hasRecruitmentValue, resolveRecruitmentFields } from '../../utils/recruitment-fields';
 
 interface CharacterItem {
   id: string;
@@ -44,6 +45,17 @@ const commentContent = ref('');
 
 const postId = computed(() => String(route.params.id || ''));
 const isOwner = computed(() => !!detail.value && detail.value.poster_id === authStore.userId);
+const recruitmentFields = computed(() => resolveRecruitmentFields(detail.value ? { id: detail.value.ruleset_id, name: detail.value.ruleset_name } : null));
+const detailMetadataEntries = computed(() => {
+  const metadata = (detail.value?.metadata ?? {}) as Record<string, unknown>;
+  return recruitmentFields.value
+    .map((field) => ({ label: field.label, value: metadata[field.name] }))
+    .filter((item) => hasRecruitmentValue(item.value));
+});
+const filteredCharacters = computed(() => {
+  if (!detail.value?.ruleset_id) return myCharacters.value;
+  return myCharacters.value.filter((item) => item.ruleset_id === detail.value.ruleset_id);
+});
 const approvedApplications = computed(() => {
   if (!Array.isArray(detail.value?.applications)) return [];
   return detail.value.applications.filter((item: any) => item.status === 'approved');
@@ -86,6 +98,12 @@ async function loadCharacters() {
     // ignore
   }
 }
+
+watch([detail, filteredCharacters], () => {
+  if (applyCharacterId.value && !filteredCharacters.value.some((item) => item.id === applyCharacterId.value)) {
+    applyCharacterId.value = '';
+  }
+});
 
 async function submitApply() {
   if (!applyMessage.value.trim()) {
@@ -187,12 +205,20 @@ onMounted(async () => {
         <TTag v-for="tag in detail.tags || []" :key="tag" color="default" size="sm">{{ tag }}</TTag>
       </div>
 
+      <div v-if="detailMetadataEntries.length" class="extra-grid">
+        <div v-for="item in detailMetadataEntries" :key="item.label" class="extra-item">
+          <span class="extra-label">{{ item.label }}</span>
+          <strong>{{ formatRecruitmentValue(item.value) }}</strong>
+        </div>
+      </div>
+
       <ElDivider />
       <h3>描述</h3>
       <pre class="markdown-text">{{ detail.description || '暂无描述' }}</pre>
 
       <div class="actions" v-if="!isOwner">
         <TButton type="primary" @click="showApplyDialog = true">申请加入</TButton>
+        <TTag v-if="detail.my_application?.status" color="warning" size="sm">当前申请：{{ detail.my_application.status }}</TTag>
       </div>
     </TCard>
 
@@ -206,7 +232,10 @@ onMounted(async () => {
       <div v-else class="application-list">
         <div v-for="app in detail.applications" :key="app.id" class="application-item">
           <div class="app-row">
-            <strong>{{ app.applicant_nickname || app.applicant_user_id }}</strong>
+            <div class="applicant-head">
+              <span class="mini-avatar">{{ (app.applicant_nickname || app.applicant_user_id || '?').slice(0, 1) }}</span>
+              <strong>{{ app.applicant_nickname || app.applicant_user_id }}</strong>
+            </div>
             <span class="status" :class="app.status">{{ app.status }}</span>
           </div>
           <div class="app-row">角色卡：{{ app.character_name || '未选择' }}</div>
@@ -239,8 +268,9 @@ onMounted(async () => {
     </TCard>
 
     <ElDialog v-model="showApplyDialog" title="申请加入" width="520px">
+      <div class="apply-hint">仅显示与当前招募规则集一致的角色卡。</div>
       <ElSelect v-model="applyCharacterId" placeholder="选择角色卡（可选）" clearable style="width:100%;margin-bottom:12px">
-        <ElOption v-for="ch in myCharacters" :key="ch.id" :label="`${ch.name} (${ch.ruleset_id})`" :value="ch.id" />
+        <ElOption v-for="ch in filteredCharacters" :key="ch.id" :label="`${ch.name} (${ch.ruleset_id})`" :value="ch.id" />
       </ElSelect>
       <ElInput v-model="applyMessage" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="填写申请留言" />
       <template #footer>
@@ -278,6 +308,21 @@ onMounted(async () => {
   color: var(--color-text-secondary);
 }
 .tag-row { margin-top: var(--space-3); display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.extra-grid {
+  margin-top: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.extra-item {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary, #2563eb) 7%, var(--color-bg-secondary));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.extra-label { color: var(--color-text-muted); font-size: var(--text-xs); }
 .markdown-text {
   margin: 0;
   white-space: pre-wrap;
@@ -295,6 +340,19 @@ onMounted(async () => {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-md);
   background: var(--color-bg-secondary);
+}
+.applicant-head { display: flex; align-items: center; gap: var(--space-2); }
+.mini-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-primary, #2563eb) 12%, transparent);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
 }
 .app-row { margin-bottom: 4px; color: var(--color-text-secondary); }
 .status.open, .status.pending { color: #2563eb; }
@@ -317,7 +375,9 @@ onMounted(async () => {
 }
 .empty { color: var(--color-text-muted); padding: var(--space-3) 0; }
 .group-checks { display: flex; flex-direction: column; gap: var(--space-2); }
+.apply-hint { margin-bottom: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
 @media (max-width: 768px) {
-  .meta-grid { grid-template-columns: 1fr; }
+  .meta-grid,
+  .extra-grid { grid-template-columns: 1fr; }
 }
 </style>

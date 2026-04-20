@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 
 const props = defineProps<{
@@ -121,6 +121,12 @@ function onCommandKeydown(e: KeyboardEvent) {
 
 const quickDice = ['1d20', '1d100', '2d6', '3d6', '4d6'];
 
+function syncKeyboardOffset() {
+  if (!window.visualViewport) return;
+  const offset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+  document.documentElement.style.setProperty('--keyboard-offset', `${offset}px`);
+}
+
 function send() {
   const text = content.value.trim();
   if (!text) return;
@@ -152,6 +158,18 @@ function onKeydown(e: KeyboardEvent) {
     send();
   }
 }
+
+onMounted(() => {
+  syncKeyboardOffset();
+  window.visualViewport?.addEventListener('resize', syncKeyboardOffset);
+  window.visualViewport?.addEventListener('scroll', syncKeyboardOffset);
+});
+
+onUnmounted(() => {
+  window.visualViewport?.removeEventListener('resize', syncKeyboardOffset);
+  window.visualViewport?.removeEventListener('scroll', syncKeyboardOffset);
+  document.documentElement.style.setProperty('--keyboard-offset', '0px');
+});
 </script>
 
 <template>
@@ -360,4 +378,22 @@ function onKeydown(e: KeyboardEvent) {
 .command-name { font-family: var(--font-mono); color: var(--color-accent); font-weight: 600; flex-shrink: 0; }
 .command-param { font-family: var(--font-mono); color: var(--color-text-secondary); font-size: var(--text-xs); flex-shrink: 0; }
 .command-desc { color: var(--color-text-muted); font-size: var(--text-xs); flex: 1; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .chat-input-area {
+    position: sticky;
+    bottom: 0;
+    z-index: 12;
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px) + var(--keyboard-offset, 0px));
+    box-shadow: 0 -10px 20px rgba(15, 23, 42, 0.08);
+  }
+
+  .input-row {
+    align-items: stretch;
+  }
+
+  .text-input {
+    min-height: 44px;
+  }
+}
 </style>

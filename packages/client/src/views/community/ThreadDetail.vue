@@ -48,6 +48,30 @@ const currentPage = ref(1);
 const pageSize = 20;
 const hasMore = ref(false);
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderMarkdown(value: string) {
+  const safe = escapeHtml(value);
+  return safe
+    .replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br />');
+}
+
+function findReplyTarget(replyToPostId?: string | null) {
+  if (!replyToPostId) return null;
+  return posts.value.find((item) => item.id === replyToPostId) ?? null;
+}
+
 async function fetchThread(page = 1, append = false) {
   loading.value = true;
   try {
@@ -129,7 +153,7 @@ onMounted(fetchThread);
             <div class="post-header">
               <span class="post-author">{{ thread.author_nickname ?? '-' }}</span>
             </div>
-            <div class="post-content">{{ thread.content }}</div>
+            <div class="post-content markdown-body" v-html="renderMarkdown(thread.content)"></div>
           </div>
         </div>
 
@@ -144,7 +168,10 @@ onMounted(fetchThread);
               <span class="post-time">{{ formatTime(post.created_at) }}</span>
               <button v-if="!thread.is_locked" class="quote-btn" @click="quoteReply(post)">引用</button>
             </div>
-            <div class="post-content">{{ post.content }}</div>
+            <div v-if="findReplyTarget(post.reply_to_post_id)" class="quote-preview">
+              引用 #{{ findReplyTarget(post.reply_to_post_id)?.floor_number }} {{ findReplyTarget(post.reply_to_post_id)?.author_nickname || '匿名' }}
+            </div>
+            <div class="post-content markdown-body" v-html="renderMarkdown(post.content)"></div>
           </div>
         </div>
       </div>
@@ -248,6 +275,23 @@ onMounted(fetchThread);
   color: var(--text-body);
   line-height: var(--leading-relaxed);
   white-space: pre-wrap;
+}
+.markdown-body :deep(blockquote) {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 3px solid color-mix(in srgb, var(--color-primary, #2563eb) 45%, transparent);
+  color: var(--text-secondary);
+}
+.markdown-body :deep(code) {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
+  font-size: 0.95em;
+}
+.quote-preview {
+  margin-bottom: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
 /* 回复框 */

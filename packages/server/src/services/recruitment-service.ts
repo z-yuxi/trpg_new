@@ -20,6 +20,23 @@ function parseJsonArray(value: unknown): string[] {
   return [];
 }
 
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
 function rowToPost(row: Record<string, unknown>): RecruitmentPost {
   return {
     id: row['id'] as string,
@@ -34,6 +51,7 @@ function rowToPost(row: Record<string, unknown>): RecruitmentPost {
     schedule_text: (row['schedule_text'] as string | null) ?? null,
     description: (row['description'] as string | null) ?? null,
     tags: parseJsonArray(row['tags']),
+    metadata: parseJsonObject(row['metadata']),
     status: row['status'] as RecruitmentPost['status'],
     created_at: row['created_at'] as Date,
   };
@@ -55,6 +73,7 @@ export class RecruitmentService {
     schedule_text?: string | null;
     description?: string | null;
     tags?: string[];
+    metadata?: Record<string, unknown> | null;
   }): Promise<RecruitmentPost> {
     const id = generateId();
     await db('recruitment_posts').insert({
@@ -69,6 +88,7 @@ export class RecruitmentService {
       schedule_text: params.schedule_text ?? null,
       description: params.description ?? null,
       tags: JSON.stringify(params.tags ?? []),
+      metadata: params.metadata ? JSON.stringify(params.metadata) : null,
       status: 'open',
     });
     return this.findById(id) as Promise<RecruitmentPost>;
@@ -85,7 +105,10 @@ export class RecruitmentService {
     type?: RecruitmentPost['type'];
     ruleset_id?: string;
     keyword?: string;
-    sort?: 'latest' | 'oldest';
+    tag?: string;
+    sort?: 'latest' | 'oldest' | 'hottest';
+    poster_id?: string;
+    applicant_user_id?: string;
     page?: number;
     limit?: number;
   }): Promise<{ data: Array<Record<string, unknown>>; total: number; page: number; limit: number }> {
@@ -96,9 +119,22 @@ export class RecruitmentService {
       .leftJoin('users as u', 'rp.poster_id', 'u.id')
       .leftJoin('rulesets as r', 'rp.ruleset_id', 'r.id');
 
+    if (params.applicant_user_id) {
+      query = query.leftJoin('recruitment_applications as ra', function joinApplications() {
+        this.on('ra.post_id', '=', 'rp.id').andOn('ra.applicant_user_id', '=', db.raw('?', [params.applicant_user_id!]));
+      });
+    }
+
     if (params.type) query = query.where('rp.type', params.type);
     if (params.ruleset_id) query = query.where('rp.ruleset_id', params.ruleset_id);
-    if (params.keyword) query = query.where('rp.title', 'like', `%${params.keyword}%`);
+    if (params.poster_id) query = query.where('rp.poster_id', params.poster_id);
+    if (params.keyword) {
+      query = query.where((builder) => {
+        builder.where('rp.title', 'like', `%${params.keyword}%`).orWhere('rp.description', 'like', `%${params.keyword}%`);
+      });
+    }
+    if (params.tag) query = query.where('rp.tags', 'like', `%${params.tag}%`);
+    if (params.applicant_user_id) query = query.whereNotNull('ra.id');
 
     if (params.status) {
       if (params.status === 'grouped') {
@@ -116,8 +152,13 @@ export class RecruitmentService {
         'rp.*',
         'u.nickname as poster_nickname',
         'r.name as ruleset_name',
+        'ra.status as my_application_status',
       )
-      .orderBy('rp.created_at', params.sort === 'oldest' ? 'asc' : 'desc')
+      .orderBy(
+        params.sort === 'hottest' ? 'rp.player_count_joined' : 'rp.created_at',
+        params.sort === 'oldest' ? 'asc' : 'desc',
+      )
+      .orderBy('rp.created_at', 'desc')
       .offset((page - 1) * limit)
       .limit(limit);
 
@@ -128,6 +169,7 @@ export class RecruitmentService {
         status_view: postStatusView(post),
         poster_nickname: row['poster_nickname'] ?? '匿名玩家',
         ruleset_name: row['ruleset_name'] ?? post.ruleset_id,
+        my_application_status: row['my_application_status'] ?? null,
       };
     });
 
@@ -192,6 +234,7 @@ export class RecruitmentService {
         .where({ id: params.character_id, user_id: params.applicant_user_id })
         .first();
       if (!character) throw new Error('角色卡不存在或无权限');
+      if (character['ruleset_id'] !== post.ruleset_id) throw new Error('角色卡规则包与招募帖不匹配');
     }
 
     const existed = await db('recruitment_applications')
@@ -365,8 +408,18 @@ export class RecruitmentService {
     return { campaign_id: campaign.id, selected_count: selectedApps.length };
   }
 
-  async update(id: string, updates: Partial<Pick<RecruitmentPost, 'title' | 'status'>>): Promise<RecruitmentPost> {
-    await db('recruitment_posts').where({ id }).update(updates);
+  async update(id: string, updates: Partial<Pick<RecruitmentPost, 'title' | 'status' | 'description' | 'schedule_text' | 'module_name' | 'player_count_max' | 'tags' | 'metadata'>>): Promise<RecruitmentPost> {
+    const payload: Record<string, unknown> = {};
+    if (updates.title !== undefined) payload['title'] = updates.title;
+    if (updates.status !== undefined) payload['status'] = updates.status;
+    if (updates.description !== undefined) payload['description'] = updates.description;
+    if (updates.schedule_text !== undefined) payload['schedule_text'] = updates.schedule_text;
+    if (updates.module_name !== undefined) payload['module_name'] = updates.module_name;
+    if (updates.player_count_max !== undefined) payload['player_count_max'] = updates.player_count_max;
+    if (updates.tags !== undefined) payload['tags'] = JSON.stringify(updates.tags ?? []);
+    if (updates.metadata !== undefined) payload['metadata'] = updates.metadata ? JSON.stringify(updates.metadata) : null;
+
+    await db('recruitment_posts').where({ id }).update(payload);
     return this.findById(id) as Promise<RecruitmentPost>;
   }
 

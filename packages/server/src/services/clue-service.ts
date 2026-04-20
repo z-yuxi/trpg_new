@@ -37,6 +37,17 @@ class ClueService {
     return rows.map((row) => rowToClue(row as Record<string, unknown>));
   }
 
+  async listVisibleToCharacters(campaignId: string, characterIds: string[]): Promise<CampaignClue[]> {
+    const clues = await this.listByCampaign(campaignId);
+    if (characterIds.length === 0) return clues.filter((clue) => clue.revealed_to == null);
+    return clues.filter((clue) => clue.revealed_to == null || clue.revealed_to.some((id) => characterIds.includes(id)));
+  }
+
+  async getById(id: string): Promise<CampaignClue | null> {
+    const row = await db('campaign_clues').where({ id }).first();
+    return row ? rowToClue(row as Record<string, unknown>) : null;
+  }
+
   async create(params: {
     campaign_id: string;
     title: string;
@@ -78,6 +89,21 @@ class ClueService {
     await db('campaign_clues').where({ id }).update(updateData);
     const row = await db('campaign_clues').where({ id }).first();
     return row ? rowToClue(row as Record<string, unknown>) : null;
+  }
+
+  async revealToCharacters(id: string, characterIds: string[]): Promise<CampaignClue | null> {
+    const current = await this.getById(id);
+    if (!current) return null;
+    const next = [...new Set([...(current.revealed_to ?? []), ...characterIds])];
+    return this.update(id, {
+      is_revealed: true,
+      revealed_to: next,
+    });
+  }
+
+  async delete(id: string): Promise<boolean> {
+    const deleted = await db('campaign_clues').where({ id }).delete();
+    return deleted > 0;
   }
 }
 

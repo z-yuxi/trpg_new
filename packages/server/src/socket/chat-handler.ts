@@ -447,6 +447,29 @@ export function registerChatHandlers(
       }
     });
 
+    socket.on('grid_area_marked', async (data) => {
+      try {
+        const campaignId = socket.data.campaignId as string;
+        if (!campaignId || campaignId !== data.campaign_id) return;
+
+        const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+        if (!campaign || campaign.gm_user_id !== userId) return;
+
+        const overlays = Array.isArray(data.overlays) ? data.overlays : [];
+        await db('campaign_grid_maps')
+          .where({ campaign_id: campaignId, scene_id: data.scene_id })
+          .update({ overlays: JSON.stringify(overlays), updated_at: db.fn.now() });
+
+        roomNsp.to(`campaign:${campaignId}`).emit('grid_area_marked', {
+          campaign_id: campaignId,
+          scene_id: data.scene_id,
+          overlays,
+        });
+      } catch (err) {
+        console.error('[grid_area_marked] handler error:', err);
+      }
+    });
+
     // 断线
     socket.on('disconnect', async () => {
       try {

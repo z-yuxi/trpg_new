@@ -1,6 +1,34 @@
 // Service Worker for TRPG Platform PWA
-const CACHE_NAME = 'trpg-v1';
-const STATIC_ASSETS = ['/', '/manifest.json'];
+const CACHE_NAME = 'trpg-v2';
+const STATIC_ASSETS = ['/', '/manifest.json', '/icons/icon-192.svg', '/icons/icon-512.svg'];
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (request.method === 'GET' && response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    return cached ?? new Response(JSON.stringify({ error: 'offline' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (request.method === 'GET' && response.ok) {
+    cache.put(request, response.clone());
+  }
+  return response;
+}
 
 // 安装：预缓存核心资源
 self.addEventListener('install', (event) => {
@@ -24,13 +52,22 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // 跳过 API 和 socket.io
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+  if (url.pathname.startsWith('/socket.io/')) return;
+
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
 
   // 导航请求（HTML） → Network First，失败时返回 /index.html 缓存
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() =>
+      fetch(event.request).then((response) => {
+        if (response.ok) {
+          caches.open(CACHE_NAME).then((cache) => cache.put('/', response.clone()));
+        }
+        return response;
+      }).catch(() =>
         caches.match('/').then((cached) => cached ?? new Response('Offline', { status: 503 }))
       )
     );
@@ -38,16 +75,5 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 静态资源 → Cache First
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (event.request.method === 'GET' && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    })
-  );
+  event.respondWith(cacheFirst(event.request));
 });

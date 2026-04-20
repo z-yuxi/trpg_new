@@ -23,6 +23,22 @@ export async function joinScene(
   sceneId: string,
   moveType: 'join' | 'scheduled' | 'force_move' = 'join'
 ): Promise<void> {
+  const currentState = await db('character_scene_states')
+    .where({ character_id: characterId, campaign_id: campaignId })
+    .select('current_spatial_scene_id')
+    .first()
+    .catch(() => null);
+
+  const previousSceneId: string | null = currentState?.current_spatial_scene_id ?? null;
+  if (previousSceneId === sceneId) {
+    return;
+  }
+
+  // 先结束旧场景停留，确保 position_history.story_time_left 被正确补齐
+  if (previousSceneId) {
+    await leaveScene(characterId, campaignId, previousSceneId);
+  }
+
   // 更新场景状态
   await db('character_scene_states')
     .where({ character_id: characterId, campaign_id: campaignId })

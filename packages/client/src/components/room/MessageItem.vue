@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
+import ClueCard from '../ClueCard.vue';
 import type { LocalMessage } from '../../stores/message-store';
 
 const props = defineProps<{ message: LocalMessage; isOwn: boolean }>();
@@ -19,7 +19,7 @@ function parseDiceResult(metadata: any) {
 
 function parseClue(metadata: any) {
   if (!metadata) return null;
-  return metadata as { title?: string; content?: string; theme?: string };
+  return metadata as { clue_id?: string; title?: string; content?: string; theme?: string; sender_identity_label?: string };
 }
 
 function getSenderIdentity(metadata: any) {
@@ -35,6 +35,17 @@ function getSenderLabel(message: LocalMessage) {
 
 function isNpcMessage(message: LocalMessage) {
   return getSenderIdentity(message.metadata)?.sender_identity?.startsWith('npc:') ?? false;
+}
+
+function cluePreview(message: LocalMessage) {
+  const parsed = parseClue(message.metadata);
+  return {
+    clueId: parsed?.clue_id ?? String(message.id),
+    title: parsed?.title ?? '未命名线索',
+    content: parsed?.content ?? message.content,
+    theme: parsed?.theme ?? 'river',
+    senderName: parsed?.sender_identity_label ?? getSenderLabel(message),
+  };
 }
 </script>
 
@@ -58,11 +69,14 @@ function isNpcMessage(message: LocalMessage) {
 
   <!-- clue_card -->
   <div v-else-if="message.message_type === 'clue_card'" class="msg-clue">
-    <div class="clue-header"><SvgIcon name="icon-scroll" :size="14" /> 线索</div>
-    <div class="clue-title">{{ parseClue(message.metadata)?.title }}</div>
-    <div class="clue-content" :class="`text-art-${parseClue(message.metadata)?.theme ?? 'default'}`">
-      {{ message.content }}
-    </div>
+    <ClueCard
+      :clue-id="cluePreview(message).clueId"
+      :title="cluePreview(message).title"
+      :content="cluePreview(message).content"
+      :theme="cluePreview(message).theme"
+      :sender-name="cluePreview(message).senderName"
+      :created-at="message.created_at"
+    />
   </div>
 
   <!-- ooc -->
@@ -135,22 +149,9 @@ function isNpcMessage(message: LocalMessage) {
 
 /* ===== 线索卡 ===== */
 .msg-clue {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
   margin: var(--space-2) 0;
-  background: var(--surface-card);
+  max-width: 420px;
 }
-.clue-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-bottom: var(--space-2);
-}
-.clue-title   { font-weight: var(--font-semibold); margin-bottom: var(--space-2); color: var(--text-primary); }
-.clue-content { font-size: var(--text-sm); color: var(--text-secondary); }
 
 /* ===== OOC ===== */
 .msg-ooc {

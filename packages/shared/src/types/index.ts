@@ -190,6 +190,7 @@ export interface RecruitmentPost {
   schedule_text?: string | null;
   description?: string | null;
   tags?: string[];
+  metadata?: Record<string, unknown> | null;
   status: RecruitmentStatus;
   created_at: Date;
 }
@@ -516,9 +517,19 @@ export interface PositionHistory {
 }
 
 // ===== 网格地图 =====
+export interface GridOverlay {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+  label?: string;
+}
+
 export interface GridToken {
   id: string;
-  entity_type: 'character' | 'npc';
+  entity_type: 'character' | 'npc' | 'object';
   entity_id: string;
   label: string;
   x: number;
@@ -535,6 +546,7 @@ export interface GridMap {
   cell_size: number;
   background_image_url: string | null;
   tokens: GridToken[];
+  overlays: GridOverlay[];
   updated_at: Date;
 }
 

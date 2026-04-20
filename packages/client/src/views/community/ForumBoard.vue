@@ -12,6 +12,7 @@ interface Thread {
   is_pinned?: boolean;
   is_locked?: boolean;
   title: string;
+  content: string;
   author_nickname?: string;
   reply_count: number;
   view_count: number;
@@ -19,23 +20,25 @@ interface Thread {
   created_at: string;
 }
 
-const BOARD_LABELS: Record<string, string> = {
-  rules:      '规则问答',
-  creation:   '模组创作',
-  experience: '游玩体验',
-  newbie:     '新人求助',
-  lounge:     '水区',
+const BOARD_META: Record<string, { label: string; description: string; badge: string }> = {
+  rules: { label: '规则问答', description: '检定、判定、规则冲突与实战裁定集中讨论。', badge: 'RL' },
+  creation: { label: '模组创作', description: '分享模组草稿、灵感片段和发布前评审。', badge: 'CR' },
+  experience: { label: '游玩体验', description: '复盘跑团体验，沉淀流程和带团经验。', badge: 'EX' },
+  newbie: { label: '新人求助', description: '面向新手的快速问答区，适合入门咨询。', badge: 'NB' },
+  lounge: { label: '休息室', description: '轻松闲聊、拉片、吐槽和非严肃话题。', badge: 'LG' },
 };
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const board = computed(() => route.params['board'] as string);
-const boardLabel = computed(() => BOARD_LABELS[board.value] ?? '讨论区');
+const boardMeta = computed(() => BOARD_META[board.value] ?? { label: '讨论区', description: '社区讨论区', badge: 'CM' });
 
 const page = ref(1);
 const pageSize = 20;
 const sort = ref<'newest' | 'hottest' | 'latest_reply'>('latest_reply');
+const keyword = ref('');
+const timeRange = ref<'all' | '1' | '7' | '30'>('all');
 const threads = ref<Thread[]>([]);
 const total = ref(0);
 const loading = ref(false);
@@ -50,6 +53,8 @@ async function fetchThreads() {
   loading.value = true;
   try {
     const params = new URLSearchParams({ sort: sort.value, page: String(page.value), limit: String(pageSize) });
+    if (keyword.value.trim()) params.set('keyword', keyword.value.trim());
+    if (timeRange.value !== 'all') params.set('days', timeRange.value);
     const body = await api.get<{ data: Thread[]; total: number }>(`/forum/boards/${board.value}/threads?${params}`);
     threads.value = body.data;
     total.value = body.total;
@@ -102,9 +107,13 @@ function goThread(id: string) {
   router.push(`/community/thread/${id}`);
 }
 
+function excerpt(content: string) {
+  return content.replace(/\s+/g, ' ').trim().slice(0, 120) || '暂无摘要';
+}
+
 const totalPages = computed(() => Math.ceil(total.value / pageSize));
 
-watch([board, sort], () => { page.value = 1; fetchThreads(); }, { immediate: false });
+watch([board, sort, timeRange], () => { page.value = 1; fetchThreads(); }, { immediate: false });
 watch(page, fetchThreads);
 onMounted(fetchThreads);
 </script>
@@ -112,8 +121,21 @@ onMounted(fetchThreads);
 <template>
   <div class="forum-board">
     <div class="board-header">
-      <h2 class="board-title">{{ boardLabel }}</h2>
+      <div class="board-title-wrap">
+        <div class="board-badge">{{ boardMeta.badge }}</div>
+        <div>
+          <h2 class="board-title">{{ boardMeta.label }}</h2>
+          <p class="board-desc">{{ boardMeta.description }}</p>
+        </div>
+      </div>
       <div class="header-actions">
+        <ElInput v-model="keyword" placeholder="搜索标题或内容" clearable class="search-input" @keyup.enter="page = 1; fetchThreads()" @clear="page = 1; fetchThreads()" />
+        <select v-model="timeRange" class="sort-select">
+          <option value="all">全部时间</option>
+          <option value="1">24 小时</option>
+          <option value="7">近 7 天</option>
+          <option value="30">近 30 天</option>
+        </select>
         <select v-model="sort" class="sort-select">
           <option value="latest_reply">最新回复</option>
           <option value="newest">最新发布</option>
@@ -146,6 +168,7 @@ onMounted(fetchThreads);
             <TTag v-if="t.is_locked" size="sm" color="default">锁帖</TTag>
           </div>
           <span class="thread-title">{{ t.title }}</span>
+          <p class="thread-excerpt">{{ excerpt(t.content) }}</p>
         </div>
 
         <span class="col-author author-name">{{ t.author_nickname ?? '-' }}</span>
@@ -195,9 +218,24 @@ onMounted(fetchThreads);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-4);
+}
+.board-title-wrap { display: flex; align-items: center; gap: var(--space-3); }
+.board-badge {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 .board-title { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--text-primary); }
+.board-desc { margin: 4px 0 0; color: var(--text-muted); font-size: var(--text-sm); }
 .header-actions { display: flex; align-items: center; gap: var(--space-2); }
+.search-input { width: 220px; }
 .sort-select {
   padding: 4px 8px;
   border: 1px solid var(--border-default);
@@ -251,6 +289,16 @@ onMounted(fetchThreads);
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.thread-excerpt {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .author-name { font-size: var(--text-sm); color: var(--text-secondary); }
 
@@ -298,6 +346,9 @@ onMounted(fetchThreads);
 
 /* 响应式 */
 @media (max-width: 640px) {
+  .board-header,
+  .header-actions { flex-direction: column; align-items: stretch; }
+  .search-input { width: 100%; }
   .thread-row { grid-template-columns: 1fr 60px 50px; }
   .col-author, .col-last { display: none; }
 }

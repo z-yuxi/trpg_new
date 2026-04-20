@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElCheckbox, ElCheckboxGroup } from 'element-plus';
+import { ElCheckbox, ElCheckboxGroup, ElMessage } from 'element-plus';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
+
+type Perspective = 'my' | 'full' | 'scene';
+type SortStrategy = 'strict' | 'scene_first' | 'main_interleave';
+type ExportFormat = 'pdf' | 'md' | 'txt' | 'ilf';
 
 const route = useRoute();
 const router = useRouter();
@@ -11,38 +15,96 @@ const authStore = useAuthStore();
 
 const campaignId = route.params.id as string;
 
-// 配置选项
-const format = ref<'json' | 'markdown' | 'text'>('markdown');
-const mode = ref<'player' | 'full'>('player');
-const sortStrategy = ref<'chronological' | 'scene' | 'interleave' | 'custom'>('chronological');
+const currentStep = ref(1);
+const perspective = ref<Perspective>('my');
+const sortStrategy = ref<SortStrategy>('strict');
+const exportFormat = ref<ExportFormat>('md');
+const includeOoc = ref(true);
+const includeSystem = ref(true);
+const includeDiceDetails = ref(true);
 const simulateUserId = ref('');
 const selectedSceneIds = ref<string[]>([]);
 const allScenesSelected = ref(true);
 const isGm = ref(false);
 
-// 场景列表
 const scenes = ref<Array<{ id: string; name: string }>>([]);
 const isLoadingScenes = ref(false);
+const previewLoading = ref(false);
+const previewText = ref('');
+const previewFileName = ref('');
+const previewTotalMessages = ref(0);
+const previewReady = ref(false);
+const downloadLoading = ref(false);
 
-// 导出结果
-const exportResult = ref('');
-const isExporting = ref(false);
-const hasResult = ref(false);
+const steps = [
+  { id: 1, label: '选择视角' },
+  { id: 2, label: '配置选项' },
+  { id: 3, label: '生成预览' },
+  { id: 4, label: '下载导出' },
+] as const;
 
-// 全选/取消全选
-const handleSelectAll = (val: string | number | boolean) => {
+const perspectiveOptions = [
+  { value: 'my' as const, title: '我的故事', desc: '仅导出当前账号可见内容', icon: 'icon-npc' },
+  { value: 'full' as const, title: '完整剧本', desc: 'GM 视角的全量日志', icon: 'icon-highlight' },
+  { value: 'scene' as const, title: '场景剧本', desc: '按场景分章导出', icon: 'icon-grid' },
+];
+
+const formatOptions = [
+  { value: 'pdf' as const, title: 'PDF', desc: '适合打印与归档', icon: 'icon-scroll' },
+  { value: 'md' as const, title: 'Markdown', desc: '适合阅读与二次编辑', icon: 'icon-list' },
+  { value: 'txt' as const, title: '纯文本', desc: '适合快速分享', icon: 'icon-settings' },
+  { value: 'ilf' as const, title: 'ILF', desc: '结构化中间格式', icon: 'icon-history' },
+];
+
+const canUseFullPerspective = computed(() => isGm.value);
+const needSceneSelection = computed(() => perspective.value === 'scene');
+const hasSelectedScenes = computed(() => allScenesSelected.value || selectedSceneIds.value.length > 0);
+const canPreview = computed(() => {
+  if (perspective.value === 'full' && !canUseFullPerspective.value) return false;
+  if (needSceneSelection.value && !hasSelectedScenes.value) return false;
+  return true;
+});
+const previewLineCount = computed(() => previewText.value.split('\n').length);
+
+watch(
+  [perspective, sortStrategy, exportFormat, includeOoc, includeSystem, includeDiceDetails, simulateUserId, selectedSceneIds, allScenesSelected],
+  () => {
+    previewReady.value = false;
+  },
+);
+
+watch(perspective, (value) => {
+  if (value !== 'scene') allScenesSelected.value = true;
+  if (value === 'full' && !canUseFullPerspective.value) perspective.value = 'my';
+});
+
+function handleSelectAll(val: string | number | boolean) {
   if (val) {
-    selectedSceneIds.value = scenes.value.map((s) => s.id);
+    selectedSceneIds.value = scenes.value.map((scene) => scene.id);
   } else {
     selectedSceneIds.value = [];
   }
-};
+}
 
-const handleSceneChange = () => {
+function handleSceneChange() {
   allScenesSelected.value = selectedSceneIds.value.length === scenes.value.length;
-};
+}
 
-const resultLines = computed(() => exportResult.value.split('\n').length);
+function buildQuery(preview = false): string {
+  const params = new URLSearchParams({
+    perspective: perspective.value,
+    sort: sortStrategy.value,
+    format: exportFormat.value,
+    include_ooc: String(includeOoc.value),
+    include_system: String(includeSystem.value),
+    include_dice_details: String(includeDiceDetails.value),
+  });
+
+  if (preview) params.set('preview', 'true');
+  if (isGm.value && simulateUserId.value.trim()) params.set('simulate_user_id', simulateUserId.value.trim());
+  if (!allScenesSelected.value && selectedSceneIds.value.length > 0) params.set('scenes', selectedSceneIds.value.join(','));
+  return params.toString();
+}
 
 async function loadScenes() {
   isLoadingScenes.value = true;
@@ -55,76 +117,92 @@ async function loadScenes() {
       isGm.value = campaign?.gm_user_id === authStore.userId;
     }
 
-    const res = await fetch(`/api/campaigns/${campaignId}/scenes`, {
+    const sceneRes = await fetch(`/api/campaigns/${campaignId}/scenes`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
     });
-    if (res.ok) {
-      const data = await res.json();
-      scenes.value = data ?? [];
-      selectedSceneIds.value = scenes.value.map((s) => s.id);
+    if (sceneRes.ok) {
+      scenes.value = await sceneRes.json();
+      selectedSceneIds.value = scenes.value.map((scene) => scene.id);
+      allScenesSelected.value = true;
     }
   } catch {
-    // 忽略，可能没有场景 API
+    ElMessage.error('场景加载失败');
   } finally {
     isLoadingScenes.value = false;
   }
 }
 
-async function handleExport() {
-  isExporting.value = true;
-  hasResult.value = false;
-  exportResult.value = '';
-
-  const body: Record<string, unknown> = {
-    campaign_id: campaignId,
-    format: format.value,
-    mode: mode.value,
-    sort_strategy: sortStrategy.value,
-  };
-
-  if (isGm.value && simulateUserId.value.trim()) {
-    body.simulate_user_id = simulateUserId.value.trim();
+async function generatePreview() {
+  if (!canPreview.value) {
+    ElMessage.warning('请先完成当前导出配置');
+    return;
   }
 
-  if (!allScenesSelected.value && selectedSceneIds.value.length > 0) {
-    body.scene_ids = selectedSceneIds.value;
-  }
-
+  previewLoading.value = true;
   try {
-    const res = await fetch('/api/logs/export', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authStore.token}`,
-      },
-      body: JSON.stringify(body),
+    const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(true)}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
     });
-
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      ElMessage.error(err.error ?? '导出失败');
-      return;
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error ?? '预览生成失败');
     }
 
-    exportResult.value = await res.text();
-    hasResult.value = true;
-  } catch {
-    ElMessage.error('网络错误，请稍后重试');
+    const data = await res.json() as {
+      preview: string;
+      total_messages: number;
+      file_name: string;
+    };
+    previewText.value = data.preview;
+    previewTotalMessages.value = data.total_messages;
+    previewFileName.value = data.file_name;
+    previewReady.value = true;
+    currentStep.value = 4;
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '预览生成失败');
   } finally {
-    isExporting.value = false;
+    previewLoading.value = false;
   }
 }
 
-function handleDownload() {
-  const ext = format.value === 'json' ? 'json' : format.value === 'text' ? 'txt' : 'md';
-  const mime = format.value === 'json' ? 'application/json' : format.value === 'text' ? 'text/plain' : 'text/markdown';
-  const blob = new Blob([exportResult.value], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `campaign-${campaignId}-log.${ext}`;
-  a.click();
-  URL.revokeObjectURL(url);
+async function downloadExport() {
+  if (!previewReady.value) {
+    ElMessage.warning('请先生成预览');
+    return;
+  }
+
+  downloadLoading.value = true;
+  try {
+    const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(false)}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` },
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.error ?? '导出失败');
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const matched = disposition.match(/filename\*=UTF-8''([^;]+)/);
+    const fileName = matched
+      ? decodeURIComponent(matched[1])
+      : (previewFileName.value || `campaign-${campaignId}.${exportFormat.value}`);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  } catch (error: any) {
+    ElMessage.error(error?.message ?? '导出失败');
+  } finally {
+    downloadLoading.value = false;
+  }
+}
+
+function goToStep(step: number) {
+  if (step === 4 && !previewReady.value) return;
+  currentStep.value = step;
 }
 
 onMounted(() => {
@@ -138,130 +216,159 @@ onMounted(() => {
       <button class="back-btn" @click="router.back()" aria-label="返回">
         <span class="back-icon">←</span>
       </button>
-      <h1 class="page-title">导出日志</h1>
+      <div>
+        <h1 class="page-title">跑团日志导出</h1>
+        <p class="page-subtitle">按视角、排序和格式生成导出文件</p>
+      </div>
+    </div>
+
+    <div class="step-strip">
+      <button
+        v-for="step in steps"
+        :key="step.id"
+        class="step-pill"
+        :class="{ active: currentStep === step.id, done: currentStep > step.id || (step.id === 4 && previewReady) }"
+        @click="goToStep(step.id)"
+      >
+        <span class="step-index">{{ step.id }}</span>
+        <span>{{ step.label }}</span>
+      </button>
     </div>
 
     <div class="export-card">
-      <div class="section">
-        <div class="section-title">导出模式</div>
-        <div class="mode-options">
-          <label class="format-option" :class="{ active: mode === 'player' }">
-            <input v-model="mode" type="radio" value="player" />
-            <span class="format-icon"><SvgIcon name="icon-npc" :size="18" /></span>
+      <section class="section" :class="{ muted: currentStep !== 1 }">
+        <div class="section-head">
+          <span class="section-step">Step 1</span>
+          <h2 class="section-title">选择视角</h2>
+        </div>
+        <div class="option-grid">
+          <label
+            v-for="option in perspectiveOptions"
+            :key="option.value"
+            class="option-card"
+            :class="{ active: perspective === option.value, disabled: option.value === 'full' && !canUseFullPerspective }"
+          >
+            <input v-model="perspective" type="radio" :value="option.value" :disabled="option.value === 'full' && !canUseFullPerspective" />
+            <span class="option-icon"><SvgIcon :name="option.icon" :size="18" /></span>
             <div>
-              <div class="format-name">我的故事</div>
-              <div class="format-desc">按当前玩家可见内容导出</div>
-            </div>
-          </label>
-          <label class="format-option" :class="{ active: mode === 'full', disabled: !isGm }">
-            <input v-model="mode" type="radio" value="full" :disabled="!isGm" />
-            <span class="format-icon"><SvgIcon name="icon-highlight" :size="18" /></span>
-            <div>
-              <div class="format-name">完整剧本</div>
-              <div class="format-desc">仅 GM 可导出全量消息</div>
+              <div class="option-title">{{ option.title }}</div>
+              <div class="option-desc">{{ option.desc }}</div>
             </div>
           </label>
         </div>
-      </div>
+        <button class="next-btn" @click="currentStep = 2">继续配置</button>
+      </section>
 
-      <!-- 格式选择 -->
-      <div class="section">
-        <div class="section-title">导出格式</div>
-        <div class="format-options">
-          <label class="format-option" :class="{ active: format === 'markdown' }">
-            <input v-model="format" type="radio" value="markdown" />
-            <span class="format-icon"><SvgIcon name="icon-scroll" :size="18" /></span>
-            <div>
-              <div class="format-name">Markdown</div>
-              <div class="format-desc">适合阅读与存档</div>
-            </div>
-          </label>
-          <label class="format-option" :class="{ active: format === 'json' }">
-            <input v-model="format" type="radio" value="json" />
-            <span class="format-icon"><SvgIcon name="icon-settings" :size="18" /></span>
-            <div>
-              <div class="format-name">JSON</div>
-              <div class="format-desc">适合数据处理</div>
-            </div>
-          </label>
-          <label class="format-option" :class="{ active: format === 'text' }">
-            <input v-model="format" type="radio" value="text" />
-            <span class="format-icon"><SvgIcon name="icon-list" :size="18" /></span>
-            <div>
-              <div class="format-name">纯文本</div>
-              <div class="format-desc">适合快速复制与分享</div>
-            </div>
-          </label>
+      <section class="section" :class="{ muted: currentStep !== 2 }">
+        <div class="section-head">
+          <span class="section-step">Step 2</span>
+          <h2 class="section-title">配置选项</h2>
         </div>
-      </div>
 
-      <div class="section">
-        <div class="section-title">排序策略</div>
-        <select v-model="sortStrategy" class="strategy-select">
-          <option value="chronological">严格时序</option>
-          <option value="scene">场景优先</option>
-          <option value="interleave">主线穿插（当前按时序导出）</option>
-          <option value="custom">自定义排序（当前按时序导出）</option>
-        </select>
-        <p class="helper-text">当前 MVP 已实现严格时序与场景优先，其余策略先回退到时序导出。</p>
-      </div>
+        <div class="field-block">
+          <label class="field-label">排序策略</label>
+          <select v-model="sortStrategy" class="field-input">
+            <option value="strict">严格时序</option>
+            <option value="scene_first">场景优先</option>
+            <option value="main_interleave">主线优先穿插</option>
+          </select>
+        </div>
 
-      <div v-if="isGm && mode === 'player'" class="section">
-        <div class="section-title">GM 模拟玩家视角</div>
-        <input
-          v-model="simulateUserId"
-          class="simulate-input"
-          type="text"
-          placeholder="输入用户 ID，例如 1000000"
-        />
-        <p class="helper-text">留空则按你的可见范围导出。</p>
-      </div>
+        <div class="toggle-grid">
+          <label class="toggle-item"><input v-model="includeOoc" type="checkbox" />包含 OOC 消息</label>
+          <label class="toggle-item"><input v-model="includeSystem" type="checkbox" />包含 system 消息</label>
+          <label class="toggle-item"><input v-model="includeDiceDetails" type="checkbox" />包含骰子详情</label>
+        </div>
 
-      <!-- 场景筛选 -->
-      <div v-if="scenes.length > 0" class="section">
-        <div class="section-title">场景筛选</div>
-        <div class="scene-filter">
-          <label class="select-all-row">
-            <ElCheckbox v-model="allScenesSelected" @change="handleSelectAll">全部场景</ElCheckbox>
-          </label>
-          <div v-if="!allScenesSelected" class="scene-list">
-            <ElCheckboxGroup v-model="selectedSceneIds" @change="handleSceneChange">
-            <label v-for="scene in scenes" :key="scene.id" class="scene-item">
-              <ElCheckbox :value="scene.id">
-                {{ scene.name }}
-              </ElCheckbox>
+        <div v-if="isGm && perspective === 'my'" class="field-block">
+          <label class="field-label">GM 模拟玩家视角</label>
+          <input v-model="simulateUserId" class="field-input" type="text" placeholder="输入玩家 user_id，留空则使用你自己的视角" />
+        </div>
+
+        <div v-if="needSceneSelection" class="field-block">
+          <div class="field-label">选择场景</div>
+          <div v-if="isLoadingScenes" class="helper-text">场景加载中...</div>
+          <div v-else class="scene-picker">
+            <label class="select-all-row">
+              <ElCheckbox v-model="allScenesSelected" @change="handleSelectAll">全部场景</ElCheckbox>
             </label>
-            </ElCheckboxGroup>
+            <div v-if="!allScenesSelected" class="scene-list">
+              <ElCheckboxGroup v-model="selectedSceneIds" @change="handleSceneChange">
+                <label v-for="scene in scenes" :key="scene.id" class="scene-item">
+                  <ElCheckbox :value="scene.id">{{ scene.name }}</ElCheckbox>
+                </label>
+              </ElCheckboxGroup>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- 操作按钮 -->
-      <div class="actions">
-        <button
-          class="btn-export"
-          :disabled="isExporting"
-          @click="handleExport"
-        >
-          {{ isExporting ? '导出中...' : '生成日志' }}
-        </button>
-      </div>
-    </div>
+        <div class="field-block">
+          <label class="field-label">导出格式</label>
+          <div class="option-grid compact">
+            <label v-for="option in formatOptions" :key="option.value" class="option-card" :class="{ active: exportFormat === option.value }">
+              <input v-model="exportFormat" type="radio" :value="option.value" />
+              <span class="option-icon"><SvgIcon :name="option.icon" :size="16" /></span>
+              <div>
+                <div class="option-title">{{ option.title }}</div>
+                <div class="option-desc">{{ option.desc }}</div>
+              </div>
+            </label>
+          </div>
+        </div>
 
-    <!-- 预览区域 -->
-    <div v-if="hasResult" class="result-card">
-      <div class="result-header">
-        <span class="result-meta">共 {{ resultLines }} 行</span>
-        <button class="btn-download" @click="handleDownload">⬇ 下载文件</button>
-      </div>
-      <textarea class="result-preview" readonly :value="exportResult" />
+        <div class="action-row">
+          <button class="ghost-btn" @click="currentStep = 1">返回上一步</button>
+          <button class="next-btn" :disabled="!canPreview" @click="currentStep = 3">前往预览</button>
+        </div>
+      </section>
+
+      <section class="section" :class="{ muted: currentStep !== 3 }">
+        <div class="section-head">
+          <span class="section-step">Step 3</span>
+          <h2 class="section-title">生成预览</h2>
+        </div>
+        <div class="summary-card">
+          <div>视角：{{ perspectiveOptions.find((item) => item.value === perspective)?.title }}</div>
+          <div>排序：{{ sortStrategy }}</div>
+          <div>格式：{{ exportFormat.toUpperCase() }}</div>
+          <div v-if="needSceneSelection">场景数：{{ allScenesSelected ? scenes.length : selectedSceneIds.length }}</div>
+        </div>
+        <div class="action-row">
+          <button class="ghost-btn" @click="currentStep = 2">返回配置</button>
+          <button class="next-btn" :disabled="previewLoading || !canPreview" @click="generatePreview">
+            {{ previewLoading ? '生成中...' : '生成前 50 条预览' }}
+          </button>
+        </div>
+      </section>
+
+      <section class="section" :class="{ muted: currentStep !== 4 }">
+        <div class="section-head">
+          <span class="section-step">Step 4</span>
+          <h2 class="section-title">下载导出</h2>
+        </div>
+        <div v-if="previewReady" class="preview-card">
+          <div class="preview-meta">
+            <span>文件名：{{ previewFileName }}</span>
+            <span>消息数：{{ previewTotalMessages }}</span>
+            <span>预览行数：{{ previewLineCount }}</span>
+          </div>
+          <textarea class="preview-box" readonly :value="previewText" />
+        </div>
+        <div v-else class="helper-text">先完成预览后再下载。</div>
+        <div class="action-row">
+          <button class="ghost-btn" @click="currentStep = 3">返回预览</button>
+          <button class="next-btn" :disabled="!previewReady || downloadLoading" @click="downloadExport">
+            {{ downloadLoading ? '下载中...' : '下载导出文件' }}
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
 .log-export-page {
-  max-width: 640px;
+  max-width: 960px;
   margin: 0 auto;
   padding: var(--space-4);
   display: flex;
@@ -269,160 +376,301 @@ onMounted(() => {
   gap: var(--space-4);
 }
 
-/* 页面顶部 */
 .page-header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
 }
+
 .back-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 44px;
   height: 44px;
   border: none;
-  background: none;
-  cursor: pointer;
   border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
-  font-size: var(--text-xl);
-  -webkit-tap-highlight-color: transparent;
+  background: var(--surface-card);
+  cursor: pointer;
+  color: var(--text-secondary);
 }
-.back-btn:hover { color: var(--color-accent); background: var(--surface-hover); }
+
 .page-title {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--color-text-primary);
   margin: 0;
+  font-size: 28px;
 }
 
-/* 卡片 */
-.export-card, .result-card {
-  background: var(--color-card-bg);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-/* 区块 */
-.section-title {
+.page-subtitle {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
   font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--space-2);
 }
 
-/* 格式选项 */
-.format-options {
-  display: flex;
-  gap: var(--space-3);
-}
-.mode-options {
+.step-strip {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
 }
-.format-option {
-  flex: 1;
+
+.step-pill {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
-}
-.format-option input { display: none; }
-.format-option.active { border-color: var(--color-accent); background: var(--surface-hover); }
-.format-option.disabled {
-  opacity: 0.52;
-  cursor: not-allowed;
-}
-.format-icon { font-size: 20px; flex-shrink: 0; }
-.format-name { font-weight: 600; font-size: var(--text-sm); color: var(--color-text-primary); }
-.format-desc { font-size: 11px; color: var(--color-text-muted); }
-.strategy-select,
-.simulate-input {
-  width: 100%;
-  min-height: 40px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
   background: var(--surface-card);
-  color: var(--color-text-primary);
-}
-.helper-text {
-  margin-top: var(--space-2);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
-/* 场景列表 */
-.select-all-row { display: block; margin-bottom: var(--space-2); }
-.scene-list {
+.step-pill.active,
+.step-pill.done {
+  border-color: var(--color-accent);
+  color: var(--text-primary);
+}
+
+.step-index {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  font-size: 12px;
+}
+
+.export-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  max-height: 180px;
-  overflow-y: auto;
-  padding-left: var(--space-2);
+  gap: var(--space-3);
 }
-.scene-item { display: block; }
 
-/* 操作 */
-.actions { display: flex; justify-content: flex-end; }
-.btn-export {
-  padding: var(--space-2) var(--space-6);
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
+.section {
+  border: 1px solid var(--border-default);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(247,244,238,0.9));
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-.btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-export:not(:disabled):hover { opacity: 0.85; }
 
-/* 结果区域 */
-.result-header {
+.section.muted {
+  opacity: 0.8;
+}
+
+.section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-2);
 }
-.result-meta { font-size: var(--text-sm); color: var(--color-text-muted); }
-.btn-download {
-  padding: var(--space-1) var(--space-3);
-  background: var(--surface-hover);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+
+.section-step {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.section-title {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.option-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.option-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: rgba(255,255,255,0.82);
   cursor: pointer;
-  color: var(--color-text-primary);
-  transition: border-color var(--transition-fast);
 }
-.btn-download:hover { border-color: var(--color-accent); color: var(--color-accent); }
-.result-preview {
+
+.option-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.option-card.active {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.option-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-hover);
+  color: var(--color-accent);
+}
+
+.option-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.option-desc {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.field-input {
   width: 100%;
-  height: 320px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-card);
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.7);
+  font-size: var(--text-sm);
+}
+
+.scene-picker {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: var(--space-3);
+  background: rgba(255,255,255,0.72);
+}
+
+.scene-list {
+  margin-top: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.scene-item {
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+}
+
+.summary-card,
+.preview-card {
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.82);
+  padding: var(--space-3);
+}
+
+.summary-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.preview-box {
+  width: 100%;
+  min-height: 360px;
   resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: #111318;
+  color: #f3f1ea;
+  padding: var(--space-3);
   font-family: var(--font-mono);
   font-size: 12px;
-  background: var(--color-page-bg);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  color: var(--color-text-primary);
   line-height: 1.6;
-  box-sizing: border-box;
+}
+
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.next-btn,
+.ghost-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.next-btn {
+  border: none;
+  background: linear-gradient(135deg, #1f6f63, #2a8a7a);
+  color: #fff;
+}
+
+.ghost-btn {
+  border: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.next-btn:disabled,
+.ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.helper-text {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
 }
 
 @media (max-width: 768px) {
@@ -430,16 +678,17 @@ onMounted(() => {
     padding: var(--space-3);
   }
 
-  .format-options,
-  .mode-options {
-    display: grid;
+  .step-strip,
+  .option-grid,
+  .option-grid.compact,
+  .toggle-grid,
+  .scene-list,
+  .summary-card {
     grid-template-columns: 1fr;
   }
 
-  .result-header {
+  .action-row {
     flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
   }
 }
 </style>

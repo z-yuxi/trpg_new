@@ -5,10 +5,10 @@ import SvgIcon from '../components/SvgIcon.vue';
 const route = useRoute();
 
 const navItems = [
+  { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者面板' },
   { path: '/creator/workshop',   icon: 'icon-list',      label: '规则工坊' },
   { path: '/creator/modules',    icon: 'icon-book',      label: '模组编辑器' },
   { path: '/creator/assets',     icon: 'icon-dice',      label: '素材库' },
-  { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者面板' },
   { path: '/creator/products',   icon: 'icon-star',      label: '我的作品' },
 ];
 
