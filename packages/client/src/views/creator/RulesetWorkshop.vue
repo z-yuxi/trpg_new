@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElDialog, ElInput, ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface RulesetItem {
   id: string;
@@ -25,7 +25,6 @@ interface RulesetVersionItem {
 }
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 const rulesets = ref<RulesetItem[]>([]);
 const loading = ref(false);
@@ -67,10 +66,8 @@ function statusColor(status: RulesetItem['status']) {
 async function loadRulesets() {
   loading.value = true;
   try {
-    const res = await fetch('/api/rulesets/mine', { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (!res.ok) throw new Error('加载失败');
-    const body = await res.json();
-    rulesets.value = Array.isArray(body) ? body : body.data ?? [];
+    const body = await api.get<unknown>('/rulesets/mine');
+    rulesets.value = Array.isArray(body) ? body : (body as { data?: RulesetItem[] }).data ?? [];
   } catch (error: any) {
     ElMessage.error(error?.message ?? '规则集加载失败');
   } finally {
@@ -86,19 +83,7 @@ async function createRuleset() {
 
   creating.value = true;
   try {
-    const res = await fetch('/api/rulesets', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authStore.token}`,
-      },
-      body: JSON.stringify({ name: newName.value.trim(), version: '0.1.0' }),
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.error ?? '创建失败');
-    }
-    const created = await res.json();
+    const created = await api.post<{ id: string }>('/rulesets', { name: newName.value.trim(), version: '0.1.0' });
     showNew.value = false;
     newName.value = '';
     router.push(`/creator/workshop/${created.id}/edit`);
@@ -112,14 +97,7 @@ async function createRuleset() {
 async function publishRuleset(rulesetId: string) {
   publishTargetId.value = rulesetId;
   try {
-    const res = await fetch(`/api/rulesets/${rulesetId}/publish`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.error ?? '发布失败');
-    }
+    await api.post(`/rulesets/${rulesetId}/publish`, {});
     ElMessage.success('规则集已发布');
     await loadRulesets();
   } catch (error: any) {
@@ -133,15 +111,7 @@ async function forkRuleset(rs: RulesetItem) {
   if (!window.confirm(`Fork「${rs.name}」？将创建一份独立草稿。`)) return;
   forking.value = rs.id;
   try {
-    const res = await fetch(`/api/rulesets/${rs.id}/fork`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.error ?? 'Fork 失败');
-    }
-    const data = await res.json();
+    const data = await api.post<{ new_ruleset: { id: string } }>(`/rulesets/${rs.id}/fork`, {});
     ElMessage.success('Fork 成功');
     await loadRulesets();
     router.push(`/creator/workshop/${data.new_ruleset.id}/edit`);
@@ -157,12 +127,8 @@ async function openVersions(rs: RulesetItem) {
   showVersionDialog.value = true;
   versionLoading.value = true;
   try {
-    const res = await fetch(`/api/rulesets/${rs.id}/versions`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error('版本列表加载失败');
-    const body = await res.json();
-    versions.value = Array.isArray(body) ? body : body.data ?? [];
+    const body = await api.get<unknown>(`/rulesets/${rs.id}/versions`);
+    versions.value = Array.isArray(body) ? body : (body as { data?: unknown[] }).data ?? [];
   } catch (error: any) {
     ElMessage.error(error?.message ?? '版本列表加载失败');
   } finally {
@@ -174,18 +140,7 @@ async function createSnapshot() {
   if (!versionRuleset.value) return;
   savingVersion.value = true;
   try {
-    const res = await fetch(`/api/rulesets/${versionRuleset.value.id}/versions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ changelog: snapshotChangelog.value.trim() }),
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.error ?? '创建版本失败');
-    }
+    await api.post(`/rulesets/${versionRuleset.value.id}/versions`, { changelog: snapshotChangelog.value.trim() });
     ElMessage.success('版本快照已创建');
     snapshotChangelog.value = '';
     await openVersions(versionRuleset.value);
@@ -202,14 +157,7 @@ async function rollbackVersion(versionId: string) {
   if (!confirmed) return;
   rollingBackVersionId.value = versionId;
   try {
-    const res = await fetch(`/api/rulesets/${versionRuleset.value.id}/versions/${versionId}/rollback`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.error ?? '回滚失败');
-    }
+    await api.post(`/rulesets/${versionRuleset.value.id}/versions/${versionId}/rollback`, {});
     ElMessage.success('已回滚到指定版本');
     await loadRulesets();
     await openVersions(versionRuleset.value);

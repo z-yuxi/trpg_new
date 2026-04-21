@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { Scene, SceneConnection } from '@trpg/shared';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 type SceneConnectionRow = SceneConnection & {
   from_scene_name?: string;
@@ -17,7 +17,6 @@ const props = defineProps<{
   currentSceneId?: string;
 }>();
 
-const authStore = useAuthStore();
 const connections = ref<SceneConnectionRow[]>([]);
 const loading = ref(false);
 const showEditDialog = ref(false);
@@ -34,10 +33,7 @@ const editConn = ref<Partial<SceneConnectionRow> & { fromId: string; toId: strin
 async function loadConnections() {
   loading.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/connections`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (res.ok) connections.value = await res.json();
+    connections.value = await api.get<SceneConnectionRow[]>(`/campaigns/${props.campaignId}/connections`);
   } catch {
     ElMessage.error('场景连接加载失败');
   } finally {
@@ -58,17 +54,10 @@ async function saveConnection() {
     };
 
     const isEdit = !!editConn.value.id;
-    const url = isEdit
-      ? `/api/campaigns/${props.campaignId}/connections/${editConn.value.id}`
-      : `/api/campaigns/${props.campaignId}/connections`;
-    const res = await fetch(url, {
-      method: isEdit ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error ?? '保存失败');
+    if (isEdit) {
+      await api.put(`/campaigns/${props.campaignId}/connections/${editConn.value.id}`, body);
+    } else {
+      await api.post(`/campaigns/${props.campaignId}/connections`, body);
     }
 
     await loadConnections();
@@ -90,15 +79,7 @@ async function removeConnection(connId: string) {
       type: 'warning',
     });
 
-    const res = await fetch(`/api/campaigns/${props.campaignId}/connections/${connId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error ?? '删除失败');
-    }
-
+    await api.delete(`/campaigns/${props.campaignId}/connections/${connId}`);
     connections.value = connections.value.filter((c) => c.id !== connId);
     ElMessage.success('场景连接已删除');
   } catch (err: any) {

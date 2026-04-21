@@ -5,6 +5,7 @@ import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { api } from '../utils/api';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -38,23 +39,22 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
 onMounted(async () => {
   loading.value = true;
   try {
-    const headers: HeadersInit = authStore.token ? { Authorization: `Bearer ${authStore.token}` } : {};
-    const [cRes, rRes, mRes, recRes] = await Promise.all([
-      authStore.isLoggedIn ? fetch('/api/campaigns', { headers }) : Promise.resolve(null),
-      fetch('/api/rulesets?limit=6'),
-      fetch('/api/modules?limit=6'),
-      fetch('/api/recruitment?limit=5'),
+    const [cData, rData, mData, recData] = await Promise.all([
+      authStore.isLoggedIn ? api.get<unknown[]>('/campaigns') : Promise.resolve(null),
+      api.get<unknown>('/rulesets?limit=6').catch(() => null),
+      api.get<unknown>('/modules?limit=6').catch(() => null),
+      api.get<unknown[]>('/recruitment?limit=5').catch(() => null),
     ]);
-    if (cRes?.ok) { const d = await cRes.json(); campaigns.value = Array.isArray(d) ? d.slice(0, 6) : []; }
-    if (rRes?.ok) {
-      const d = await rRes.json();
-      rulesets.value = Array.isArray(d?.data) ? d.data.slice(0, 6) : Array.isArray(d) ? d.slice(0, 6) : [];
+    if (cData) campaigns.value = (cData as unknown[]).slice(0, 6);
+    if (rData) {
+      const d = rData as { data?: unknown[] } | unknown[];
+      rulesets.value = Array.isArray((d as { data?: unknown[] }).data) ? ((d as { data: unknown[] }).data).slice(0, 6) : Array.isArray(d) ? (d as unknown[]).slice(0, 6) : [];
     }
-    if (mRes?.ok) {
-      const d = await mRes.json();
-      modules.value = Array.isArray(d?.data) ? d.data.slice(0, 6) : [];
+    if (mData) {
+      const d = mData as { data?: unknown[] };
+      modules.value = Array.isArray(d?.data) ? d.data!.slice(0, 6) : [];
     }
-    if (recRes?.ok) { const d = await recRes.json(); recruitments.value = Array.isArray(d) ? d.slice(0, 5) : []; }
+    if (recData) recruitments.value = (recData as unknown[]).slice(0, 5);
   } catch { /* silent */ } finally {
     loading.value = false;
   }

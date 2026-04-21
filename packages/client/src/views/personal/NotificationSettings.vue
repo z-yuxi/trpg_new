@@ -2,10 +2,9 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 interface NotifyGroup {
   label: string;
@@ -44,12 +43,7 @@ const saving = ref(false);
 async function save() {
   saving.value = true;
   try {
-    const res = await fetch('/api/users/me/notification-settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({ system: system.value, recruit: recruit.value, dm: dm.value, mention: mention.value }),
-    });
-    if (!res.ok) throw new Error();
+    await api.put('/users/me/notification-settings', { system: system.value, recruit: recruit.value, dm: dm.value, mention: mention.value });
     ElMessage.success('通知设置已保存');
   } catch {
     ElMessage.error('保存失败，请稍后重试');

@@ -17,6 +17,11 @@ export interface UserNotification {
 // ===== Server → Client 事件 =====
 export interface ServerToClientEvents {
   new_message: (message: ChatMessage) => void;
+  time_tag_announced: (data: {
+    time_label: string;          // HH:MM 格式
+    message_id: string;          // 插入聊天流的消息ID
+  }) => void;
+  /** @deprecated 旧事件，保留兼容性 */
   time_advanced: (data: {
     old_time: StoryTime;
     new_time: StoryTime;
@@ -29,7 +34,7 @@ export interface ServerToClientEvents {
     move_type: 'scheduled' | 'force_move' | 'join' | 'leave';
   }) => void;
   character_state_sync: (snapshot: CharacterInstance) => void;
-  move_approved: (data: { move_id: string; execute_at: StoryTime }) => void;
+  move_approved: (data: { move_id: string; to_scene_id: string; from_scene_id: string | null }) => void;
   move_rejected: (data: { move_id: string; reason?: string }) => void;
   rate_limited: (data: { retry_after: number; message: string }) => void;
   missed_messages: (data: {
@@ -65,15 +70,14 @@ export interface ClientToServerEvents {
   }) => void;
   gm_approve_move: (data: {
     move_id: string;
-    execute_at?: StoryTime;
+    story_arrival_time?: string;  // 可选：HH:MM 格式的剧情到达时间
   }) => void;
   gm_reject_move: (data: {
     move_id: string;
     reason?: string;
   }) => void;
-  gm_advance_time: (data: {
-    delta?: { days?: number; hours?: number; minutes?: number };
-    custom_time?: StoryTime;
+  gm_announce_time: (data: {
+    time_label: string;  // HH:MM 格式，如 "14:30"
   }) => void;
   grid_token_moved: (data: {
     campaign_id: string;

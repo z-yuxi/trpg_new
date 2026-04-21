@@ -2,6 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
+import { useTheme } from '../composables/useTheme';
 
 type MobileAssistantTab = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 type MobileView = 'chat' | 'scenes' | 'assistant' | 'gm';
@@ -12,11 +13,12 @@ const emit = defineEmits<{
   'export-log': [];
   'mobile-assistant-open': [tab: MobileAssistantTab];
   'update:mobileView': [view: MobileView];
-  'advance-time': [minutes: number];
+  'announce-time': [];
   'play-as-npc': [npcId: string];
   'open-approve': [];
 }>();
 const router = useRouter();
+const { currentTheme, toggleTheme } = useTheme();
 
 const leftVisible = ref(true);
 const rightVisible = ref(true);
@@ -72,21 +74,10 @@ function handleBackToCampaigns() {
 }
 
 const showNpcMenu = ref(false);
-const showGmMenu = ref(false);
 
-function toggleNpcMenu() { showNpcMenu.value = !showNpcMenu.value; showGmMenu.value = false; }
-function toggleGmMenu() { showGmMenu.value = !showGmMenu.value; showNpcMenu.value = false; }
-
-const gmMenuItems = [
-  { key: 'scenes', label: '场景管理' },
-  { key: 'npcs', label: 'NPC 管理' },
-  { key: 'clues', label: '线索库' },
-  { key: 'timeline', label: '轨迹矩阵' },
-  { key: 'map', label: '网格地图' },
-];
+function toggleNpcMenu() { showNpcMenu.value = !showNpcMenu.value; }
 
 function openGmPage(module: string) {
-  showGmMenu.value = false;
   if (props.campaignId) router.push(`/campaign/${props.campaignId}/gm/${module}`);
 }
 
@@ -109,15 +100,11 @@ function playAsNpc(npcId: string) {
       <div class="room-info">
         <span class="room-name">{{ campaignName ?? '加载中...' }}</span>
         <code class="room-code" @click="copyCode" title="点击复制">{{ roomCode }}</code>
-        <span v-if="globalTime" class="story-time">
-          第{{ globalTime.day }}天 {{ String(globalTime.hour).padStart(2, '0') }}:{{ String(globalTime.minute).padStart(2, '0') }}
-        </span>
       </div>
       <div class="topbar-actions">
         <!-- GM 快捷操作（仅 GM 可见） -->
         <template v-if="isGm">
-          <button class="icon-btn quick-time desktop-action" @click="emit('advance-time', 30)" title="快进 30 分钟">+30m</button>
-          <button class="icon-btn quick-time desktop-action" @click="emit('advance-time', 60)" title="快进 1 小时">+1h</button>
+          <button class="icon-btn quick-time desktop-action" @click="emit('announce-time')" title="宣布剧情时间">宣布时间</button>
           <button class="icon-btn approve-btn desktop-action" @click="emit('open-approve')">
             审批
             <span v-if="pendingMovesCount" class="badge">{{ pendingMovesCount }}</span>
@@ -132,19 +119,14 @@ function playAsNpc(npcId: string) {
               <li v-for="npc in npcs" :key="npc.id" @click="playAsNpc(npc.id)">{{ npc.name }}</li>
             </ul>
           </div>
-          <!-- GM 管理页面下拉 -->
-          <div class="dropdown-wrap">
-            <button class="icon-btn gm-btn desktop-action" @click="toggleGmMenu">
-              <SvgIcon name="icon-settings" :size="16" />
-              GM
-              <SvgIcon name="icon-caret-down" :size="12" />
-            </button>
-            <ul v-if="showGmMenu" class="dropdown-menu">
-              <li v-for="item in gmMenuItems" :key="item.key" @click="openGmPage(item.key)">{{ item.label }}</li>
-            </ul>
-          </div>
-          <!-- 移动端仅显示：+30m 和 审批 -->
-          <button class="icon-btn quick-time mobile-action" @click="emit('advance-time', 30)">+30m</button>
+          <!-- 导演台按钮（取代旧 GM 下拉菜单） -->
+          <button class="icon-btn director-btn desktop-action" @click="openGmPage('now')" title="进入导演台">
+            <SvgIcon name="icon-settings" :size="16" />
+            导演台
+            <span v-if="pendingMovesCount" class="director-badge">{{ pendingMovesCount }}</span>
+          </button>
+          <!-- 移动端仅显示：宣布时间 和 审批 -->
+          <button class="icon-btn quick-time mobile-action" @click="emit('announce-time')">时间</button>
           <button class="icon-btn approve-btn mobile-action" @click="emit('open-approve')">
             审批
             <span v-if="pendingMovesCount" class="badge">{{ pendingMovesCount }}</span>
@@ -159,6 +141,9 @@ function playAsNpc(npcId: string) {
         </button>
         <button class="icon-btn" @click="toggleRightPanel" aria-label="切换助手台">
           <SvgIcon name="icon-scroll" :size="18" />
+        </button>
+        <button class="icon-btn theme-toggle-btn" @click="toggleTheme" :title="currentTheme === 'day' ? '切换夜间模式' : '切换日间模式'">
+          <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="18" />
         </button>
       </div>
     </header>
@@ -220,7 +205,6 @@ function playAsNpc(npcId: string) {
 .room-name { font-weight: 600; font-size: var(--text-base); }
 .room-code { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-text-muted); cursor: pointer; letter-spacing: 2px; }
 .room-code:hover { color: var(--color-accent); }
-.story-time { font-size: var(--text-xs); color: var(--color-text-muted); background: var(--color-card-bg); border: 1px solid var(--color-card-border); border-radius: var(--radius-sm); padding: 2px 8px; font-family: var(--font-mono); }
 .topbar-actions { display: flex; align-items: center; gap: var(--space-2); }
 .desktop-action { display: flex; }
 .mobile-action { display: none; }
@@ -232,6 +216,20 @@ function playAsNpc(npcId: string) {
 }
 .icon-btn:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
 .gm-btn { background: #fef3c7; color: #92400e; }
+.director-btn {
+  background: linear-gradient(135deg, var(--color-accent, #3b82f6), #6366f1);
+  color: #fff;
+  font-weight: 600;
+  position: relative;
+}
+.director-btn:hover { filter: brightness(1.1); color: #fff; }
+.director-badge {
+  background: var(--color-error, #ef4444);
+  color: #fff;
+  font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  line-height: 16px; text-align: center; padding: 0 3px;
+}
 .export-btn { background: var(--surface-hover); color: var(--color-text-secondary); }
 .quick-time { font-weight: 600; font-family: var(--font-mono); }
 .approve-btn { position: relative; }

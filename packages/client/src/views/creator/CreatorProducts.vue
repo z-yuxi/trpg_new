@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface Ruleset {
   id: string;
@@ -31,7 +31,6 @@ type ProductItem =
   | ({ kind: 'module' } & Module);
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 const rulesets = ref<Ruleset[]>([]);
 const modules = ref<Module[]>([]);
@@ -39,15 +38,13 @@ const loading = ref(false);
 const filterStatus = ref('all');
 const searchQuery = ref('');
 
-const headers = computed(() => ({ Authorization: `Bearer ${authStore.token}` }));
-
 // 合并展示列表
 const allProducts = computed<ProductItem[]>(() => [
   ...rulesets.value.map(r => ({ kind: 'ruleset' as const, ...r })),
   ...modules.value.map(m => ({ kind: 'module' as const, ...m })),
 ].sort((a, b) => {
-  const ta = new Date((a as Record<string, string>)['updated_at'] ?? (a as Record<string, string>)['created_at'] ?? 0).getTime();
-  const tb = new Date((b as Record<string, string>)['updated_at'] ?? (b as Record<string, string>)['created_at'] ?? 0).getTime();
+  const ta = new Date(('updated_at' in a ? a.updated_at : undefined) ?? ('created_at' in a ? a.created_at : undefined) ?? 0).getTime();
+  const tb = new Date(('updated_at' in b ? b.updated_at : undefined) ?? ('created_at' in b ? b.created_at : undefined) ?? 0).getTime();
   return tb - ta;
 }));
 
@@ -74,12 +71,12 @@ const stats = computed(() => ({
 async function loadProducts() {
   loading.value = true;
   try {
-    const [rsRes, modRes] = await Promise.all([
-      fetch('/api/rulesets/mine', { headers: headers.value }),
-      fetch('/api/modules/mine', { headers: headers.value }),
+    const [rsData, modData] = await Promise.all([
+      api.get<Ruleset[]>('/rulesets/mine'),
+      api.get<Module[]>('/modules/mine'),
     ]);
-    if (rsRes.ok) rulesets.value = await rsRes.json();
-    if (modRes.ok) modules.value = await modRes.json();
+    rulesets.value = rsData;
+    modules.value = modData;
   } catch {
     ElMessage.error('加载作品列表失败');
   } finally {
@@ -91,10 +88,10 @@ function formatStatus(status: string) {
   return { draft: '草稿', reviewing: '审核中', published: '已发布', deprecated: '已弃用', archived: '已归档' }[status] ?? status;
 }
 
-function statusColor(status: string): string {
+function statusColor(status: string): 'default' | 'success' | 'warning' | 'danger' {
   if (status === 'published') return 'success';
   if (status === 'reviewing') return 'warning';
-  if (status === 'deprecated' || status === 'archived') return 'error';
+  if (status === 'deprecated' || status === 'archived') return 'danger';
   return 'default';
 }
 
@@ -195,11 +192,11 @@ onMounted(loadProducts);
           <template v-else>
             <span>派生 {{ (item as Ruleset).fork_count ?? 0 }}</span>
           </template>
-          <span>· 更新于 {{ formatDate((item as Record<string, string>)['updated_at'] ?? (item as Record<string, string>)['created_at']) }}</span>
+          <span>· 更新于 {{ formatDate(('updated_at' in item ? item.updated_at : undefined) ?? ('created_at' in item ? item.created_at : undefined)) }}</span>
         </div>
 
         <div class="card-actions">
-          <TButton size="small" type="secondary" @click="editProduct(item)">
+          <TButton size="sm" type="secondary" @click="editProduct(item)">
             <SvgIcon name="icon-edit" :size="14" />
             编辑
           </TButton>

@@ -12,20 +12,16 @@ const props = defineProps<{
 
 const spatialScenes = computed(() => props.scenes.filter((s) => s.type === 'spatial' || s.type === 'lobby'));
 
-function padZ(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
-function formatTime(t: { day: number; hour: number; minute: number }) {
-  return `第${t.day}日 ${padZ(t.hour)}:${padZ(t.minute)}`;
-}
-
 type ScheduledMove = {
   id: string;
   character_name?: string;
   to_scene_name?: string;
   to_scene_id?: string;
-  execute_at_story: { day: number; hour: number; minute: number };
+  execute_at_story?: { day?: number; hour: number; minute: number } | null;
 };
 
 const currentScheduledMoves = ref<ScheduledMove[]>([]);
+const arrivalTimes = ref<Record<string, string>>({});
 const loadingMoves = ref(false);
 const showRejectDialog = ref(false);
 const rejectMoveId = ref('');
@@ -46,8 +42,12 @@ async function loadPendingScheduledMoves() {
 
 async function approveMove(moveId: string) {
   try {
-    await api.post(`/campaigns/${props.campaignId}/moves/${moveId}/approve`);
+    const storyArrivalTime = arrivalTimes.value[moveId]?.trim();
+    await api.post(`/campaigns/${props.campaignId}/moves/${moveId}/approve`, {
+      story_arrival_time: storyArrivalTime || null,
+    });
     currentScheduledMoves.value = currentScheduledMoves.value.filter((m) => m.id !== moveId);
+    delete arrivalTimes.value[moveId];
     ElMessage.success('移动已批准');
   } catch (e: any) { ElMessage.error(e.message ?? '批准失败'); }
 }
@@ -106,7 +106,8 @@ onMounted(() => {
     <div v-else v-for="move in currentScheduledMoves" :key="move.id" class="move-preview-row">
       <div class="move-info">
         <div class="move-char">{{ move.character_name || '未命名角色' }}</div>
-        <div class="move-scene">→ {{ move.to_scene_name || move.to_scene_id }} · {{ move.execute_at_story ? formatTime(move.execute_at_story) : '—' }}</div>
+        <div class="move-scene">→ {{ move.to_scene_name || move.to_scene_id }}</div>
+        <input v-model="arrivalTimes[move.id]" class="field-input arrival-input" placeholder="可选：HH:MM" />
       </div>
       <div class="move-btns">
         <button class="sm-btn accent" @click="approveMove(move.id)">批准</button>

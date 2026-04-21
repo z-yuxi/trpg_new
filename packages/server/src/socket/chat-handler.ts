@@ -8,16 +8,10 @@ import { notificationService } from '../services/notification-service';
 import { rulesetService } from '../services/ruleset-service';
 import { characterInstanceService } from '../services/character-sheet-service';
 import { resolveCommand } from '../engine/command-resolver';
+import { announceTime } from '../services/time';
+import { approveMove } from '../services/movement';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
-
-/** 比较两个 StoryTime，返回 1 / 0 / -1 */
-function compareStoryTime(a: StoryTime, b: StoryTime): number {
-  if (a.day !== b.day) return a.day > b.day ? 1 : -1;
-  if (a.hour !== b.hour) return a.hour > b.hour ? 1 : -1;
-  if (a.minute !== b.minute) return a.minute > b.minute ? 1 : -1;
-  return 0;
-}
 
 export function registerChatHandlers(
   roomNsp: Namespace<ClientToServerEvents, ServerToClientEvents>
@@ -202,179 +196,156 @@ export function registerChatHandlers(
       }
     });
 
-    // GM 推进时间
-    socket.on('gm_advance_time', async (data) => {
+    // GM 宣布剧情时间（插入 time_tag 消息到聊天流）
+    socket.on('gm_announce_time', async (data) => {
       try {
-      const campaignId = socket.data.campaignId as string;
-      if (!campaignId) return;
+        const campaignId = socket.data.campaignId as string;
+        if (!campaignId) return;
 
-      const campaign = await db('campaigns').where({ id: campaignId }).first();
-      if (!campaign || campaign.gm_user_id !== userId) return;
+        const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
+        if (!campaign || campaign.gm_user_id !== userId) return;
 
-      let currentTime: StoryTime = { day: 1, hour: 8, minute: 0 };
-      try {
-        currentTime = typeof campaign.global_story_time === 'string'
-          ? JSON.parse(campaign.global_story_time)
-          : campaign.global_story_time ?? currentTime;
-      } catch { /* 默认值 */ }
+        // 获取 GM 当前所在场景（作为 time_tag 消息归属场景）
+        const gmState = await db('character_scene_states')
+          .where({ campaign_id: campaignId })
+          .join('character_sheets', 'character_sheets.id', 'character_scene_states.character_id')
+          .where('character_sheets.user_id', userId)
+          .select('character_scene_states.current_spatial_scene_id')
+          .first()
+          .catch(() => null);
 
-      // 计算新时间：优先使用 custom_time，否则在当前时间上加 delta
-      let newTime: StoryTime;
-      if (data.custom_time) {
-        newTime = data.custom_time;
-      } else if (data.delta) {
-        const totalMinutes =
-          currentTime.day * 24 * 60 +
-          currentTime.hour * 60 +
-          currentTime.minute +
-          (data.delta.days ?? 0) * 24 * 60 +
-          (data.delta.hours ?? 0) * 60 +
-          (data.delta.minutes ?? 0);
-        newTime = {
-          day: Math.floor(totalMinutes / (24 * 60)),
-          hour: Math.floor((totalMinutes % (24 * 60)) / 60),
-          minute: totalMinutes % 60,
+        // 若 GM 不在任何场景，用第一个非大厅场景或留空字符串
+        const sceneId = gmState?.current_spatial_scene_id ?? '';
+
+        const { messageId, timeLabel } = await announceTime(campaignId, sceneId, data.time_label, userId);
+
+        // 构建消息对象广播到全体
+        const message = {
+          id: messageId,
+          scene_id: sceneId,
+          campaign_id: campaignId,
+          sender_user_id: userId,
+          sender_character_id: null,
+          content: timeLabel,
+          message_type: 'time_tag' as const,
+          story_time: null,
+          visible_to: null,
+          client_timestamp: Date.now(),
+          created_at: new Date(),
+          metadata: null,
         };
-      } else {
-        return;
-      }
 
-      if (compareStoryTime(newTime, currentTime) <= 0) return;
+        // 推入 Redis 消息缓冲区
+        await redis.lpush(RedisKeys.messageBuffer(campaignId), JSON.stringify(message));
+        await redis.ltrim(RedisKeys.messageBuffer(campaignId), 0, 199);
 
-      await db('campaigns').where({ id: campaignId }).update({
-        global_story_time: JSON.stringify(newTime),
-      });
-
-      // 查找并执行到期的 scheduled_moves
-      const pendingMoves = await db('scheduled_moves')
-        .where({ campaign_id: campaignId, status: 'pending' })
-        .select();
-
-      const triggeredMoves: { move_id: string; character_id: string; to_scene_id: string }[] = [];
-      for (const move of pendingMoves) {
-        let executeAt: StoryTime;
-        try {
-          executeAt = typeof move.execute_at_story === 'string'
-            ? JSON.parse(move.execute_at_story)
-            : move.execute_at_story;
-        } catch { continue; }
-
-        if (compareStoryTime(executeAt, newTime) <= 0) {
-          await db('character_scene_states')
-            .where({ character_id: move.character_id, campaign_id: campaignId })
-            .update({ current_spatial_scene_id: move.to_scene_id });
-
-          await db('position_history').insert({
-            id: generateId(),
-            campaign_id: campaignId,
-            character_id: move.character_id,
-            scene_id: move.to_scene_id,
-            story_time_entered: JSON.stringify(newTime),
-            story_time_left: null,
-            move_type: 'scheduled',
-          });
-
-          await db('scheduled_moves').where({ id: move.id }).update({ status: 'executed' });
-          triggeredMoves.push({ move_id: move.id, character_id: move.character_id, to_scene_id: move.to_scene_id });
-        }
-      }
-
-      roomNsp.to(`campaign:${campaignId}`).emit('time_advanced', {
-        old_time: currentTime,
-        new_time: newTime,
-        triggered_moves: triggeredMoves,
-        executed_moves: triggeredMoves, // 兼容字段
-      });
-
-      // 广播系统消息提示时间推进
-      const padZ = (n: number) => String(n).padStart(2, '0');
-      const timeStr = `第${newTime.day}天 ${padZ(newTime.hour)}:${padZ(newTime.minute)}`;
-      const sysMsg = {
-        id: generateId(),
-        campaign_id: campaignId,
-        sender_user_id: userId,
-        sender_character_id: null,
-        content: `[系统] 故事时间推进到 ${timeStr}`,
-        message_type: 'system',
-        scene_id: null,
-        visible_to: null,
-        story_time: JSON.stringify(newTime),
-        metadata: null,
-        created_at: new Date().toISOString(),
-      };
-      await db('chat_messages').insert(sysMsg);
-      roomNsp.to(`campaign:${campaignId}`).emit('new_message', sysMsg);
+        // 广播消息
+        roomNsp.to(`campaign:${campaignId}`).emit('new_message', message);
+        roomNsp.to(`campaign:${campaignId}`).emit('time_tag_announced', { time_label: timeLabel, message_id: messageId });
       } catch (err) {
-        console.error('[gm_advance_time] handler error:', err);
+        console.error('[gm_announce_time] handler error:', err);
       }
     });
 
-    // 请求移动
+    // 玩家申请移动
     socket.on('request_move', async (data) => {
       try {
-      const { target_scene_id } = data;
-      const campaignId = socket.data.campaignId as string;
-      const characterId = socket.data.characterId as string;
-      if (!characterId || !campaignId) return;
+        const { target_scene_id } = data;
+        const campaignId = socket.data.campaignId as string;
+        const characterId = socket.data.characterId as string;
+        if (!characterId || !campaignId) return;
 
-      const campaign = await db('campaigns').where({ id: campaignId }).select('global_story_time', 'gm_user_id').first();
-      const executeAt = campaign?.global_story_time
-        ? (typeof campaign.global_story_time === 'string' ? campaign.global_story_time : JSON.stringify(campaign.global_story_time))
-        : JSON.stringify({ day: 1, hour: 8, minute: 0 });
+        const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
 
-      const moveId = generateId();
-      await db('scheduled_moves').insert({
-        id: moveId,
-        character_id: characterId,
-        campaign_id: campaignId,
-        to_scene_id: target_scene_id,
-        execute_at_story: executeAt,
-        status: 'pending',
-      });
+        const moveId = generateId();
+        await db('scheduled_moves').insert({
+          id: moveId,
+          character_id: characterId,
+          campaign_id: campaignId,
+          to_scene_id: target_scene_id,
+          execute_at_story: null,
+          status: 'pending',
+        });
 
-      if (campaign?.gm_user_id) {
-        const gmSocketId = await redis.get(RedisKeys.userSocket(campaign.gm_user_id));
-        if (gmSocketId) {
-          // move_requested 是内部GM通知，不在标准 ServerToClientEvents 中
-          (roomNsp.to(gmSocketId) as any).emit('move_requested', {
-            move_id: moveId,
-            character_id: characterId,
-            to_scene_id: target_scene_id,
-            campaign_id: campaignId,
-          });
+        if (campaign?.gm_user_id) {
+          const gmSocketId = await redis.get(RedisKeys.userSocket(campaign.gm_user_id));
+          if (gmSocketId) {
+            (roomNsp.to(gmSocketId) as any).emit('move_requested', {
+              move_id: moveId,
+              character_id: characterId,
+              to_scene_id: target_scene_id,
+              campaign_id: campaignId,
+            });
+          }
         }
-      }
       } catch (err) {
         console.error('[request_move] handler error:', err);
       }
     });
 
-    // GM 审批移动
+    // GM 批准移动（立即执行 → 角色瞬间到达目标场景）
     socket.on('gm_approve_move', async (data) => {
       try {
-      const { move_id } = data;
-      const move = await db('scheduled_moves').where({ id: move_id }).first();
-      if (!move) return;
+        const { move_id, story_arrival_time } = data;
+        const move = await db('scheduled_moves').where({ id: move_id, status: 'pending' }).first();
+        if (!move) return;
 
-      await db('scheduled_moves').where({ id: move_id }).update({ status: 'approved' });
+        const { record, from_scene_id } = await approveMove(move_id, userId, story_arrival_time ?? null);
+        if (!record) return;
 
-      const charSheet = await db('character_sheets').where({ id: move.character_id }).select('user_id').first();
-      if (charSheet?.user_id) {
-        const playerSocketId = await redis.get(RedisKeys.userSocket(charSheet.user_id));
-        if (playerSocketId) {
-          const executeAt: StoryTime = move.execute_at_story
-            ? (typeof move.execute_at_story === 'string' ? JSON.parse(move.execute_at_story) : move.execute_at_story)
-            : { day: 1, hour: 8, minute: 0 };
-          roomNsp.to(playerSocketId).emit('move_approved', { move_id, execute_at: executeAt });
+        // 构建系统过渡消息（插入当前场景聊天流）
+        const toScene = await db('scenes').where({ id: move.to_scene_id }).select('name').first().catch(() => null);
+        const fromScene = from_scene_id ? await db('scenes').where({ id: from_scene_id }).select('name').first().catch(() => null) : null;
+        const charSheet = await db('character_sheets').where({ id: move.character_id }).select('user_id', 'name').first().catch(() => null);
+
+        const transitionContent = fromScene
+          ? `${charSheet?.name ?? '角色'} 离开 ${fromScene.name}，前往 ${toScene?.name ?? '目标场景'}`
+          : `${charSheet?.name ?? '角色'} 前往 ${toScene?.name ?? '目标场景'}`;
+        const sysMsg = {
+          id: String(snowflake.nextId()),
+          scene_id: move.to_scene_id,
+          campaign_id: move.campaign_id,
+          sender_user_id: userId,
+          sender_character_id: null,
+          content: transitionContent,
+          message_type: 'system' as const,
+          story_time: null,
+          visible_to: null,
+          client_timestamp: Date.now(),
+          created_at: new Date(),
+          metadata: null,
+        };
+        await db('chat_messages').insert({ ...sysMsg, id: BigInt(sysMsg.id) });
+        await redis.lpush(RedisKeys.messageBuffer(move.campaign_id), JSON.stringify(sysMsg));
+        await redis.ltrim(RedisKeys.messageBuffer(move.campaign_id), 0, 199);
+        roomNsp.to(`campaign:${move.campaign_id}`).emit('new_message', sysMsg);
+
+        // 通知玩家移动已执行
+        if (charSheet?.user_id) {
+          const playerSocketId = await redis.get(RedisKeys.userSocket(charSheet.user_id));
+          if (playerSocketId) {
+            roomNsp.to(playerSocketId).emit('move_approved', {
+              move_id,
+              to_scene_id: move.to_scene_id,
+              from_scene_id,
+            });
+          }
+          notificationService.createNotification({
+            userId: charSheet.user_id as string,
+            type: 'system',
+            title: '移动已执行',
+            content: `你已抵达 ${toScene?.name ?? '目标场景'}`,
+            metadata: { move_id },
+          }).catch(() => {});
         }
-        notificationService.createNotification({
-          userId: charSheet.user_id as string,
-          type: 'system',
-          title: '移动请求已批准',
-          content: 'GM已批准你的移动请求。',
-          metadata: { move_id },
-        }).catch(() => {});
-      }
+
+        // 广播位置变更
+        roomNsp.to(`campaign:${move.campaign_id}`).emit('position_changed', {
+          character_id: move.character_id,
+          from_scene_id: from_scene_id ?? '',
+          to_scene_id: move.to_scene_id,
+          move_type: 'scheduled',
+        });
       } catch (err) {
         console.error('[gm_approve_move] handler error:', err);
       }
@@ -383,26 +354,26 @@ export function registerChatHandlers(
     // GM 拒绝移动
     socket.on('gm_reject_move', async (data) => {
       try {
-      const { move_id } = data;
-      const move = await db('scheduled_moves').where({ id: move_id }).first();
-      if (!move) return;
+        const { move_id } = data;
+        const move = await db('scheduled_moves').where({ id: move_id }).first();
+        if (!move) return;
 
-      await db('scheduled_moves').where({ id: move_id }).update({ status: 'cancelled' });
+        await db('scheduled_moves').where({ id: move_id }).update({ status: 'cancelled' });
 
-      const charSheet = await db('character_sheets').where({ id: move.character_id }).select('user_id').first();
-      if (charSheet?.user_id) {
-        const playerSocketId = await redis.get(RedisKeys.userSocket(charSheet.user_id));
-        if (playerSocketId) {
-          roomNsp.to(playerSocketId).emit('move_rejected', { move_id });
+        const charSheet = await db('character_sheets').where({ id: move.character_id }).select('user_id').first();
+        if (charSheet?.user_id) {
+          const playerSocketId = await redis.get(RedisKeys.userSocket(charSheet.user_id));
+          if (playerSocketId) {
+            roomNsp.to(playerSocketId).emit('move_rejected', { move_id });
+          }
+          notificationService.createNotification({
+            userId: charSheet.user_id as string,
+            type: 'system',
+            title: '移动请求已拒绝',
+            content: 'GM拒绝了你的移动请求。',
+            metadata: { move_id },
+          }).catch(() => {});
         }
-        notificationService.createNotification({
-          userId: charSheet.user_id as string,
-          type: 'system',
-          title: '移动请求已拒绝',
-          content: 'GM拒绝了你的移动请求。',
-          metadata: { move_id },
-        }).catch(() => {});
-      }
       } catch (err) {
         console.error('[gm_reject_move] handler error:', err);
       }

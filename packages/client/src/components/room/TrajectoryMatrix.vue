@@ -2,7 +2,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { StoryTime } from '@trpg/shared';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface TrajectorySegment {
   scene_id: string;
@@ -21,7 +21,6 @@ const props = defineProps<{
   isGm?: boolean;
 }>();
 
-const authStore = useAuthStore();
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < 900);
 const filterCharId = ref('');
 const selectedDetail = ref<{
@@ -109,18 +108,7 @@ async function handleCellContext(charId: string, charName: string, day: number, 
         cancelButtonText: '取消',
         type: 'warning',
       });
-      const res = await fetch(`/api/campaigns/${props.campaignId}/moves/force`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authStore.token}`,
-        },
-        body: JSON.stringify({ character_id: charId, to_scene_id: segment.scene_id }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? '强制移动失败');
-      }
+      await api.post(`/campaigns/${props.campaignId}/moves/force`, { character_id: charId, to_scene_id: segment.scene_id });
       ElMessage.success('已发起强制移动');
     } catch (err: any) {
       if (err?.message !== 'cancel') ElMessage.error(err?.message ?? '强制移动失败');

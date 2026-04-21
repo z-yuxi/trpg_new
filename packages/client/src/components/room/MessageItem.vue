@@ -1,10 +1,47 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
 import type { LocalMessage } from '../../stores/message-store';
 
 const props = defineProps<{ message: LocalMessage; isOwn: boolean }>();
 const emit = defineEmits<{ retry: [tempId: string] }>();
+
+// 右键 / 长按 显示真实发送时间
+const timestampVisible = ref(false);
+const timestampText = ref('');
+let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getRealTime(message: LocalMessage): string {
+  const dt = message.created_at instanceof Date ? message.created_at : new Date(message.created_at);
+  if (isNaN(dt.getTime())) return '未知时间';
+  return `发送时间：${dt.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+}
+
+function showTimestamp() {
+  timestampText.value = getRealTime(props.message);
+  timestampVisible.value = true;
+}
+
+function hideTimestamp() {
+  timestampVisible.value = false;
+}
+
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault();
+  showTimestamp();
+}
+
+function onTouchStart() {
+  longPressTimer = setTimeout(() => {
+    showTimestamp();
+    longPressTimer = null;
+  }, 500);
+}
+
+function onTouchEnd() {
+  if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
 
 function formatTime(d: Date) {
   const dt = d instanceof Date ? d : new Date(d);
@@ -50,8 +87,11 @@ function cluePreview(message: LocalMessage) {
 </script>
 
 <template>
+  <!-- time_tag -->
+  <div v-if="message.message_type === 'time_tag'" class="msg-time-tag">{{ message.content }}</div>
+
   <!-- system -->
-  <div v-if="message.message_type === 'system'" class="msg-system">{{ message.content }}</div>
+  <div v-else-if="message.message_type === 'system'" class="msg-system">{{ message.content }}</div>
 
   <!-- announcement -->
   <div v-else-if="message.message_type === 'announcement'" class="msg-announcement">
@@ -85,7 +125,15 @@ function cluePreview(message: LocalMessage) {
   </div>
 
   <!-- narrative / default — 按附录 B 3.5 实现尖角气泡 -->
-  <div v-else class="msg-bubble-row" :class="{ own: isOwn }">
+  <div
+    v-else
+    class="msg-bubble-row"
+    :class="{ own: isOwn }"
+    @contextmenu="onContextMenu"
+    @touchstart.passive="onTouchStart"
+    @touchend="onTouchEnd"
+    @touchcancel="onTouchEnd"
+  >
     <div class="msg-avatar">{{ (message.sender_character_id ?? message.sender_user_id ?? '?')[0] }}</div>
     <div class="msg-bubble-wrap">
       <div v-if="getSenderLabel(message)" class="msg-sender" :class="{ npc: isNpcMessage(message) }">
@@ -104,12 +152,23 @@ function cluePreview(message: LocalMessage) {
           title="点击重试"
         >!</span>
       </div>
-      <div class="msg-time">{{ formatTime(message.created_at) }}</div>
+      <!-- 真实发送时间浮层（右键/长按触发） -->
+      <div v-if="timestampVisible" class="msg-timestamp-tip" @click="hideTimestamp">{{ timestampText }}</div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* ===== 时间标签 ===== */
+.msg-time-tag {
+  text-align: center;
+  margin: var(--space-3) 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 /* ===== 系统消息 ===== */
 .msg-system {
   text-align: center;
@@ -131,11 +190,6 @@ function cluePreview(message: LocalMessage) {
 }
 
 /* ===== 骰子 ===== */
-.msg-dice {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--color-info-bg);
   border: 1px solid var(--color-info);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
@@ -294,4 +348,17 @@ function cluePreview(message: LocalMessage) {
 .send-status { margin-left: 4px; font-size: 11px; }
 .send-status.pending { color: var(--text-muted); }
 .send-status.failed  { color: var(--color-danger); cursor: pointer; font-weight: var(--font-bold); }
+
+/* 真实时间提示 */
+.msg-timestamp-tip {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--color-card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+  user-select: none;
+}
 </style>

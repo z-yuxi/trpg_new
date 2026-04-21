@@ -7,7 +7,8 @@ import { clueService } from '../services/clue-service';
 import { characterInstanceService } from '../services/character-sheet-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
-import { generateId } from '@trpg/shared';
+import { generateId, snowflake } from '@trpg/shared';
+import { io } from '../app';
 
 const router: IRouter = Router();
 
@@ -795,17 +796,19 @@ router.get('/:id/scheduled-moves', async (req, res) => {
 
 // ── 时间/移动 REST API ──────────────────────────────────────────────────────
 
-// POST /api/campaigns/:id/time/advance — GM 推进故事时间
-router.post('/:id/time/advance', async (req, res) => {
+// POST /api/campaigns/:id/time/announce — GM 宣布剧情时间
+router.post('/:id/time/announce', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
-    const { advanceTime } = await import('../services/time.js');
-    const result = await advanceTime(req.params.id, req.body.delta ?? {}, req.user!.id);
+    const { announceTime } = await import('../services/time.js');
+    const sceneId = String(req.body.scene_id ?? '');
+    const timeLabel = String(req.body.time_label ?? '');
+    const result = await announceTime(req.params.id, sceneId, timeLabel, req.user!.id);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Time advance failed' });
+    res.status(500).json({ error: err?.message ?? 'Time announce failed' });
   }
 });
 
@@ -823,7 +826,7 @@ router.get('/:id/moves', async (req, res) => {
   }
 });
 
-// POST /api/campaigns/:id/moves/request — 玩家预约移动
+// POST /api/campaigns/:id/moves/request — 玩家申请移动
 router.post('/:id/moves/request', async (req, res) => {
   try {
     const { character_id, to_scene_id } = req.body;
@@ -863,20 +866,14 @@ router.post('/:id/moves/request', async (req, res) => {
       else travelDuration = Number(conn.walk_duration ?? 0);
     }
 
-    const baseTime =
-      parseStoryTime(sceneState.personal_story_time) ??
-      parseStoryTime(campaign.global_story_time) ??
-      { day: 1, hour: 8, minute: 0 };
-    const executeAtStory = addStoryMinutes(baseTime, Math.max(0, travelDuration));
-
     const { requestMove } = await import('../services/movement.js');
-    const move = await requestMove(character_id, req.params.id, to_scene_id, executeAtStory);
+    const move = await requestMove(character_id, req.params.id, to_scene_id);
     res.status(201).json({
       ...move,
       from_scene_id: fromSceneId,
       transport_mode: transportMode,
       travel_duration: travelDuration,
-      execute_at_story: executeAtStory,
+      execute_at_story: null,
     });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Request failed' });
@@ -890,9 +887,9 @@ router.post('/:id/moves/:moveId/approve', async (req, res) => {
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { approveMove } = await import('../services/movement.js');
-    const move = await approveMove(req.params.moveId!, req.user!.id);
-    if (!move) { res.status(404).json({ error: 'Move not found' }); return; }
-    res.json(move);
+    const result = await approveMove(req.params.moveId!, req.user!.id, req.body.story_arrival_time ?? null);
+    if (!result.record) { res.status(404).json({ error: 'Move not found' }); return; }
+    res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Approve failed' });
   }
@@ -923,6 +920,40 @@ router.post('/:id/moves/force', async (req, res) => {
     if (!character_id || !to_scene_id) { res.status(400).json({ error: 'Missing fields' }); return; }
     const { forceMove } = await import('../services/movement.js');
     const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
+
+    // 插入系统过渡消息到聊天流
+    const toScene = await db('scenes').where({ id: to_scene_id }).select('name').first().catch(() => null);
+    const fromScene = result.from_scene_id ? await db('scenes').where({ id: result.from_scene_id }).select('name').first().catch(() => null) : null;
+    const charSheet = await db('character_sheets').where({ id: character_id }).select('name').first().catch(() => null);
+    const transitionContent = fromScene
+      ? `${charSheet?.name ?? '角色'} 离开 ${fromScene.name}，前往 ${toScene?.name ?? '目标场景'}`
+      : `${charSheet?.name ?? '角色'} 前往 ${toScene?.name ?? '目标场景'}`;
+    const sysMsg = {
+      id: String(snowflake.nextId()),
+      scene_id: to_scene_id,
+      campaign_id: req.params.id,
+      sender_user_id: req.user!.id,
+      sender_character_id: null,
+      content: transitionContent,
+      message_type: 'system' as const,
+      story_time: null,
+      visible_to: null,
+      client_timestamp: Date.now(),
+      created_at: new Date(),
+      metadata: null,
+    };
+    await db('chat_messages').insert({ ...sysMsg, id: BigInt(sysMsg.id) });
+    await redis.lpush(RedisKeys.messageBuffer(req.params.id), JSON.stringify(sysMsg));
+    await redis.ltrim(RedisKeys.messageBuffer(req.params.id), 0, 199);
+    const roomNsp = io.of('/room');
+    roomNsp.to(`campaign:${req.params.id}`).emit('new_message', sysMsg);
+    roomNsp.to(`campaign:${req.params.id}`).emit('position_changed', {
+      character_id,
+      from_scene_id: result.from_scene_id ?? '',
+      to_scene_id: result.to_scene_id,
+      move_type: 'force_move',
+    });
+
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Force move failed' });

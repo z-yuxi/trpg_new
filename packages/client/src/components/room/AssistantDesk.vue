@@ -5,7 +5,7 @@ import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
 import GridMap from './GridMap.vue';
 import { useMessageStore } from '../../stores/message-store';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 import type { CharacterSheet, Scene, StoryTime } from '@trpg/shared';
 
 const props = defineProps<{
@@ -24,7 +24,6 @@ const emit = defineEmits<{
   'broadcast': [content: string];
 }>();
 
-const authStore = useAuthStore();
 const messageStore = useMessageStore();
 
 // ── character binding ─────────────────────────────────────────────────
@@ -37,8 +36,8 @@ const loadingChar = ref(false);
 
 async function loadCharacterList() {
   try {
-    const res = await fetch('/api/characters', { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (res.ok) myCharacters.value = (await res.json()).map((c: any) => ({ id: c.id, name: c.name }));
+    const list = await api.get<{ id: string; name: string }[]>('/characters');
+    myCharacters.value = list.map((c) => ({ id: c.id, name: c.name }));
   } catch { /* ignore */ }
 }
 
@@ -46,8 +45,7 @@ async function loadCharacterSheet(id: string) {
   if (!id) { characterSheet.value = null; return; }
   loadingChar.value = true;
   try {
-    const res = await fetch(`/api/characters/${id}`, { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (res.ok) characterSheet.value = await res.json();
+    characterSheet.value = await api.get<CharacterSheet>(`/characters/${id}`);
   } catch { /* ignore */ } finally { loadingChar.value = false; }
 }
 
@@ -116,10 +114,7 @@ const expandedClueId = ref('');
 async function loadNotebookClues() {
   notebookLoading.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (res.ok) notebookClues.value = await res.json();
+    notebookClues.value = await api.get<NotebookClue[]>(`/campaigns/${props.campaignId}/clues`);
   } catch {
     notebookClues.value = [];
   } finally {

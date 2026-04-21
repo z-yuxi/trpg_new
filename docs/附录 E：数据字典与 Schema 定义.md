@@ -1,4 +1,4 @@
-
+﻿
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
@@ -256,7 +256,7 @@ interface ScheduledMove {
   campaign_id: string;
   to_scene_id: string;
   travel_method?: 'walk' | 'bike' | 'drive';  // 启用场景连通时
-  execute_at_story: StoryTime;                 // 剧情时间到达时执行
+  execute_at_story?: StoryTime;                // （可选）移动关联的剧情时间，供记录用；不再用于触发执行
   status: 'pending' | 'approved' | 'executed' | 'cancelled';
   created_at: Timestamp;
   approved_at?: Timestamp;
@@ -268,7 +268,7 @@ interface PositionHistory {
   campaign_id: string;
   character_id: string;
   scene_id: string;
-  story_time_entered: StoryTime;   // 进入时间
+  story_time_entered?: StoryTime;  // 进入时间（可选，GM审批移动时填写；不填则为null）
   story_time_left?: StoryTime;       // 离开时间，NULL表示仍在
   move_type: 'scheduled' | 'force_move' | 'join' | 'leave';
 }

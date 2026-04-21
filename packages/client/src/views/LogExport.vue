@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElCheckbox, ElCheckboxGroup, ElMessage } from 'element-plus';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { api, getToken } from '../utils/api';
 
 type Perspective = 'my' | 'full' | 'scene';
 type SortStrategy = 'strict' | 'scene_first' | 'main_interleave';
@@ -109,22 +110,12 @@ function buildQuery(preview = false): string {
 async function loadScenes() {
   isLoadingScenes.value = true;
   try {
-    const campaignRes = await fetch(`/api/campaigns/${campaignId}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (campaignRes.ok) {
-      const campaign = await campaignRes.json();
-      isGm.value = campaign?.gm_user_id === authStore.userId;
-    }
+    const campaign = await api.get<{ gm_user_id?: string }>(`/campaigns/${campaignId}`);
+    isGm.value = campaign?.gm_user_id === authStore.userId;
 
-    const sceneRes = await fetch(`/api/campaigns/${campaignId}/scenes`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (sceneRes.ok) {
-      scenes.value = await sceneRes.json();
-      selectedSceneIds.value = scenes.value.map((scene) => scene.id);
-      allScenesSelected.value = true;
-    }
+    scenes.value = await api.get<{ id: string; name: string }[]>(`/campaigns/${campaignId}/scenes`);
+    selectedSceneIds.value = scenes.value.map((scene) => scene.id);
+    allScenesSelected.value = true;
   } catch {
     ElMessage.error('场景加载失败');
   } finally {
@@ -141,7 +132,7 @@ async function generatePreview() {
   previewLoading.value = true;
   try {
     const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(true)}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
+      headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
@@ -174,7 +165,7 @@ async function downloadExport() {
   downloadLoading.value = true;
   try {
     const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(false)}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
+      headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));

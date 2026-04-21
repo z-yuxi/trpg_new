@@ -2,10 +2,9 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 const profilePublic = ref(true);
 const onlineVisible = ref(true);
@@ -15,16 +14,11 @@ const saving = ref(false);
 async function save() {
   saving.value = true;
   try {
-    const res = await fetch('/api/users/me/privacy', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({
-        profile_public: profilePublic.value,
-        online_visible: onlineVisible.value,
-        campaign_history_public: campaignHistoryPublic.value,
-      }),
+    await api.put('/users/me/privacy', {
+      profile_public: profilePublic.value,
+      online_visible: onlineVisible.value,
+      campaign_history_public: campaignHistoryPublic.value,
     });
-    if (!res.ok) throw new Error();
     ElMessage.success('隐私设置已保存');
   } catch {
     ElMessage.error('保存失败，请稍后重试');

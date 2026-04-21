@@ -114,7 +114,6 @@ function resetPageAndReload() {
   loadPosts();
 }
 
-watch(() => props.type, resetPageAndReload);
 watch(() => props.fixedType, () => {
   filterType.value = props.fixedType ?? 'all';
   resetPageAndReload();

@@ -8,6 +8,7 @@ import TInput from '../components/base/TInput.vue';
 import TTag from '../components/base/TTag.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { api, getToken } from '../utils/api';
 import { useTheme } from '../composables/useTheme';
 
 const router = useRouter();
@@ -50,12 +51,8 @@ const avatarDisplay = computed(() => avatarPreview.value || displayUser.value.av
 onMounted(async () => {
   if (!authStore.isLoggedIn) return;
   try {
-    const res = await fetch('/api/users/me', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (res.ok) {
-      const payload = await res.json();
-      userDetail.value = payload.user ?? payload;
+    const payload = await api.get<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me');
+    userDetail.value = (payload as { user?: Record<string, unknown> }).user ?? payload;
       if (!Array.isArray(userDetail.value.tags)) userDetail.value.tags = [];
       if (typeof userDetail.value.intro !== 'string') userDetail.value.intro = '';
       authStore.setAuth({
@@ -64,38 +61,23 @@ onMounted(async () => {
         nickname: userDetail.value.nickname,
         avatarUrl: userDetail.value.avatar_url,
       });
-    }
   } catch { /* 静默失败，显示缓存数据 */ }
 
   try {
-    const statRes = await fetch('/api/users/me/stats', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (statRes.ok) {
-      const data = await statRes.json();
-      stats.value = {
-        joinedCampaigns: Number(data.joined_campaigns ?? 0),
-        createdCampaigns: Number(data.created_campaigns ?? 0),
-        totalHours: Number(data.total_hours ?? 0),
-      };
-      return;
-    }
+    const data = await api.get<Record<string, unknown>>('/users/me/stats');
+    stats.value = {
+      joinedCampaigns: Number(data.joined_campaigns ?? 0),
+      createdCampaigns: Number(data.created_campaigns ?? 0),
+      totalHours: Number(data.total_hours ?? 0),
+    };
+    return;
   } catch { /* ignore */ }
 
   // 兼容尚未部署统计接口的环境：从现有战役接口做动态兜底，不使用硬编码。
   try {
-    const campaignRes = await fetch('/api/campaigns', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (campaignRes.ok) {
-      const campaigns = await campaignRes.json();
-      const count = Array.isArray(campaigns) ? campaigns.length : 0;
-      stats.value = {
-        joinedCampaigns: count,
-        createdCampaigns: count,
-        totalHours: 0,
-      };
-    }
+    const campaigns = await api.get<unknown[]>('/campaigns');
+    const count = Array.isArray(campaigns) ? campaigns.length : 0;
+    stats.value = { joinedCampaigns: count, createdCampaigns: count, totalHours: 0 };
   } catch { /* ignore */ }
 });
 
@@ -109,38 +91,29 @@ function startEdit() {
 
 async function saveEdit() {
   try {
-    const res = await fetch('/api/users/me', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({
-        nickname: editNickname.value,
-        avatar_url: avatarPreview.value,
-        intro: editIntro.value.slice(0, 200),
-        tags: editTags.value,
-      }),
+    const payload = await api.put<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me', {
+      nickname: editNickname.value,
+      avatar_url: avatarPreview.value,
+      intro: editIntro.value.slice(0, 200),
+      tags: editTags.value,
     });
-    if (res.ok) {
-      const payload = await res.json().catch(() => ({}));
-      const updated = payload.user ?? payload;
-      const merged = {
-        ...displayUser.value,
-        ...updated,
-        nickname: updated.nickname ?? editNickname.value,
-        avatar_url: updated.avatar_url ?? avatarPreview.value,
-        intro: updated.intro ?? editIntro.value.slice(0, 200),
-        tags: Array.isArray(updated.tags) ? updated.tags : [...editTags.value],
+    const updated = (payload as { user?: Record<string, unknown> }).user ?? payload as Record<string, unknown>;
+    const merged = {
+      ...displayUser.value,
+      ...updated,
+      nickname: (updated.nickname as string) ?? editNickname.value,
+      avatar_url: (updated.avatar_url as string) ?? avatarPreview.value,
+      intro: (updated.intro as string) ?? editIntro.value.slice(0, 200),
+        tags: Array.isArray(updated.tags) ? updated.tags as string[] : [...editTags.value],
       };
       userDetail.value = merged;
       authStore.setAuth({
         token: authStore.token,
-        userId: String(merged.id ?? authStore.userId),
-        nickname: merged.nickname,
-        avatarUrl: merged.avatar_url,
+        userId: String((merged.id as string | number) ?? authStore.userId),
+        nickname: merged.nickname as string,
+        avatarUrl: merged.avatar_url as string,
       });
       ElMessage.success('资料已保存');
-    } else {
-      ElMessage.error('保存失败，请稍后重试');
-    }
   } catch {
     ElMessage.error('保存失败，请稍后重试');
   }
@@ -171,13 +144,13 @@ async function uploadAvatar(file: File): Promise<string> {
 
   const res = await fetch('/api/upload', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${authStore.token}` },
+    headers: { Authorization: `Bearer ${getToken()}` },
     body: formData,
   });
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? '头像上传失败');
+    throw new Error((data as Record<string, string>).error ?? '头像上传失败');
   }
 
   const data = await res.json();
@@ -185,19 +158,8 @@ async function uploadAvatar(file: File): Promise<string> {
 }
 
 async function persistAvatar(url: string) {
-  const res = await fetch('/api/users/me', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-    body: JSON.stringify({ avatar_url: url }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? '头像保存失败');
-  }
-
-  const payload = await res.json().catch(() => ({}));
-  const updated = payload.user ?? payload;
+  const payload = await api.put<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me', { avatar_url: url });
+  const updated = (payload as { user?: Record<string, unknown> }).user ?? payload as Record<string, unknown>;
   userDetail.value = {
     ...displayUser.value,
     ...updated,

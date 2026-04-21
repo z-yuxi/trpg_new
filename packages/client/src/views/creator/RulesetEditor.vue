@@ -2,17 +2,16 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
 import RuleCanvas from '../../components/rule-canvas/RuleCanvas.vue';
 import VersionPanel from '../../components/VersionPanel.vue';
 import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
 import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
 import { deserializeFromGraph } from '../../utils/canvas-serializer';
+import { api, getToken } from '../../utils/api';
 import type { CommandGraph } from '@trpg/shared';
 
 const route = useRoute();
 const router = useRouter();
-const authStore = useAuthStore();
 
 const rulesetId = route.params.id as string;
 const isNew = rulesetId === 'new';
@@ -175,20 +174,16 @@ async function runPreview() {
     try { skills = JSON.parse(mockSkillRaw.value); } catch { /* use empty */ }
     try { resources = JSON.parse(mockResourceRaw.value); } catch { /* use empty */ }
 
-    const res = await fetch(`/api/rulesets/${rulesetId}/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({
-        command: previewCommand.value,
-        mock_context: { attributes, skills, resources },
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      previewResult.value = data;
-    } else {
-      previewResult.value = { success: false, result: data.error ?? '执行失败', dice_rolls: [], logs: [] };
-    }
+    const data = await api.post<{ success?: boolean; result?: string; dice_rolls?: unknown[]; logs?: unknown[] }>(
+      `/rulesets/${rulesetId}/execute`,
+      { command: previewCommand.value, mock_context: { attributes, skills, resources } },
+    );
+    previewResult.value = {
+      success: Boolean(data.success),
+      result: data.result ?? '',
+      dice_rolls: (data.dice_rolls ?? []) as Array<{ expression: string; value: number; detail: string }>,
+      logs: (data.logs ?? []) as PreviewLog[],
+    };
   } catch (e) {
     previewResult.value = { success: false, result: String(e), dice_rolls: [], logs: [] };
   } finally {
@@ -211,12 +206,10 @@ const formData = ref<Record<string, unknown>>({});
 async function fetchRuleset() {
   if (isNew) return;
   try {
-    const res = await fetch(`/api/rulesets/${rulesetId}`, { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (res.ok) {
-      const rs = await res.json();
-      formName.value = rs.name;
-      formVersion.value = rs.version;
-      formStatus.value = rs.status;
+    const rs = await api.get<Record<string, unknown>>(`/rulesets/${rulesetId}`);
+    formName.value = (rs.name as string);
+    formVersion.value = (rs.version as string);
+    formStatus.value = (rs.status as string) as typeof formStatus.value;
       // Try to restore l1 config from character_card_schema
       const cfg = (rs.character_card_schema as any)?._l1_config;
       if (cfg) {
@@ -252,7 +245,6 @@ async function fetchRuleset() {
         } as CommandGraph;
       }
       formData.value = rs;
-    }
   } catch { /* ignore */ }
 }
 
@@ -328,19 +320,13 @@ async function save() {
     ...graphPayload,
   };
   try {
-    const url = isNew ? '/api/rulesets' : `/api/rulesets/${rulesetId}`;
-    const method = isNew ? 'POST' : 'PUT';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify(body),
-    });
-    if (res.ok) {
+    if (isNew) {
+      const data = await api.post<{ id: string }>('/rulesets', body);
       ElMessage.success('保存成功');
-      const data = await res.json();
-      if (isNew) router.replace(`/creator/workshop/${data.id}/edit`);
+      router.replace(`/creator/workshop/${data.id}/edit`);
     } else {
-      ElMessage.error('保存失败（后端功能尚未开放）');
+      await api.put(`/rulesets/${rulesetId}`, body);
+      ElMessage.success('保存成功');
     }
   } catch {
     ElMessage.error('保存失败，请检查网络连接');
@@ -351,36 +337,20 @@ async function submitForReview() {
   if (!rulesetId || isNew) { ElMessage.warning('请先保存规则集'); return; }
   if (!confirm('提交发布？V1.0 将自动审核通过并公开发布。')) return;
   try {
-    const res = await fetch(`/api/rulesets/${rulesetId}/submit-review`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token ?? ''}` },
-    });
-    if (res.ok) {
-      formStatus.value = 'published';
-      ElMessage.success('规则集已发布');
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error ?? '发布失败');
-    }
-  } catch { ElMessage.error('网络错误'); }
+    await api.post(`/rulesets/${rulesetId}/submit-review`, {});
+    formStatus.value = 'published';
+    ElMessage.success('规则集已发布');
+  } catch (e: unknown) { ElMessage.error((e as Error)?.message ?? '发布失败'); }
 }
 
 async function deprecate() {
   if (!rulesetId || isNew) return;
   if (!confirm('确认弃用此规则集？弃用后不再对外展示。')) return;
   try {
-    const res = await fetch(`/api/rulesets/${rulesetId}/deprecate`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authStore.token ?? ''}` },
-    });
-    if (res.ok) {
-      formStatus.value = 'deprecated';
-      ElMessage.success('已弃用');
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error ?? '弃用失败');
-    }
-  } catch { ElMessage.error('网络错误'); }
+    await api.post(`/rulesets/${rulesetId}/deprecate`, {});
+    formStatus.value = 'deprecated';
+    ElMessage.success('已弃用');
+  } catch (e: unknown) { ElMessage.error((e as Error)?.message ?? '弃用失败'); }
 }
 
 // ── list helpers ──────────────────────────────────────────────────────
@@ -419,7 +389,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
     <div v-if="editorMode === 'l3'" class="l3-canvas-container">
       <RuleCanvas
         :ruleset-id="rulesetId"
-        :auth-token="authStore.token ?? undefined"
+        :auth-token="getToken() ?? undefined"
         :initial-graph="currentGraph ?? undefined"
         @update:graph="(g) => (currentGraph = g)"
         @save="(g) => { currentGraph = g; save(); }"
@@ -430,7 +400,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
     <div v-else-if="editorMode === 'versions'" class="versions-container">
       <VersionPanel
         :ruleset-id="rulesetId"
-        :auth-token="authStore.token ?? ''"
+        :auth-token="getToken() ?? ''"
         :parent-id="(formData as any)?.parent_id ?? null"
         @rolledback="fetchRuleset"
         @merged="onMerged"

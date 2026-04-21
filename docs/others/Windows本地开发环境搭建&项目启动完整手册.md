@@ -142,7 +142,7 @@ pnpm --filter @trpg/server migrate
 终端 A：
 
 ```powershell
-cd E:\Desktop\trpg_new
+cd /d E:\Desktop\trpg_new
 pnpm --filter @trpg/server dev
 ```
 

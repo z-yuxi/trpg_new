@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElDialog, ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface ModuleItem {
   id: string;
@@ -19,8 +19,6 @@ interface ModuleItem {
 }
 
 const router = useRouter();
-const authStore = useAuthStore();
-
 const loading = ref(false);
 const modules = ref<ModuleItem[]>([]);
 const creating = ref(false);
@@ -31,23 +29,16 @@ const rulesets = ref<Array<{ id: string; name: string }>>([]);
 
 async function loadModules() {
   loading.value = true;
-  const headers = { Authorization: `Bearer ${authStore.token}` };
   try {
-    const [moduleRes, rulesetRes] = await Promise.all([
-      fetch('/api/modules/mine', { headers }),
-      fetch('/api/rulesets/mine', { headers }),
+    const [modulePayload, rulesetPayload] = await Promise.all([
+      api.get<unknown>('/modules/mine'),
+      api.get<unknown>('/rulesets/mine'),
     ]);
 
-    if (moduleRes.ok) {
-      const payload = await moduleRes.json();
-      modules.value = Array.isArray(payload) ? payload : payload.data ?? [];
-    }
+    modules.value = Array.isArray(modulePayload) ? modulePayload : (modulePayload as { data?: ModuleItem[] }).data ?? [];
 
-    if (rulesetRes.ok) {
-      const payload = await rulesetRes.json();
-      const list = Array.isArray(payload) ? payload : payload.data ?? [];
-      rulesets.value = list.map((item: { id: string; name: string }) => ({ id: item.id, name: item.name }));
-    }
+    const list = Array.isArray(rulesetPayload) ? rulesetPayload : (rulesetPayload as { data?: unknown[] }).data ?? [];
+    rulesets.value = (list as { id: string; name: string }[]).map((item) => ({ id: item.id, name: item.name }));
   } finally {
     loading.value = false;
   }
@@ -76,21 +67,7 @@ async function createModule() {
 
   creating.value = true;
   try {
-    const response = await fetch('/api/modules', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${authStore.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: createName.value.trim(), ruleset_id: createRulesetId.value }),
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      throw new Error(payload.error ?? '创建失败');
-    }
-
-    const created = await response.json();
+    const created = await api.post<{ id: string }>('/modules', { name: createName.value.trim(), ruleset_id: createRulesetId.value });
     ElMessage.success('模组已创建');
     showCreate.value = false;
     createName.value = '';
@@ -104,46 +81,37 @@ async function createModule() {
 }
 
 async function submitModule(moduleId: string) {
-  const response = await fetch(`/api/modules/${moduleId}/submit`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  }).catch(() => null);
-  if (!response?.ok) {
+  try {
+    await api.post(`/modules/${moduleId}/submit`, {});
+    ElMessage.success('已提交审核');
+    loadModules();
+  } catch {
     ElMessage.error('提交审核失败');
-    return;
   }
-  ElMessage.success('已提交审核');
-  loadModules();
 }
 
 async function deleteModule(moduleId: string) {
   const confirmed = window.confirm('仅草稿模组可删除，确认继续吗？');
   if (!confirmed) return;
-  const response = await fetch(`/api/modules/${moduleId}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  }).catch(() => null);
-  if (!response?.ok) {
+  try {
+    await api.delete(`/modules/${moduleId}`);
+    ElMessage.success('已删除模组');
+    loadModules();
+  } catch {
     ElMessage.error('删除失败');
-    return;
   }
-  ElMessage.success('已删除模组');
-  loadModules();
 }
 
 async function withdrawModule(moduleId: string) {
   const confirmed = window.confirm('撤回后模组将回到草稿状态，确认撤回吗？');
   if (!confirmed) return;
-  const response = await fetch(`/api/modules/${moduleId}/withdraw`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  }).catch(() => null);
-  if (!response?.ok) {
+  try {
+    await api.post(`/modules/${moduleId}/withdraw`, {});
+    ElMessage.success('已撤回模组审核');
+    loadModules();
+  } catch {
     ElMessage.error('撤回失败');
-    return;
   }
-  ElMessage.success('已撤回模组审核');
-  loadModules();
 }
 
 /** 计算公示期剩余时间文字 */

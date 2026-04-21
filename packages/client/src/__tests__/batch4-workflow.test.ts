@@ -57,7 +57,7 @@ const sampleDoc = {
 // ── 测试 ──────────────────────────────────────────────────────
 
 describe('useBlockRegistry', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('editor 为 undefined 时注册表为空', () => {
     const editorRef = ref<Editor | undefined>(undefined);

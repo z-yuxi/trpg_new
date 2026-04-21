@@ -5,6 +5,7 @@
  */
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import { api } from '../utils/api';
 
 const props = defineProps<{
   rulesetId: string;
@@ -32,13 +33,8 @@ async function fetchVersions() {
   if (!props.rulesetId || props.rulesetId === 'new') return;
   loading.value = true;
   try {
-    const res = await fetch(`/api/rulesets/${props.rulesetId}/versions`, {
-      headers: { Authorization: `Bearer ${props.authToken}` },
-    });
-    if (res.ok) {
-      const data = await res.json();
-      versions.value = (data.data as VersionItem[]) ?? [];
-    }
+    const data = await api.get<{ data: VersionItem[] }>(`/rulesets/${props.rulesetId}/versions`);
+    versions.value = data.data ?? [];
   } finally {
     loading.value = false;
   }
@@ -57,19 +53,12 @@ async function saveVersion() {
   }
   saving.value = true;
   try {
-    const res = await fetch(`/api/rulesets/${props.rulesetId}/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${props.authToken}` },
-      body: JSON.stringify({ changelog: changelogInput.value }),
-    });
-    if (res.ok) {
-      ElMessage.success('版本快照已保存');
-      changelogInput.value = '';
-      await fetchVersions();
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error ?? '保存失败');
-    }
+    await api.post(`/rulesets/${props.rulesetId}/versions`, { changelog: changelogInput.value });
+    ElMessage.success('版本快照已保存');
+    changelogInput.value = '';
+    await fetchVersions();
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '保存失败');
   } finally {
     saving.value = false;
   }
@@ -82,18 +71,12 @@ async function rollback(versionId: string, versionNumber: string) {
   if (!confirm(`确认回滚到版本 ${versionNumber}？当前草稿内容将被替换。`)) return;
   rollbacking.value = versionId;
   try {
-    const res = await fetch(`/api/rulesets/${props.rulesetId}/versions/${versionId}/rollback`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${props.authToken}` },
-    });
-    if (res.ok) {
-      ElMessage.success(`已回滚到版本 ${versionNumber}`);
-      emit('rolledback');
-      await fetchVersions();
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error ?? '回滚失败');
-    }
+    await api.post(`/rulesets/${props.rulesetId}/versions/${versionId}/rollback`, {});
+    ElMessage.success(`已回滚到版本 ${versionNumber}`);
+    emit('rolledback');
+    await fetchVersions();
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '回滚失败');
   } finally {
     rollbacking.value = null;
   }
@@ -113,16 +96,11 @@ async function compareVersions() {
   comparing.value = true;
   diffResult.value = null;
   try {
-    const res = await fetch(
-      `/api/rulesets/${props.rulesetId}/versions/compare?a=${compareA.value}&b=${compareB.value}`,
-      { headers: { Authorization: `Bearer ${props.authToken}` } },
+    diffResult.value = await api.get<{ added_nodes: string[]; removed_nodes: string[]; modified_nodes: string[] }>(
+      `/rulesets/${props.rulesetId}/versions/compare?a=${compareA.value}&b=${compareB.value}`,
     );
-    if (res.ok) {
-      diffResult.value = await res.json();
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error ?? '对比失败');
-    }
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '对比失败');
   } finally {
     comparing.value = false;
   }
@@ -136,21 +114,16 @@ async function mergeFromParent() {
   if (!confirm('从上游规则集合并变更？如有冲突需手动解决。')) return;
   merging.value = true;
   try {
-    const res = await fetch(`/api/rulesets/${props.rulesetId}/merge-from-parent`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${props.authToken}` },
-    });
-    const data = await res.json();
-    if (res.ok) {
-      emit('merged', data);
-      if (data.conflicts?.length > 0) {
-        ElMessage.warning(`合并完成，但有 ${data.conflicts.length} 个冲突需手动解决`);
-      } else {
-        ElMessage.success('已从上游合并，无冲突');
-      }
+    const data = await api.post<{ conflicts?: string[] }>(`/rulesets/${props.rulesetId}/merge-from-parent`, {});
+    emit('merged', data);
+    const conflicts = data.conflicts ?? [];
+    if (conflicts.length > 0) {
+      ElMessage.warning(`合并完成，但有 ${conflicts.length} 个冲突需手动解决`);
     } else {
-      ElMessage.error(data.error ?? '合并失败');
+      ElMessage.success('已从上游合并，无冲突');
     }
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '合并失败');
   } finally {
     merging.value = false;
   }

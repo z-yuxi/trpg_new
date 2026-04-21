@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { ElMessage, ElTabs, ElTabPane, ElBadge, ElButton, ElEmpty, ElSkeleton } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
 import { socketClient } from '../../socket/socket-client';
+import { api } from '../../utils/api';
 import type { NotificationType, UserNotification } from '@trpg/shared';
-
-const authStore = useAuthStore();
 
 type Tab = NotificationType | 'all';
 
@@ -28,11 +26,7 @@ async function fetchNotifications() {
   try {
     const params = new URLSearchParams({ page: '1', limit: '50' });
     if (activeTab.value !== 'all') params.set('type', activeTab.value);
-    const res = await fetch(`/api/notifications?${params}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error('加载失败');
-    const body = await res.json() as { data: UserNotification[]; total: number };
+    const body = await api.get<{ data: UserNotification[]; total: number }>(`/notifications?${params}`);
     notifications.value = body.data;
     total.value = body.total;
   } catch {
@@ -43,44 +37,34 @@ async function fetchNotifications() {
 }
 
 async function fetchUnreadCount() {
-  const res = await fetch('/api/notifications/unread-count', {
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  }).catch(() => null);
-  if (res?.ok) {
-    const body = await res.json() as { count: number };
+  try {
+    const body = await api.get<{ count: number }>('/notifications/unread-count');
     unreadCount.value = body.count;
-  }
+  } catch { /* ignore */ }
 }
 
 async function markAsRead(id: string) {
-  const res = await fetch(`/api/notifications/${id}/read`, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  }).catch(() => null);
-  if (res?.ok) {
-    const target = notifications.value.find(n => n.id === id);
-    if (target && !target.is_read) {
-      target.is_read = true;
+  try {
+    await api.put(`/notifications/${id}/read`, {});
+    const n = notifications.value.find(n => n.id === id);
+    if (n) {
+      n.is_read = true;
       unreadCount.value = Math.max(0, unreadCount.value - 1);
     }
-  }
+  } catch { /* ignore */ }
 }
 
 async function markAllAsRead() {
   const type = activeTab.value !== 'all' ? activeTab.value as NotificationType : undefined;
   const body: Record<string, string> = {};
   if (type) body['type'] = type;
-  const res = await fetch('/api/notifications/read-all', {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${authStore.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-  if (res?.ok) {
+  try {
+    await api.put('/notifications/read-all', body);
     notifications.value.forEach(n => { n.is_read = true; });
     if (activeTab.value === 'all') unreadCount.value = 0;
     else await fetchUnreadCount();
     ElMessage.success('已全部标为已读');
-  }
+  } catch { /* ignore */ }
 }
 
 function handleTabChange(tab: Tab) {

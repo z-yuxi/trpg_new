@@ -10,7 +10,7 @@
 import { ref, computed, watch } from 'vue';
 import TButton from '../base/TButton.vue';
 import TInput from '../base/TInput.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface DerivedItem {
   current: number;
@@ -42,7 +42,6 @@ const emit = defineEmits<{
   'updated': [instance: CharacterInstance];
 }>();
 
-const authStore = useAuthStore();
 const instance = ref<CharacterInstance | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -65,20 +64,14 @@ async function fetchInstance() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetch(
-      `/api/characters/${props.characterId}/instance?campaign_id=${props.campaignId}`,
-      { headers: { Authorization: `Bearer ${authStore.token}` } }
+    instance.value = await api.get<CharacterInstance>(
+      `/characters/${props.characterId}/instance?campaign_id=${props.campaignId}`,
     );
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      error.value = (data as any).error ?? '加载失败';
-      return;
-    }
-    instance.value = await res.json();
-    // 初始化编辑副本
     editDerived.value = JSON.parse(JSON.stringify(instance.value!.derived_current ?? {}));
     editEffects.value = JSON.parse(JSON.stringify(instance.value!.temporary_effects ?? []));
     editEquipment.value = JSON.parse(JSON.stringify(instance.value!.equipment ?? []));
+  } catch (e: unknown) {
+    error.value = (e as Error)?.message ?? '加载失败';
   } finally {
     loading.value = false;
   }
@@ -88,30 +81,19 @@ async function save() {
   saving.value = true;
   error.value = '';
   try {
-    const res = await fetch(
-      `/api/characters/${props.characterId}/instance/${props.campaignId}`,
+    const updated = await api.put<CharacterInstance>(
+      `/characters/${props.characterId}/instance/${props.campaignId}`,
       {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authStore.token}`,
-        },
-        body: JSON.stringify({
-          derived_current: editDerived.value,
-          temporary_effects: editEffects.value,
-          equipment: editEquipment.value,
-        }),
-      }
+        derived_current: editDerived.value,
+        temporary_effects: editEffects.value,
+        equipment: editEquipment.value,
+      },
     );
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      error.value = (data as any).error ?? '保存失败';
-      return;
-    }
-    const updated = await res.json();
     instance.value = updated;
     emit('updated', updated);
     emit('close');
+  } catch (e: unknown) {
+    error.value = (e as Error)?.message ?? '保存失败';
   } finally {
     saving.value = false;
   }

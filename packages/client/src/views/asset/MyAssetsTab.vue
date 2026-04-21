@@ -4,6 +4,7 @@ import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 const authStore = useAuthStore();
 const myRulesets = ref<any[]>([]);
@@ -13,10 +14,7 @@ onMounted(async () => {
   if (!authStore.isLoggedIn) return;
   loading.value = true;
   try {
-    const res = await fetch('/api/rulesets', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (res.ok) myRulesets.value = await res.json();
+    myRulesets.value = await api.get<unknown[]>('/rulesets');
   } catch { /* ignore */ }
   finally { loading.value = false; }
 });

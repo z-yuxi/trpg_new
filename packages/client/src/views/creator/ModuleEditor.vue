@@ -11,7 +11,7 @@
     <!-- 顶部栏 -->
     <header class="module-header">
       <div class="header-left">
-        <button class="back-btn" @click="goBack">← 返回</button>
+        <button class="back-btn" @click="goBack">返回</button>
         <input
           v-model="moduleTitle"
           class="title-input"
@@ -47,10 +47,10 @@
           撤回
         </button>
         <div v-if="module?.status === 'public_notice'" class="public-notice-info">
-          🔔 公示期: {{ noticeCountdown }} 天
+          公示期: {{ noticeCountdown }} 天
         </div>
         <div v-if="module?.status === 'suspended'" class="suspended-info">
-          ⚠️ 已暂停: {{ module?.suspended_reason ?? '未指定原因' }}
+          已暂停: {{ module?.suspended_reason ?? '未指定原因' }}
         </div>
       </div>
     </header>
@@ -88,7 +88,7 @@
         <div v-else class="editor-loading">加载中...</div>
       </main>
 
-      <!-- 右侧属性面板（预留位置，批次2实现） -->
+      <!-- 右侧属性面板（预留位置，批次 2 实现） -->
       <aside class="props-panel" :class="{ 'props-panel--hidden': !propsPanelVisible }">
         <div class="props-title">属性</div>
         <div class="props-placeholder">选中业务块后此处将显示属性编辑表单</div>
@@ -158,7 +158,7 @@ async function autoSave() {
   if (!moduleId.value || editorContent.value === null) return;
   saveState.value = 'saving';
   try {
-    await api.put(`/api/modules/${moduleId.value}/auto-save`, {
+    await api.put(`/modules/${moduleId.value}/auto-save`, {
       content: editorContent.value,
       word_count: wordCount.value,
     });
@@ -218,7 +218,7 @@ async function confirmImport(payload: { name: string; description: string; conte
   if (!moduleId.value) return;
   importBusy.value = true;
   try {
-    const updated = await api.post<Module>(`/api/modules/${moduleId.value}/import/confirm`, payload);
+    const updated = await api.post<Module>(`/modules/${moduleId.value}/import/confirm`, payload);
     module.value = updated;
     moduleTitle.value = updated.name;
     editorContent.value = updated.content ?? null;
@@ -272,7 +272,7 @@ function onWordCount(count: number) {
 async function handleTitleBlur() {
   if (!moduleId.value || moduleTitle.value === module.value?.name) return;
   try {
-    await api.put(`/api/modules/${moduleId.value}`, { name: moduleTitle.value });
+    await api.put(`/modules/${moduleId.value}`, { name: moduleTitle.value });
   } catch {
     // 静默处理
   }
@@ -290,10 +290,10 @@ const statusLabel = computed(() => ({
 }[module.value?.status ?? 'draft']));
 
 async function handlePublish() {
-  // Batch 4: 提交发布审核（draft → public_notice）
+  // Batch 4: 提交发布审核（draft -> public_notice）
   if (!moduleId.value) return;
   try {
-    const res = await api.post<{ status: string; public_notice_end_at?: string | Date | null }>(`/api/modules/${moduleId.value}/submit`);
+    const res = await api.post<{ status: string; public_notice_end_at?: string | Date | null }>(`/modules/${moduleId.value}/submit`);
     if (module.value) {
       module.value.status = res.status as any;
       module.value.public_notice_end_at = res.public_notice_end_at as any;
@@ -307,7 +307,7 @@ async function handlePublish() {
 async function handleWithdraw() {
   if (!moduleId.value) return;
   try {
-    const res = await api.post<{ status: string }>(`/api/modules/${moduleId.value}/withdraw`);
+    const res = await api.post<{ status: string }>(`/modules/${moduleId.value}/withdraw`);
     if (module.value) module.value.status = res.status as any;
   } catch (err) {
     console.error('撤回失败', err);
@@ -354,7 +354,7 @@ const saveIndicatorText = computed(() => ({
 // ── 加载 ─────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const data = await api.get<Module>(`/api/modules/${moduleId.value}`);
+    const data = await api.get<Module>(`/modules/${moduleId.value}`);
     module.value = data;
     moduleTitle.value = data.name;
     editorContent.value = data.content ?? null;

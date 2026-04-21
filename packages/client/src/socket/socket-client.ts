@@ -66,12 +66,12 @@ export class SocketClient {
     this.roomSocket?.emit('request_move', { target_scene_id: toSceneId });
   }
 
-  gmAdvanceTime(params: { custom_time?: { day: number; hour: number; minute: number }; delta?: { days?: number; hours?: number; minutes?: number } }): void {
-    this.roomSocket?.emit('gm_advance_time', params);
+  gmAnnounceTime(timeLabel: string): void {
+    this.roomSocket?.emit('gm_announce_time', { time_label: timeLabel });
   }
 
-  gmApproveMove(moveId: string): void {
-    this.roomSocket?.emit('gm_approve_move', { move_id: moveId });
+  gmApproveMove(moveId: string, storyArrivalTime?: string): void {
+    this.roomSocket?.emit('gm_approve_move', { move_id: moveId, story_arrival_time: storyArrivalTime });
   }
 
   gmRejectMove(moveId: string): void {
@@ -90,8 +90,8 @@ export class SocketClient {
     this.roomSocket?.on('new_message', handler);
   }
 
-  onTimeAdvanced(handler: (data: any) => void): void {
-    this.roomSocket?.on('time_advanced', handler);
+  onTimeTagAnnounced(handler: (data: any) => void): void {
+    this.roomSocket?.on('time_tag_announced', handler);
   }
 
   onPositionChanged(handler: (data: any) => void): void {

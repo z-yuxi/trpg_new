@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, markRaw, nextTick } from 'vue';
+import { ref, computed, markRaw, nextTick, shallowRef } from 'vue';
 import { VueFlow, useVueFlow, Panel } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { MiniMap } from '@vue-flow/minimap';
 import { Controls } from '@vue-flow/controls';
-import type { Node, Edge, Connection, EdgeMouseEvent } from '@vue-flow/core';
+import type { Node, Edge, Connection, EdgeMouseEvent, NodeTypesObject } from '@vue-flow/core';
 import AtomLibrary from './AtomLibrary.vue';
 import AtomNode from './nodes/AtomNode.vue';
 import {
@@ -16,6 +16,7 @@ import {
 } from '../../utils/canvas-serializer';
 import type { AtomNodeData, PortType, PortDef } from '../../utils/canvas-serializer';
 import type { CommandGraph } from '@trpg/shared';
+import { api } from '../../utils/api';
 
 // ── Props & Emits ─────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -49,14 +50,14 @@ const {
 } = useVueFlow();
 
 // 注册自定义节点类型
-const nodeTypes = markRaw({ atomNode: AtomNode });
+const nodeTypes = markRaw({ atomNode: AtomNode }) as unknown as NodeTypesObject;
 
 // ── 输出节点 ──────────────────────────────────────────────────────────────
 const outputNodeId = ref('');
 
 // ── 历史记录（撤销/重做） ──────────────────────────────────────────────────
 interface HistoryEntry { nodes: Node[]; edges: Edge[]; outputNodeId: string }
-const history = ref<HistoryEntry[]>([]);
+const history = shallowRef<HistoryEntry[]>([]);
 const historyIndex = ref(-1);
 const MAX_HISTORY = 50;
 
@@ -68,7 +69,7 @@ function pushHistory() {
   };
   // 删除当前位置之后的历史
   history.value = history.value.slice(0, historyIndex.value + 1);
-  history.value.push(snapshot);
+  history.value.push(snapshot as HistoryEntry);
   if (history.value.length > MAX_HISTORY) history.value.shift();
   historyIndex.value = history.value.length - 1;
 }
@@ -375,22 +376,13 @@ async function runPreview() {
     try { skills = JSON.parse(mockSkillRaw.value); } catch { /**/ }
     try { resources = JSON.parse(mockResourceRaw.value); } catch { /**/ }
 
-    const res = await fetch(`/api/rulesets/${props.rulesetId}/execute`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${props.authToken ?? ''}`,
-      },
-      body: JSON.stringify({
+    const data = await api.post<{ logs?: Array<{ node_id: string; output: unknown }> }>(
+      `/rulesets/${props.rulesetId}/execute`,
+      {
         command: previewCommand.value,
         mock_context: { attributes, skills, resources },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      previewError.value = data.error ?? '执行失败';
-      return;
-    }
+      },
+    );
 
     // 将执行日志注入到对应节点的 preview
     const executedNodeIds = new Set<string>();

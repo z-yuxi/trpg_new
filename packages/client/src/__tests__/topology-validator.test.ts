@@ -46,7 +46,9 @@ function findMissingRequiredPorts(
 ): Array<{ nodeId: string; portKey: string }> {
   const missing: Array<{ nodeId: string; portKey: string }> = [];
   for (const n of nodes) {
-    const def = ATOM_DEFINITIONS[n.data?.atom_type];
+    const atomType = n.data?.atom_type;
+    if (!atomType) continue;
+    const def = ATOM_DEFINITIONS[atomType];
     if (!def) continue;
     for (const port of def.inputs) {
       if (!port.required) continue;

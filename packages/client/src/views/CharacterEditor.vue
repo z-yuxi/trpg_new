@@ -4,7 +4,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import TTag from '../components/base/TTag.vue';
-import { useAuthStore } from '../stores/auth-store';
+import { api, getToken } from '../utils/api';
 import { calcDerived, COC7_DEFAULT_DERIVED } from '@trpg/shared';
 
 /* ========== 类型 ========== */
@@ -39,7 +39,6 @@ interface RulesetOption {
 /* ========== 路由 & Store ========== */
 const route = useRoute();
 const router = useRouter();
-const authStore = useAuthStore();
 const characterId = route.params.id as string | undefined;
 const isEditing = !!characterId;
 
@@ -164,8 +163,7 @@ function initSkills() {
 /* ========== 加载规则集 ========== */
 onMounted(async () => {
   try {
-    const res = await fetch('/api/rulesets?status=published', { headers: { Authorization: `Bearer ${authStore.token}` } });
-    if (res.ok) rulesets.value = await res.json();
+    rulesets.value = await api.get<{ id: string; name: string }[]>('/rulesets?status=published');
   } catch { /* ignore */ }
   if (rulesets.value.length === 0) {
     rulesets.value = [
@@ -176,16 +174,14 @@ onMounted(async () => {
 
   if (isEditing && characterId) {
     try {
-      const res = await fetch(`/api/characters/${characterId}`, { headers: { Authorization: `Bearer ${authStore.token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        form.value.name = data.name ?? '';
-        form.value.ruleset_id = data.ruleset_id ?? '';
-        form.value.occupation_id = data.occupation_id ?? '';
-        form.value.avatar_url = data.avatar_url ?? '';
-        form.value.attributes = data.attributes ?? {};
-        form.value.skills = data.skills ?? {};
-        form.value.background = data.background ?? '';
+      const data = await api.get<Record<string, unknown>>(`/characters/${characterId}`);
+      form.value.name = (data.name as string) ?? '';
+      form.value.ruleset_id = (data.ruleset_id as string) ?? '';
+      form.value.occupation_id = (data.occupation_id as string) ?? '';
+      form.value.avatar_url = (data.avatar_url as string) ?? '';
+      form.value.attributes = (data.attributes as Record<string, number>) ?? {};
+      form.value.skills = (data.skills as Record<string, number>) ?? {};
+      form.value.background = (data.background as string) ?? '';
         // 加载 schema 以支持派生值计算和步骤预览
         const rs = rulesets.value.find(r => r.id === form.value.ruleset_id);
         if (rs?.character_card_schema && typeof rs.character_card_schema === 'object') {
@@ -195,9 +191,8 @@ onMounted(async () => {
         const occ = (schema.value.occupations ?? []).find(o => o.id === form.value.occupation_id);
         const formula = occ?.skill_points_formula ?? 'EDU*4';
         skillPoints.value = calcSkillPoints(formula, form.value.attributes);
-      }
     } catch { /* ignore */ }
-    step.value = 6;  // 编辑模式直接到预览步骤，可回退修改
+    step.value = 6;
   }
 });
 
@@ -217,13 +212,13 @@ async function uploadAvatar(file: File): Promise<string> {
 
   const res = await fetch('/api/upload', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${authStore.token}` },
+    headers: { Authorization: `Bearer ${getToken()}` },
     body: formData,
   });
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error ?? '头像上传失败');
+    throw new Error((data as any).error ?? '头像上传失败');
   }
 
   const data = await res.json();
@@ -304,25 +299,13 @@ async function save() {
       attributes: form.value.attributes,
       skills: form.value.skills,
     };
-    const url = isEditing ? `/api/characters/${characterId}` : '/api/characters';
-    const method = isEditing ? 'PUT' : 'POST';
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const saved = await res.json().catch(() => ({}));
-      savedCharacterCode.value = (saved as any).character_code ?? '';
-      if (isEditing) {
-        router.push('/personal/characters');
-      } else {
-        // 保存成功后留在第6步显示 character_code
-        step.value = 6;
-      }
+    if (isEditing) {
+      await api.put(`/characters/${characterId}`, payload);
+      router.push('/personal/characters');
     } else {
-      const data = await res.json().catch(() => ({}));
-      saveError.value = (data as any).error || '保存失败';
+      const saved = await api.post<{ character_code?: string }>('/characters', payload);
+      savedCharacterCode.value = saved.character_code ?? '';
+      step.value = 6;
     }
   } catch (e: any) {
     saveError.value = e.message || '网络错误';

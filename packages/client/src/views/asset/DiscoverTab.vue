@@ -4,6 +4,7 @@ import TCard from '../../components/base/TCard.vue';
 import TInput from '../../components/base/TInput.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
+import { api } from '../../utils/api';
 
 const search = ref('');
 const filterType = ref<'all' | 'ruleset' | 'module'>('all');
@@ -17,8 +18,7 @@ const filtered = computed(() => rulesets.value.filter(r =>
 onMounted(async () => {
   loading.value = true;
   try {
-    const res = await fetch('/api/rulesets?status=published');
-    if (res.ok) rulesets.value = await res.json();
+    rulesets.value = await api.get<unknown[]>('/rulesets?status=published');
   } catch { /* ignore */ }
   finally { loading.value = false; }
 });

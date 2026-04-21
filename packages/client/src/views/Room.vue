@@ -209,11 +209,14 @@ async function loadScenes() {
   } catch { /* ignore */ }
 }
 
-function handleAdvanceTime(minutes: number) {
-  const base = globalTime.value ?? { day: 1, hour: 8, minute: 0 };
-  const total = base.minute + minutes + base.hour * 60 + (base.day - 1) * 1440;
-  const newTime = { day: Math.floor(total / 1440) + 1, hour: Math.floor((total % 1440) / 60), minute: total % 60 };
-  socketClient.gmAdvanceTime({ custom_time: newTime });
+function handleAnnounceTime() {
+  const value = window.prompt('输入要插入的时间标签（HH:MM）', `${String(globalTime.value.hour).padStart(2, '0')}:${String(globalTime.value.minute).padStart(2, '0')}`);
+  if (!value) return;
+  if (!/^\d{1,2}:\d{2}$/.test(value)) {
+    ElMessage.error('时间格式应为 HH:MM');
+    return;
+  }
+  socketClient.gmAnnounceTime(value);
 }
 
 async function handleSceneCreated(s: any) {
@@ -370,16 +373,14 @@ onMounted(async () => {
   socketClient.joinRoom(campaignId, characterId.value);
   if (currentSceneId.value) socketClient.subscribeScene(currentSceneId.value);
 
-  socketClient.onTimeAdvanced((data) => {
-    globalTime.value = data.new_time;
-    // 检查是否有自己角色的移动被执行，弹出"到达场景"提示
-    const executedMoves: Array<{ character_id: string; to_scene_id: string }> = data.executed_moves ?? data.triggered_moves ?? [];
-    const myMove = executedMoves.find((m) => m.character_id === characterId.value);
-    if (myMove) {
-      const targetScene = scenes.value.find((s) => s.id === myMove.to_scene_id);
-      const sceneName = targetScene?.name ?? '目标场景';
-      ElMessage.success(`你已到达「${sceneName}」`);
-    }
+  socketClient.onTimeTagAnnounced((data) => {
+    const match = String(data.time_label ?? '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return;
+    globalTime.value = {
+      ...globalTime.value,
+      hour: parseInt(match[1], 10),
+      minute: parseInt(match[2], 10),
+    };
   });
 
   socketClient.onPositionChanged((data) => {
@@ -426,7 +427,7 @@ onUnmounted(() => {
       @export-log="router.push(`/room/${campaignId}/export`)"
       @mobile-assistant-open="handleMobileAssistantOpen"
       @update:mobile-view="mobileView = $event"
-      @advance-time="handleAdvanceTime"
+      @announce-time="handleAnnounceTime"
       @play-as-npc="(id) => { selectedSenderIdentity = `npc:${id}`; }"
       @open-approve="showGMConsole = true"
     >
@@ -469,6 +470,8 @@ onUnmounted(() => {
         <ChatArea
           :prefill-text="prefillCommand"
           :is-gm="isGm"
+          :campaign-id="campaignId"
+          :characters="roomCharacters.map((c) => ({ id: c.id, name: c.name }))"
           :current-scene-type="currentScene?.type"
           :my-character="myCharacter ? { id: myCharacter.id, name: myCharacter.name, avatarUrl: myCharacter.avatarUrl } : null"
           :roleplayable-npcs="npcs.map((npc) => ({ id: npc.id, name: npc.name, avatarUrl: npc.avatar_url }))"

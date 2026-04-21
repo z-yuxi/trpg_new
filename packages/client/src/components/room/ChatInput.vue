@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   send: [content: string, messageType: string, senderIdentity: string];
   command: [commandStr: string];
+  'open-clue-grant': [];
 }>();
 
 type IdentityOption = { key: string; label: string; avatarUrl?: string };
@@ -233,6 +234,12 @@ onUnmounted(() => {
         <SvgIcon name="icon-dice" :size="18" />
       </button>
 
+      <!-- 线索发放按钮（仅 GM） -->
+      <button v-if="isGm" class="icon-btn clue-btn" @click.stop="emit('open-clue-grant')" title="发放线索">
+        <SvgIcon name="icon-scroll" :size="18" />
+        <span class="clue-btn-label">线索</span>
+      </button>
+
       <!-- 输入框 -->
       <textarea
         v-model="content"
@@ -348,6 +355,8 @@ onUnmounted(() => {
 }
 .send-btn:hover:not(:disabled) { background: var(--color-accent-hover); }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.clue-btn { gap: 3px; padding: 6px 8px; }
+.clue-btn-label { font-size: 12px; font-weight: 500; }
 
 /* 指令补全列表 */
 .command-list {

@@ -7,12 +7,18 @@ import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import EmptyState from '../components/base/EmptyState.vue';
-import { useAuthStore } from '../stores/auth-store';
+import { api } from '../utils/api';
 
 const router = useRouter();
-const authStore = useAuthStore();
+type CampaignListItem = {
+  id: string;
+  name: string;
+  status: string;
+  role: 'gm' | 'player';
+  room_code: string;
+};
 
-const campaigns = ref<any[]>([]);
+const campaigns = ref<CampaignListItem[]>([]);
 const loading = ref(false);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
@@ -25,10 +31,7 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
 async function loadCampaigns() {
   loading.value = true;
   try {
-    const res = await fetch('/api/campaigns', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (res.ok) campaigns.value = await res.json();
+    campaigns.value = await api.get<CampaignListItem[]>('/campaigns');
   } catch { ElMessage.error('加载失败'); }
   finally { loading.value = false; }
 }
@@ -43,20 +46,11 @@ async function createCampaign() {
   if (!createForm.value.name || !createForm.value.ruleset_id) return;
   createLoading.value = true;
   try {
-    const res = await fetch('/api/campaigns', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify(createForm.value),
-    });
-    if (res.ok) {
-      showCreateDialog.value = false;
-      createForm.value = { name: '', ruleset_id: '', module_id: '' };
-      await loadCampaigns();
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error || '创建失败');
-    }
-  } catch { ElMessage.error('网络错误'); }
+    await api.post('/campaigns', createForm.value);
+    showCreateDialog.value = false;
+    createForm.value = { name: '', ruleset_id: '', module_id: '' };
+    await loadCampaigns();
+  } catch (e: unknown) { ElMessage.error((e as Error)?.message || '创建失败'); }
   finally { createLoading.value = false; }
 }
 
@@ -68,21 +62,11 @@ async function joinCampaign() {
   if (joinCode.value.length < 4) return;
   joinLoading.value = true;
   try {
-    const res = await fetch('/api/campaigns/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({ code: joinCode.value }),
-    });
-    if (res.ok) {
-      const campaign = await res.json();
-      showJoinDialog.value = false;
-      joinCode.value = '';
-      router.push(`/room/${campaign.id}`);
-    } else {
-      const data = await res.json();
-      ElMessage.error(data.error || '加入失败，请检查房间码');
-    }
-  } catch { ElMessage.error('网络错误'); }
+    const campaign = await api.post<{ id: string }>('/campaigns/join', { code: joinCode.value });
+    showJoinDialog.value = false;
+    joinCode.value = '';
+    router.push(`/room/${campaign.id}`);
+  } catch (e: unknown) { ElMessage.error((e as Error)?.message || '加入失败，请检查房间码'); }
   finally { joinLoading.value = false; }
 }
 

@@ -152,7 +152,9 @@ export class RecruitmentService {
         'rp.*',
         'u.nickname as poster_nickname',
         'r.name as ruleset_name',
-        'ra.status as my_application_status',
+        params.applicant_user_id
+          ? 'ra.status as my_application_status'
+          : db.raw('null as my_application_status'),
       )
       .orderBy(
         params.sort === 'hottest' ? 'rp.player_count_joined' : 'rp.created_at',

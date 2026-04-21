@@ -3,7 +3,7 @@ import { ref, watch, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import ClueCard from '../ClueCard.vue';
 import TButton from '../base/TButton.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 type ClueTheme = 'river' | 'blur' | 'fragment' | 'wave' | 'ancient' | 'blood' | 'ash' | 'cyber';
 
@@ -25,7 +25,6 @@ const emit = defineEmits<{
   'style-updated': [theme: ClueTheme];
 }>();
 
-const authStore = useAuthStore();
 const selectedTheme = ref<ClueTheme>(props.currentTheme);
 const saving = ref(false);
 
@@ -49,15 +48,7 @@ watch(() => props.currentTheme, (v) => { selectedTheme.value = v; });
 async function saveStyle() {
   saving.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/clues/${props.clueId}/style`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authStore.token}`,
-      },
-      body: JSON.stringify({ theme: selectedTheme.value }),
-    });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '保存失败');
+    await api.post(`/campaigns/${props.campaignId}/clues/${props.clueId}/style`, { theme: selectedTheme.value });
     emit('style-updated', selectedTheme.value);
     ElMessage.success('样式已更新');
   } catch (e: unknown) {

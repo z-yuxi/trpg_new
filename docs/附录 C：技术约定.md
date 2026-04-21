@@ -394,9 +394,30 @@ async function filterVirtualHistory(
 ```markdown
 > **架构说明**：纯 Web + PWA 方案覆盖全平台，PC 端通过浏览器获得完整功能，移动端通过 PWA 获得接近原生应用的体验。
 ```
+
+## 2.1 前端路由约定
+
+| 路由 | 对应页面 | 说明 |
+|------|---------|------|
+| `/` | 首页 | 未登录跳转 `/login` |
+| `/login` | 登录/注册 | |
+| `/community` | 广场 | 招募帖列表 |
+| `/my-campaigns` | 我的跑团 | 跑团列表 |
+| `/room/:id` | 跑团房间（叙事模式） | 主要游戏界面，三栏聊天布局 |
+| `/campaign/:id/gm/:module` | GM 导演模式 | 全屏管理页面；`module` 可为 `now`/`scenes`/`npcs`/`clues`/`timeline`/`settings` |
+| `/character/:id` | 角色卡编辑器 | |
+| `/ruleset-workshop` | 规则工坊 | |
+| `/module-editor/:id` | 模组编辑器 | |
+| `/personal` | 个人中心 | |
+
+> **约定**：
+> - GM 导演模式的入口按钮在叙事模式（`/room/:id`）的顶部栏，点击后 `router.push` 到 `/campaign/:id/gm/now`。
+> - 导演模式返回叙事的按钮 `router.push` 回 `/room/:id`。
+> - `:id` 指 `campaign_id`，全局唯一雪花 ID（字符串类型）。
+
 ---
 
-## 3. 规则模板存储格式
+
 
 所有规则包统一使用：
 ```json

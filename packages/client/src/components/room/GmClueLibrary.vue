@@ -6,7 +6,7 @@ import ClueStyleEditor from './ClueStyleEditor.vue';
 import TButton from '../base/TButton.vue';
 import TTag from '../base/TTag.vue';
 import SvgIcon from '../SvgIcon.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 type ClueTheme = 'river' | 'blur' | 'fragment' | 'wave' | 'ancient' | 'blood' | 'ash' | 'cyber';
 
@@ -25,7 +25,6 @@ const props = defineProps<{
   characters?: Array<{ id: string; name: string }>;
 }>();
 
-const authStore = useAuthStore();
 const clues = ref<CampaignClue[]>([]);
 const loading = ref(false);
 
@@ -38,11 +37,7 @@ const expandedClueId = ref<string | null>(null);
 async function loadClues() {
   loading.value = true;
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/clues`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '加载失败');
-    clues.value = await res.json();
+    clues.value = await api.get<CampaignClue[]>(`/campaigns/${props.campaignId}/clues`);
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '加载线索失败');
   } finally {
@@ -75,11 +70,7 @@ async function deleteClue(clue: CampaignClue) {
     cancelButtonText: '取消',
   });
   try {
-    const res = await fetch(`/api/campaigns/${props.campaignId}/clues/${clue.id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok && res.status !== 204) throw new Error((await res.json().catch(() => ({}))).error ?? '删除失败');
+    await api.delete(`/campaigns/${props.campaignId}/clues/${clue.id}`);
     clues.value = clues.value.filter(c => c.id !== clue.id);
     ElMessage.success('线索已删除');
   } catch (e: unknown) {
@@ -94,7 +85,7 @@ function revealedLabel(clue: CampaignClue) {
   return '未发放';
 }
 
-function revealedColor(clue: CampaignClue): string {
+function revealedColor(clue: CampaignClue): 'default' | 'success' | 'warning' {
   if (clue.is_revealed) return 'success';
   return 'default';
 }
@@ -138,7 +129,7 @@ onMounted(loadClues);
             <span class="clue-theme-badge">{{ clue.theme }}</span>
           </div>
           <div class="clue-row-actions" @click.stop>
-            <TButton size="small" type="secondary" @click="openStyleEditor(clue)" title="编辑样式">
+            <TButton size="sm" type="secondary" @click="openStyleEditor(clue)" title="编辑样式">
               <SvgIcon name="icon-palette" :size="13" />
               样式
             </TButton>

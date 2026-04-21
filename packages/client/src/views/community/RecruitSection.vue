@@ -85,7 +85,7 @@ async function loadRulesets() {
 
 function resetPostForm() {
   postForm.value = {
-    type: activeTab.value,
+    type: activeTab.value === 'mine' ? 'gm_recruit' : activeTab.value,
     title: '',
     ruleset_id: '',
     module_name: '',
@@ -256,26 +256,30 @@ onMounted(loadRulesets);
             <ElFormItem v-for="field in currentRecruitmentFields" :key="field.name" :label="field.label">
               <ElInput
                 v-if="field.type === 'text'"
-                v-model="postForm.metadata[field.name]"
+                :model-value="(postForm.metadata[field.name] as string | number | null | undefined) ?? ''"
+                @update:model-value="(value) => (postForm.metadata[field.name] = value)"
                 :placeholder="field.placeholder || `请输入${field.label}`"
               />
               <ElInputNumber
                 v-else-if="field.type === 'number'"
-                v-model="postForm.metadata[field.name]"
+                :model-value="(postForm.metadata[field.name] as number | null | undefined) ?? null"
+                @update:model-value="(value) => (postForm.metadata[field.name] = value)"
                 :min="0"
                 controls-position="right"
                 style="width:100%"
               />
               <ElSwitch
                 v-else-if="field.type === 'boolean'"
-                v-model="postForm.metadata[field.name]"
+                :model-value="Boolean(postForm.metadata[field.name])"
+                @update:model-value="(value) => (postForm.metadata[field.name] = value)"
                 inline-prompt
                 active-text="是"
                 inactive-text="否"
               />
               <ElSelect
                 v-else-if="field.type === 'select'"
-                v-model="postForm.metadata[field.name]"
+                :model-value="(postForm.metadata[field.name] as string | string[] | number | boolean | Record<string, any> | null | undefined) ?? (field.multiple ? [] : '')"
+                @update:model-value="(value) => (postForm.metadata[field.name] = value)"
                 :multiple="field.multiple"
                 clearable
                 style="width:100%"

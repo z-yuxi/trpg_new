@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api, getToken } from '../../utils/api';
 
 interface Asset {
   id: string;
@@ -14,15 +14,11 @@ interface Asset {
   created_at: string;
 }
 
-const authStore = useAuthStore();
-
 const assets = ref<Asset[]>([]);
 const loading = ref(false);
 const uploading = ref(false);
 const filterType = ref<'all' | 'image' | 'audio'>('all');
 const fileInputRef = ref<HTMLInputElement | null>(null);
-
-const headers = computed(() => ({ Authorization: `Bearer ${authStore.token}` }));
 
 const filteredAssets = computed(() => {
   if (filterType.value === 'all') return assets.value;
@@ -32,9 +28,7 @@ const filteredAssets = computed(() => {
 async function loadAssets() {
   loading.value = true;
   try {
-    const res = await fetch('/api/creator/assets', { headers: headers.value });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '加载失败');
-    assets.value = await res.json();
+    assets.value = await api.get<Asset[]>('/creator/assets');
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '加载素材失败');
   } finally {
@@ -73,7 +67,7 @@ async function handleFileChange(event: Event) {
 
     const res = await fetch('/api/upload', {
       method: 'POST',
-      headers: headers.value,
+      headers: { Authorization: `Bearer ${getToken()}` },
       body: formData,
     });
 
@@ -81,14 +75,8 @@ async function handleFileChange(event: Event) {
     const data = await res.json();
 
     // 注册到 creator/assets
-    const regRes = await fetch('/api/creator/assets', {
-      method: 'POST',
-      headers: { ...headers.value, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, url: data.url, type: file.type, size: file.size }),
-    });
-    if (!regRes.ok) throw new Error((await regRes.json().catch(() => ({}))).error ?? '注册失败');
-
-    assets.value.unshift(await regRes.json());
+    const newAsset = await api.post<Asset>('/creator/assets', { filename: file.name, url: data.url, type: file.type, size: file.size });
+    assets.value.unshift(newAsset);
     ElMessage.success('上传成功');
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '上传失败');
@@ -106,11 +94,7 @@ async function deleteAsset(asset: Asset) {
   });
 
   try {
-    const res = await fetch(`/api/creator/assets/${asset.id}`, {
-      method: 'DELETE',
-      headers: headers.value,
-    });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '删除失败');
+    await api.delete(`/creator/assets/${asset.id}`);
     assets.value = assets.value.filter(a => a.id !== asset.id);
     ElMessage.success('已删除');
   } catch (e: unknown) {
@@ -184,7 +168,7 @@ onMounted(loadAssets);
 
         <!-- 操作 -->
         <div class="asset-actions">
-          <TButton size="small" type="secondary" @click="copyUrl(asset.url)">复制链接</TButton>
+          <TButton size="sm" type="secondary" @click="copyUrl(asset.url)">复制链接</TButton>
           <button class="danger-btn" @click="deleteAsset(asset)" title="删除">
             <SvgIcon name="icon-trash" :size="14" />
           </button>

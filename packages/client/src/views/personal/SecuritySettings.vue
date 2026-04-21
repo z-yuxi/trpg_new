@@ -2,10 +2,9 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 const currentPwd = ref('');
 const newPwd = ref('');
@@ -42,15 +41,7 @@ async function changePassword() {
   }
   saving.value = true;
   try {
-    const res = await fetch('/api/users/me/password', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({ current_password: currentPwd.value, new_password: newPwd.value }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.message || '修改失败');
-    }
+    await api.put('/users/me/password', { current_password: currentPwd.value, new_password: newPwd.value });
     ElMessage.success('密码修改成功');
     currentPwd.value = '';
     newPwd.value = '';

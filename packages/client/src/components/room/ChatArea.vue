@@ -3,6 +3,7 @@ import { computed, ref, nextTick, watch, onMounted, onUnmounted } from 'vue';
 import { v4 as uuidv4 } from 'uuid';
 import MessageItem from './MessageItem.vue';
 import ChatInput from './ChatInput.vue';
+import GmClueGrantOverlay from './GmClueGrantOverlay.vue';
 import { useMessageStore } from '../../stores/message-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { socketClient } from '../../socket/socket-client';
@@ -10,6 +11,8 @@ import { socketClient } from '../../socket/socket-client';
 const props = defineProps<{
   prefillText?: string;
   isGm?: boolean;
+  campaignId?: string;
+  characters?: { id: string; name: string }[];
   currentSceneType?: string;
   myCharacter?: { id: string; name: string; avatarUrl?: string } | null;
   roleplayableNpcs?: { id: string; name: string; avatarUrl?: string }[];
@@ -23,26 +26,34 @@ const authStore = useAuthStore();
 const listRef = ref<HTMLElement>();
 const scrollTop = ref(0);
 const viewportHeight = ref(0);
+const showClueGrant = ref(false);
 const estimatedItemSize = 88;
 const overscan = 10;
 
-const useVirtualList = computed(() => messageStore.currentMessages.length > 200);
+const isLobby = computed(() => props.currentSceneType === 'lobby');
+const filteredMessages = computed(() =>
+  isLobby.value
+    ? messageStore.currentMessages.filter(m => m.message_type !== 'time_tag')
+    : messageStore.currentMessages
+);
+
+const useVirtualList = computed(() => filteredMessages.value.length > 200);
 const startIndex = computed(() => {
   if (!useVirtualList.value) return 0;
   return Math.max(0, Math.floor(scrollTop.value / estimatedItemSize) - overscan);
 });
 const endIndex = computed(() => {
-  if (!useVirtualList.value) return messageStore.currentMessages.length;
+  if (!useVirtualList.value) return filteredMessages.value.length;
   const visibleCount = Math.ceil(viewportHeight.value / estimatedItemSize) + overscan * 2;
-  return Math.min(messageStore.currentMessages.length, startIndex.value + visibleCount);
+  return Math.min(filteredMessages.value.length, startIndex.value + visibleCount);
 });
 const visibleMessages = computed(() => {
-  if (!useVirtualList.value) return messageStore.currentMessages;
-  return messageStore.currentMessages.slice(startIndex.value, endIndex.value);
+  if (!useVirtualList.value) return filteredMessages.value;
+  return filteredMessages.value.slice(startIndex.value, endIndex.value);
 });
 const topSpacer = computed(() => useVirtualList.value ? startIndex.value * estimatedItemSize : 0);
 const bottomSpacer = computed(() => useVirtualList.value
-  ? Math.max(0, (messageStore.currentMessages.length - endIndex.value) * estimatedItemSize)
+  ? Math.max(0, (filteredMessages.value.length - endIndex.value) * estimatedItemSize)
   : 0);
 
 function syncViewportHeight() {
@@ -61,7 +72,7 @@ function handleScroll() {
   scrollTop.value = listRef.value?.scrollTop ?? 0;
 }
 
-watch(() => messageStore.currentMessages.length, async () => {
+watch(() => filteredMessages.value.length, async () => {
   const shouldAutoScroll = !listRef.value || listRef.value.scrollHeight - listRef.value.scrollTop - listRef.value.clientHeight < 120;
   await nextTick();
   syncViewportHeight();
@@ -73,7 +84,7 @@ function handleSend(content: string, messageType: string, senderIdentity?: strin
   messageStore.addPendingMessage(content, tempId, messageType);
   let senderIdentityLabel: string | undefined;
   if (senderIdentity?.startsWith('npc:')) {
-    senderIdentityLabel = props.roleplayableNpcs?.find((npc) => `npc:${npc.id}` === senderIdentity)?.name;
+    senderIdentityLabel = props.roleplayableNpcs?.find((npc: { id: string; name: string }) => `npc:${npc.id}` === senderIdentity)?.name;
   } else if (senderIdentity?.startsWith('char:')) {
     senderIdentityLabel = props.myCharacter?.name;
   } else if (senderIdentity === 'gm') {
@@ -153,6 +164,14 @@ onUnmounted(() => {
       :ruleset-commands="props.rulesetCommands"
       @send="handleSend"
       @command="handleCommand"
+      @open-clue-grant="showClueGrant = true"
+    />
+    <!-- 内联线索发放浮层（仅 GM） -->
+    <GmClueGrantOverlay
+      v-if="showClueGrant && props.isGm && props.campaignId"
+      :campaign-id="props.campaignId"
+      :characters="props.characters"
+      @close="showClueGrant = false"
     />
   </div>
 </template>

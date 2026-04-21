@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import TCard from '../../components/base/TCard.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 interface RulesetItem {
   id: string;
@@ -25,7 +25,6 @@ interface ModuleItem {
 }
 
 const router = useRouter();
-const authStore = useAuthStore();
 
 const loading = ref(false);
 const rulesets = ref<RulesetItem[]>([]);
@@ -73,22 +72,14 @@ const recentEdits = computed(() => {
 
 async function loadDashboard() {
   loading.value = true;
-  const headers = { Authorization: `Bearer ${authStore.token}` };
   try {
-    const [rulesetRes, moduleRes] = await Promise.all([
-      fetch('/api/rulesets/mine', { headers }),
-      fetch('/api/modules/mine', { headers }),
+    const [rulesetPayload, modulePayload] = await Promise.all([
+      api.get<unknown>('/rulesets/mine'),
+      api.get<unknown>('/modules/mine'),
     ]);
 
-    if (rulesetRes.ok) {
-      const payload = await rulesetRes.json();
-      rulesets.value = Array.isArray(payload) ? payload : payload.data ?? [];
-    }
-
-    if (moduleRes.ok) {
-      const payload = await moduleRes.json();
-      modules.value = Array.isArray(payload) ? payload : payload.data ?? [];
-    }
+    rulesets.value = Array.isArray(rulesetPayload) ? rulesetPayload : (rulesetPayload as { data?: RulesetItem[] }).data ?? [];
+    modules.value = Array.isArray(modulePayload) ? modulePayload : (modulePayload as { data?: ModuleItem[] }).data ?? [];
   } finally {
     loading.value = false;
   }

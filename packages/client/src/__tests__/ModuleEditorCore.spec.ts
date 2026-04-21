@@ -36,7 +36,7 @@ beforeAll(() => {
 
 describe('ModuleEditorCore 组件冒烟测试', () => {
   it('应能成功挂载（无运行时报错）', () => {
-    let wrapper: ReturnType<typeof mount> | null = null;
+    let wrapper: ReturnType<typeof mount> | undefined;
     expect(() => {
       wrapper = mount(ModuleEditorCore, {
         props: { modelValue: null },

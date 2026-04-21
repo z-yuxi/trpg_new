@@ -7,10 +7,10 @@ import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
-import { useAuthStore } from '../../stores/auth-store';
+import { api } from '../../utils/api';
 
 const router = useRouter();
-const authStore = useAuthStore();
+
 const loading = ref(false);
 const cards = ref<any[]>([]);
 
@@ -29,11 +29,7 @@ const normalizedCards = computed(() => cards.value.map((item) => {
 async function loadCharacters() {
   loading.value = true;
   try {
-    const res = await fetch('/api/characters', {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error('加载失败');
-    cards.value = await res.json();
+    cards.value = await api.get<any[]>('/characters');
   } catch {
     ElMessage.error('角色卡加载失败');
     cards.value = [];

@@ -136,13 +136,13 @@ export interface ScheduledMove {
   character_id: string;
   campaign_id: string;
   to_scene_id: string;
-  execute_at_story: StoryTime;
+  execute_at_story?: StoryTime | null;  // 可选：GM批准时填写的剧情到达时间
   status: MoveStatus;
   created_at: Date;
 }
 
 // ===== 聊天消息 =====
-export type MessageType = 'narrative' | 'dice' | 'ooc' | 'system' | 'announcement' | 'clue_card';
+export type MessageType = 'narrative' | 'dice' | 'ooc' | 'system' | 'announcement' | 'clue_card' | 'time_tag';
 
 export interface ChatMessage {
   id: SnowflakeId;
@@ -510,8 +510,8 @@ export interface PositionHistory {
   campaign_id: string;
   character_id: string;
   scene_id: string;
-  story_time_entered: StoryTime;
-  story_time_left: StoryTime | null;
+  story_time_entered?: StoryTime | null;  // 可选：GM填写的剧情到达时间
+  story_time_left?: StoryTime | null;
   move_type: MoveType;
   created_at: Date;
 }

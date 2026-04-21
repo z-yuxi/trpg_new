@@ -16,12 +16,14 @@ export interface ParticipantInfo {
  * - 更新 character_scene_states.current_spatial_scene_id
  * - 插入 scene_participations 记录（若不存在）
  * - 插入 position_history 记录
+ * @param storyTimeJson 可选，JSON字符串格式的剧情到达时间（由GM批准时传入）
  */
 export async function joinScene(
   characterId: string,
   campaignId: string,
   sceneId: string,
-  moveType: 'join' | 'scheduled' | 'force_move' = 'join'
+  moveType: 'join' | 'scheduled' | 'force_move' = 'join',
+  storyTimeJson?: string | null,
 ): Promise<void> {
   const currentState = await db('character_scene_states')
     .where({ character_id: characterId, campaign_id: campaignId })
@@ -62,14 +64,13 @@ export async function joinScene(
   }
 
   // 插入 position_history
-  const campaign = await db('campaigns').where({ id: campaignId }).select('global_story_time').first().catch(() => null);
-  const storyTime = campaign?.global_story_time ?? null;
+  // 优先使用传入的 storyTimeJson（GM批准时的剧情时间），否则为 null
   await db('position_history').insert({
     id: generateId(),
     campaign_id: campaignId,
     character_id: characterId,
     scene_id: sceneId,
-    story_time_entered: storyTime ? (typeof storyTime === 'string' ? storyTime : JSON.stringify(storyTime)) : null,
+    story_time_entered: storyTimeJson ?? null,
     story_time_left: null,
     move_type: moveType,
   });
