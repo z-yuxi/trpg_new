@@ -190,6 +190,7 @@ function cluePreview(message: LocalMessage) {
 }
 
 /* ===== 骰子 ===== */
+.msg-dice {
   border: 1px solid var(--color-info);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
