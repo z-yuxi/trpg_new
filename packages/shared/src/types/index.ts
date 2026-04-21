@@ -603,9 +603,51 @@ export interface ExecuteResponse {
     duration_ms: number;
   }>;
   error?: string;
+  /** 解析出的命令名（如 'en', 'sc', 'ra'），供调用方进行后处理 */
+  command_name?: string;
+  /** 图执行的原始输出，供调用方读取结构化结果 */
+  raw_output?: unknown;
 }
 
 // ===== 文字艺术主题 =====
 export type ThemeType = 'river' | 'blur' | 'fragment' | 'wave' | 'ancient' | 'blood' | 'ash' | 'cyber';
+
+// ===== 职业模板 =====
+export type OccupationMode = 'static' | 'leveled';
+
+/** 等级特性（DND 风格升级表的单个等级描述） */
+export interface LevelFeatures {
+  proficiency_bonus?: number;
+  features?: string[];
+  spell_slots?: Record<string, number>;
+  extra_attack?: number;
+  [key: string]: unknown;
+}
+
+/** 职业模板 */
+export interface OccupationTemplate {
+  id: string;
+  ruleset_id: string;
+  name: string;
+  description: string;
+  /** 'static' = COC 一次性应用；'leveled' = DND 等级成长 */
+  mode: OccupationMode;
+  /** 属性成长公式，如 { "STR": "1d4", "HP": "1d8" } */
+  attribute_growth?: Record<string, string>;
+  /** 技能点公式字符串，如 "EDU*2+APP*2"（COC 用） */
+  skill_point_formula?: string;
+  /** 信用评级范围（COC 用） */
+  credit_rating?: { min: number; max: number };
+  /** 本职技能列表（COC 用） */
+  occupation_skills?: string[];
+  /** 等级成长表（DND 用），键为等级数字 */
+  progression_table?: Record<number, LevelFeatures>;
+  /** 特性节点图（规则引擎扩展，预留字段） */
+  feature_graph?: { atoms: unknown[]; connections: unknown[] };
+  /** 默认起始装备列表 */
+  starting_equipment?: string[];
+  created_at: Date;
+  updated_at: Date;
+}
 
 export * from './events';

@@ -6,6 +6,7 @@ import { db } from '../db';
 import { computeVisibleTo, characterIdsToUserIds } from '../services/visibility';
 import { notificationService } from '../services/notification-service';
 import { rulesetService } from '../services/ruleset-service';
+import { characterInstanceService } from '../services/character-sheet-service';
 import { resolveCommand } from '../engine/command-resolver';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
@@ -551,7 +552,41 @@ async function handleCommandMessage(
     const diceLines = execResult.dice_rolls.map((r) =>
       `[${r.expression}] = ${r.value}${r.detail ? ` (${r.detail})` : ''}`
     );
-    const resultLine = execResult.result;
+    let resultLine = execResult.result;
+
+    // ── en 技能成长：检定通过后自动写回角色卡 ─────────────────────────────────
+    if (execResult.command_name === 'en' && characterId && execResult.success) {
+      const rawOut = execResult.raw_output as Record<string, unknown> | null;
+      const growthPassed = rawOut && typeof rawOut['passed'] === 'boolean' ? rawOut['passed'] : false;
+      if (growthPassed) {
+        // dice_rolls[0] = 成长检定骰（1d100），dice_rolls[1] = 成长骰（1d10）
+        const growthAmount = execResult.dice_rolls[1]?.value ?? 0;
+        // 从指令字符串中解析技能名（"en 侦查" → "侦查"）
+        const skillName = commandStr.replace(/^en\s+/i, '').trim();
+        if (skillName && growthAmount > 0) {
+          try {
+            // 读取当前技能值
+            const charRow = await db('character_sheets')
+              .where({ id: characterId })
+              .select('skills')
+              .first();
+            const skills: Record<string, number> = charRow?.skills
+              ? (typeof charRow.skills === 'string' ? JSON.parse(charRow.skills) : charRow.skills)
+              : {};
+            const oldValue = skills[skillName] ?? 0;
+            const newValue = Math.min(99, oldValue + growthAmount);
+            // 写回 DB
+            await characterInstanceService.growSkill(characterId, campaignId, skillName, newValue);
+            resultLine = `成功（${skillName} ${oldValue} → ${newValue}）`;
+          } catch {
+            // 写回失败不影响消息广播，仅记录
+            resultLine = `成功（成长 +${growthAmount}，角色卡同步失败）`;
+          }
+        }
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     const displayContent = [
       `> ${commandStr}`,
       ...diceLines,

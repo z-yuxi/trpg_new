@@ -21,6 +21,8 @@ const emit = defineEmits<{
   'gm-view-character': [characterId: string];
   'gm-force-move': [characterId: string];
   'jump-to-message': [messageId: string];
+  'create-virtual-scene': [];
+  'invite-to-scene': [sceneId: string];
 }>();
 
 const groupOpen = ref({
@@ -59,6 +61,8 @@ const recentPath = computed(() => {
   }));
 });
 const virtualScenes = computed(() => {
+  // GM 可见全部私密场；玩家只能看到自己参与的
+  if (props.isGm) return props.scenes.filter((scene) => scene.type === 'virtual');
   const allowed = new Set(props.myVirtualSceneIds ?? []);
   return props.scenes.filter((scene) => scene.type === 'virtual' && (allowed.has(scene.id) || scene.id === props.currentSceneId));
 });
@@ -165,6 +169,12 @@ function handleForceMove() {
         <button class="group-header" @click.stop="groupOpen.virtual = !groupOpen.virtual">
           <span class="arrow" :class="{ open: groupOpen.virtual }">▾</span>
           <span>私密场</span>
+          <button
+            v-if="isGm"
+            class="inline-icon-btn"
+            title="新建私密场"
+            @click.stop="emit('create-virtual-scene')"
+          >＋</button>
         </button>
         <div v-if="groupOpen.virtual">
           <div
@@ -177,8 +187,14 @@ function handleForceMove() {
             <SvgIcon name="icon-lock" :size="14" />
             <span class="scene-name">{{ scene.name }}</span>
             <span v-if="sceneUnread(scene.id) > 0" class="badge">{{ sceneUnread(scene.id) }}</span>
+            <button
+              v-if="isGm"
+              class="inline-icon-btn invite-btn"
+              title="邀请角色进入"
+              @click.stop="emit('invite-to-scene', scene.id)"
+            >邀请</button>
           </div>
-          <div v-if="virtualScenes.length === 0" class="empty-hint">暂无可见私密场</div>
+          <div v-if="virtualScenes.length === 0" class="empty-hint">暂无私密场</div>
         </div>
       </div>
 
@@ -299,6 +315,20 @@ function handleForceMove() {
 .scene-item.active { background: rgba(59, 130, 246, 0.1); color: var(--color-accent); }
 .scene-dot { font-size: 8px; color: currentColor; }
 .scene-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inline-icon-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.inline-icon-btn:hover { background: var(--color-page-bg); color: var(--color-accent); }
+.invite-btn { font-size: 11px; }
 .badge {
   min-width: 18px;
   height: 18px;

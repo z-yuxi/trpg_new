@@ -4,15 +4,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import GMConsole from '../components/room/GMConsole.vue';
 import SvgIcon from '../components/SvgIcon.vue';
-import { useAuthStore } from '../stores/auth-store';
 import { useCampaignStore } from '../stores/campaign-store';
+import { api } from '../utils/api';
 import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 
 type GmModule = 'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'grid' | 'trajectory' | 'broadcast';
 
 const route = useRoute();
 const router = useRouter();
-const authStore = useAuthStore();
 const campaignStore = useCampaignStore();
 
 const campaignId = computed(() => route.params.campaignId as string);
@@ -60,30 +59,24 @@ function goBack() {
 async function loadData() {
   loading.value = true;
   try {
-    const [campaignRes, scenesRes, npcsRes, charsRes] = await Promise.all([
-      fetch(`/api/campaigns/${campaignId.value}`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
-      fetch(`/api/campaigns/${campaignId.value}/scenes`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
-      fetch(`/api/campaigns/${campaignId.value}/npcs`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
-      fetch(`/api/campaigns/${campaignId.value}/characters`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
+    const [campaign, scenesData, npcsData, charsData] = await Promise.all([
+      api.get<Record<string, unknown>>(`/campaigns/${campaignId.value}`),
+      api.get<Scene[]>(`/campaigns/${campaignId.value}/scenes`),
+      api.get<CampaignNpc[]>(`/campaigns/${campaignId.value}/npcs`),
+      api.get<Record<string, unknown>[]>(`/campaigns/${campaignId.value}/characters`),
     ]);
 
-    if (campaignRes.ok) {
-      const campaign = await campaignRes.json();
-      campaignStore.setCurrentCampaign(campaign);
-      if (campaign.global_story_time) {
-        try { globalStoryTime.value = JSON.parse(campaign.global_story_time); } catch { /* ignore */ }
-      }
+    campaignStore.setCurrentCampaign(campaign);
+    if (campaign['global_story_time']) {
+      try { globalStoryTime.value = JSON.parse(campaign['global_story_time'] as string); } catch { /* ignore */ }
     }
-    if (scenesRes.ok) scenes.value = await scenesRes.json();
-    if (npcsRes.ok) npcs.value = await npcsRes.json();
-    if (charsRes.ok) {
-      const data = await charsRes.json();
-      characters.value = data.map((c: Record<string, unknown>) => ({
-        id: c['id'] as string,
-        name: c['name'] as string,
-        sceneId: c['scene_id'] as string | undefined,
-      }));
-    }
+    scenes.value = scenesData;
+    npcs.value = npcsData;
+    characters.value = charsData.map((c) => ({
+      id: c['id'] as string,
+      name: c['name'] as string,
+      sceneId: c['scene_id'] as string | undefined,
+    }));
   } catch {
     ElMessage.error('数据加载失败');
   } finally {

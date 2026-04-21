@@ -10,6 +10,7 @@ import notificationRoutes from './notifications';
 import forumRoutes from './forum';
 import moduleRoutes from './modules';
 import uploadRoutes from './upload';
+import occupationRoutes from './occupations';
 
 const router: IRouter = Router();
 
@@ -27,5 +28,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/forum', forumRoutes);
 router.use('/modules', moduleRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/occupations', occupationRoutes);
 
 export default router;

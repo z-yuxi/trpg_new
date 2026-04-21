@@ -260,6 +260,8 @@ export class RulesetService {
         duration_ms: l.duration_ms,
       })),
       ...(result.error ? { error: result.error } : {}),
+      command_name: resolved.name,
+      raw_output: result.output,
     };
   }
 

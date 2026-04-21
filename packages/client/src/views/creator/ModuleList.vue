@@ -15,6 +15,7 @@ interface ModuleItem {
   word_count?: number;
   download_count?: number;
   updated_at?: string;
+  public_notice_end_at?: string | null;
 }
 
 const router = useRouter();
@@ -130,6 +131,33 @@ async function deleteModule(moduleId: string) {
   loadModules();
 }
 
+async function withdrawModule(moduleId: string) {
+  const confirmed = window.confirm('撤回后模组将回到草稿状态，确认撤回吗？');
+  if (!confirmed) return;
+  const response = await fetch(`/api/modules/${moduleId}/withdraw`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${authStore.token}` },
+  }).catch(() => null);
+  if (!response?.ok) {
+    ElMessage.error('撤回失败');
+    return;
+  }
+  ElMessage.success('已撤回模组审核');
+  loadModules();
+}
+
+/** 计算公示期剩余时间文字 */
+function noticeCountdown(endAt: string | null | undefined): string {
+  if (!endAt) return '';
+  const ms = new Date(endAt).getTime() - Date.now();
+  if (ms <= 0) return '公示期已截止';
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  if (days > 0) return `公示期还剩 ${days} 天 ${hours} 时`;
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  return `公示期还剩 ${hours} 时 ${minutes} 分`;
+}
+
 onMounted(loadModules);
 </script>
 
@@ -160,11 +188,20 @@ onMounted(loadModules);
             <span>{{ item.word_count || 0 }} 字</span>
             <span>{{ item.download_count || 0 }} 下载</span>
             <span>{{ item.updated_at ? new Date(item.updated_at).toLocaleString() : '刚创建' }}</span>
+            <span v-if="item.status === 'public_notice' && item.public_notice_end_at" class="notice-countdown">
+              {{ noticeCountdown(item.public_notice_end_at) }}
+            </span>
           </div>
           <div class="actions">
             <TButton type="secondary" size="sm" @click="router.push(`/creator/modules/${item.id}/edit`)">编辑</TButton>
             <TButton v-if="item.status === 'draft'" type="primary" size="sm" @click="submitModule(item.id)">提交审核</TButton>
             <TButton v-if="item.status === 'draft'" type="secondary" size="sm" @click="deleteModule(item.id)">删除</TButton>
+            <TButton
+              v-if="item.status === 'reviewing' || item.status === 'public_notice'"
+              type="secondary"
+              size="sm"
+              @click="withdrawModule(item.id)"
+            >撤回审核</TButton>
           </div>
         </div>
       </article>
@@ -232,6 +269,7 @@ onMounted(loadModules);
 .module-head h2 { margin: 0; font-size: var(--text-lg); color: var(--text-primary); }
 .module-head p { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .meta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-muted); font-size: var(--text-xs); }
+.notice-countdown { color: var(--color-warning, #f59e0b); font-weight: 600; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .empty-state {
   padding: var(--space-10);

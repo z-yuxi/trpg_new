@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { ElDialog, ElMessage, ElSelect, ElOption } from 'element-plus';
+import { ElDialog, ElMessage, ElSelect, ElOption, ElInput } from 'element-plus';
 import RoomLayout from '../layouts/RoomLayout.vue';
 import LeftSidebar from '../components/room/LeftSidebar.vue';
 import ChatArea from '../components/room/ChatArea.vue';
@@ -13,6 +13,7 @@ import { useCampaignStore } from '../stores/campaign-store';
 import { useAuthStore } from '../stores/auth-store';
 import { useMessageStore } from '../stores/message-store';
 import { socketClient } from '../socket/socket-client';
+import { api } from '../utils/api';
 import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
 
 const route = useRoute();
@@ -62,9 +63,59 @@ const activeSpatialCharacters = computed(() => {
 
 const myVirtualSceneIds = ref<string[]>([]);
 
+// 私密场新建
+const showCreateVirtualSceneDialog = ref(false);
+const newVirtualSceneName = ref('');
+
+function handleCreateVirtualScene() {
+  newVirtualSceneName.value = '';
+  showCreateVirtualSceneDialog.value = true;
+}
+
+async function submitCreateVirtualScene() {
+  const name = newVirtualSceneName.value.trim();
+  if (!name) return;
+  try {
+    const scene = await api.post<any>(`/campaigns/${campaignId}/scenes`, { name, type: 'virtual', description: '' });
+    scenes.value.push(scene);
+    switchScene(scene.id);
+    showCreateVirtualSceneDialog.value = false;
+    ElMessage.success(`私密场「${scene.name}」已创建`);
+  } catch {
+    ElMessage.error('创建私密场失败');
+  }
+}
+
+// 邀请角色进入私密场
+const showInviteDialog = ref(false);
+const inviteSceneId = ref('');
+const selectedInviteCharacterIds = ref<string[]>([]);
+const inviteSceneName = computed(() => scenes.value.find((s) => s.id === inviteSceneId.value)?.name ?? '');
+
+function handleInviteToScene(sceneId: string) {
+  inviteSceneId.value = sceneId;
+  selectedInviteCharacterIds.value = [];
+  showInviteDialog.value = true;
+}
+
+async function submitInvite() {
+  if (!inviteSceneId.value || selectedInviteCharacterIds.value.length === 0) return;
+  try {
+    await Promise.all(
+      selectedInviteCharacterIds.value.map((charId) =>
+        api.post(`/campaigns/${campaignId}/scenes/${inviteSceneId.value}/join`, { character_id: charId })
+      )
+    );
+    await fetchMyVirtualScenes();
+    showInviteDialog.value = false;
+    ElMessage.success('邀请成功');
+  } catch {
+    ElMessage.error('邀请失败');
+  }
+}
+
 async function fetchMyVirtualScenes() {
   try {
-    const { api } = await import('../utils/api');
     const ids = await api.get<string[]>(`/campaigns/${campaignId}/my-virtual-scenes`);
     myVirtualSceneIds.value = ids ?? [];
   } catch {
@@ -153,10 +204,9 @@ function normalizeRulesetCommands(raw: unknown): Array<{ name: string; descripti
 }
 
 async function loadScenes() {
-  const res = await fetch(`/api/campaigns/${campaignId}/scenes`, {
-    headers: { Authorization: `Bearer ${authStore.token}` },
-  });
-  if (res.ok) scenes.value = await res.json();
+  try {
+    scenes.value = await api.get<any[]>(`/campaigns/${campaignId}/scenes`);
+  } catch { /* ignore */ }
 }
 
 function handleAdvanceTime(minutes: number) {
@@ -186,11 +236,7 @@ function switchScene(sceneId: string) {
 
 async function loadRoomCharacters() {
   try {
-    const res = await fetch(`/api/campaigns/${campaignId}/characters`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await api.get<any[]>(`/campaigns/${campaignId}/characters`);
     roomCharacters.value = data.map((item: any) => ({
       id: item.id,
       name: item.name,
@@ -207,7 +253,6 @@ async function loadRoomCharacters() {
       if (!currentSceneId.value && myChar.scene_id) {
         switchScene(myChar.scene_id);
       }
-      // 检测跨团技能同步（模板 vs 实例，差异 >= 5 点）
       if (!skillSyncDismissed.value) {
         checkSkillSync(myChar.id);
       }
@@ -219,16 +264,10 @@ async function loadRoomCharacters() {
 
 async function checkSkillSync(charId: string) {
   try {
-    const [templateRes, instanceRes] = await Promise.all([
-      fetch(`/api/characters/${charId}`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
-      fetch(`/api/characters/${charId}/instance?campaign_id=${campaignId}`, { headers: { Authorization: `Bearer ${authStore.token}` } }),
+    const [template, instance] = await Promise.all([
+      api.get<any>(`/characters/${charId}`),
+      api.get<any>(`/characters/${charId}/instance?campaign_id=${campaignId}`),
     ]);
-    if (!templateRes.ok || !instanceRes.ok) return;
-    const template = await templateRes.json();
-    const instance = await instanceRes.json();
-    const templateSkills: Record<string, number> = template.skills ?? {};
-    // instance 没有单独的 skills（存在模板中），检测 derived_current 是否过期
-    // 这里主要对比技能 growth_marks：若有待成长标记，提示同步
     const growthMarks: Record<string, boolean> = instance.skill_growth_marks ?? {};
     if (Object.keys(growthMarks).length > 0) {
       const markedSkills = Object.keys(growthMarks).join('、');
@@ -244,32 +283,21 @@ async function checkSkillSync(charId: string) {
 }
 
 async function viewCharacter(characterIdToView: string) {
-  // 如果是团成员角色，优先打开团内角色卡 Modal
   const char = roomCharacters.value.find(c => c.id === characterIdToView);
   if (char) {
     charCardModalId.value = characterIdToView;
     charCardModalName.value = char.name;
     charCardModalIsOwner.value = char.userId === authStore.userId;
-    // 尝试加载属性
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/characters/${characterIdToView}`, {
-        headers: { Authorization: `Bearer ${authStore.token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        charCardModalAttrs.value = data.attributes ?? {};
-      }
+      const data = await api.get<any>(`/campaigns/${campaignId}/characters/${characterIdToView}`);
+      charCardModalAttrs.value = data.attributes ?? {};
     } catch { /* ignore, modal can still show */ }
     showCharCardModal.value = true;
     return;
   }
-  // 回退：显示简单对话框
   try {
-    const res = await fetch(`/api/campaigns/${campaignId}/characters/${characterIdToView}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (!res.ok) throw new Error('角色卡加载失败');
-    selectedCharacter.value = await res.json();
+    const data = await api.get<any>(`/campaigns/${campaignId}/characters/${characterIdToView}`);
+    selectedCharacter.value = data;
     showCharacterDialog.value = true;
   } catch {
     ElMessage.error('无法查看该角色卡');
@@ -285,19 +313,10 @@ function openForceMove(characterIdToMove: string) {
 async function submitForceMove() {
   if (!selectedForceCharacterId.value || !forceMoveTargetSceneId.value) return;
   try {
-    const res = await fetch(`/api/campaigns/${campaignId}/force-move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authStore.token}` },
-      body: JSON.stringify({
-        character_id: selectedForceCharacterId.value,
-        to_scene_id: forceMoveTargetSceneId.value,
-      }),
+    const moved = await api.post<any>(`/campaigns/${campaignId}/force-move`, {
+      character_id: selectedForceCharacterId.value,
+      to_scene_id: forceMoveTargetSceneId.value,
     });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || '强制移动失败');
-    }
-    const moved = await res.json();
     roomCharacters.value = roomCharacters.value.map((char) => {
       if (char.id !== moved.character_id) return char;
       return { ...char, sceneId: moved.to_scene_id };
@@ -313,29 +332,23 @@ onMounted(async () => {
   socketClient.setToken(authStore.token);
 
   try {
-    const campaignRes = await fetch(`/api/campaigns/${campaignId}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (campaignRes.ok) {
-      const campaign = await campaignRes.json();
-      campaignStore.setCurrentCampaign(campaign);
-      isGm.value = campaign.gm_user_id === authStore.userId;
+    const campaign = await api.get<any>(`/campaigns/${campaignId}`);
+    campaignStore.setCurrentCampaign(campaign);
+    isGm.value = campaign.gm_user_id === authStore.userId;
 
-      if (campaign.global_story_time) {
-        try {
-          globalTime.value = JSON.parse(campaign.global_story_time);
-        } catch {
-          // ignore invalid json
-        }
+    if (campaign.global_story_time) {
+      try {
+        globalTime.value = JSON.parse(campaign.global_story_time);
+      } catch {
+        // ignore invalid json
       }
+    }
 
-      if (campaign.ruleset_id) {
-        const rulesetRes = await fetch(`/api/rulesets/${campaign.ruleset_id}`).catch(() => null);
-        if (rulesetRes?.ok) {
-          const ruleset = await rulesetRes.json();
-          commands.value = normalizeRulesetCommands(ruleset.commands);
-        }
-      }
+    if (campaign.ruleset_id) {
+      try {
+        const ruleset = await api.get<any>(`/rulesets/${campaign.ruleset_id}`);
+        commands.value = normalizeRulesetCommands(ruleset.commands);
+      } catch { /* ignore */ }
     }
 
     await loadScenes();
@@ -344,10 +357,8 @@ onMounted(async () => {
       if (firstScene) switchScene(firstScene);
     }
 
-    const npcsRes = await fetch(`/api/campaigns/${campaignId}/npcs`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
-    });
-    if (npcsRes.ok) npcs.value = await npcsRes.json();
+    const npcsData = await api.get<any[]>(`/campaigns/${campaignId}/npcs`).catch(() => []);
+    npcs.value = npcsData;
 
     await loadRoomCharacters();
     if (!isGm.value) await fetchMyVirtualScenes();
@@ -450,6 +461,8 @@ onUnmounted(() => {
           @scene-select="switchScene"
           @gm-view-character="viewCharacter"
           @gm-force-move="openForceMove"
+          @create-virtual-scene="handleCreateVirtualScene"
+          @invite-to-scene="handleInviteToScene"
         />
       </template>
       <template #chat-area>
@@ -500,6 +513,42 @@ onUnmounted(() => {
       <template #footer>
         <TButton type="secondary" @click="showForceMoveDialog = false">取消</TButton>
         <TButton type="primary" @click="submitForceMove">确认移动</TButton>
+      </template>
+    </ElDialog>
+
+    <!-- 新建私密场 -->
+    <ElDialog v-model="showCreateVirtualSceneDialog" title="新建私密场" width="380px">
+      <ElInput
+        v-model="newVirtualSceneName"
+        placeholder="请输入私密场名称"
+        maxlength="20"
+        show-word-limit
+        @keyup.enter="submitCreateVirtualScene"
+      />
+      <template #footer>
+        <TButton type="secondary" @click="showCreateVirtualSceneDialog = false">取消</TButton>
+        <TButton type="primary" :disabled="!newVirtualSceneName.trim()" @click="submitCreateVirtualScene">创建</TButton>
+      </template>
+    </ElDialog>
+
+    <!-- 邀请角色进入私密场 -->
+    <ElDialog v-model="showInviteDialog" :title="`邀请进入「${inviteSceneName}」`" width="420px">
+      <ElSelect
+        v-model="selectedInviteCharacterIds"
+        multiple
+        placeholder="选择要邀请的角色"
+        style="width:100%"
+      >
+        <ElOption
+          v-for="char in roomCharacters"
+          :key="char.id"
+          :label="char.name"
+          :value="char.id"
+        />
+      </ElSelect>
+      <template #footer>
+        <TButton type="secondary" @click="showInviteDialog = false">取消</TButton>
+        <TButton type="primary" :disabled="selectedInviteCharacterIds.length === 0" @click="submitInvite">确认邀请</TButton>
       </template>
     </ElDialog>
 
