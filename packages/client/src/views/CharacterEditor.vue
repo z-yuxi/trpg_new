@@ -163,7 +163,8 @@ function initSkills() {
 /* ========== 加载规则集 ========== */
 onMounted(async () => {
   try {
-    rulesets.value = await api.get<{ id: string; name: string }[]>('/rulesets?status=published');
+    const result = await api.get<any>('/rulesets?status=published');
+    rulesets.value = Array.isArray(result) ? result : (result?.data ?? []);
   } catch { /* ignore */ }
   if (rulesets.value.length === 0) {
     rulesets.value = [

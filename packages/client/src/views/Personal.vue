@@ -315,11 +315,11 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <span>消息通知设置</span>
       </div>
       <div class="menu-item" @click="router.push('/personal/privacy')">
-        <SvgIcon name="icon-user" :size="20" />
+        <SvgIcon name="icon-shield" :size="20" />
         <span>隐私设置</span>
       </div>
       <div class="menu-item" @click="router.push('/personal/about')">
-        <SvgIcon name="icon-workshop" :size="20" />
+        <SvgIcon name="icon-info" :size="20" />
         <span>关于我们</span>
       </div>
       <div class="menu-item" @click="clearCache">

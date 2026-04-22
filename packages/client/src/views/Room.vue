@@ -231,9 +231,11 @@ function switchScene(sceneId: string) {
   currentSceneId.value = sceneId;
   messageStore.setCurrentScene(sceneId);
   socketClient.subscribeScene(sceneId);
+  const targetScene = scenes.value.find((s) => s.id === sceneId);
+  const storyTime = targetScene?.type === 'lobby' ? undefined : globalTime.value;
   positionHistory.value = [
     ...positionHistory.value.filter((e) => e.sceneId !== sceneId),
-    { sceneId, storyTime: globalTime.value },
+    { sceneId, storyTime },
   ];
 }
 

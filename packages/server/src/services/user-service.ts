@@ -161,6 +161,38 @@ export class UserService {
     return [...modules, ...rulesets].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
   }
 
+  /** 确保官方规则库账号存在且可登录（UID=1000100） */
+  async seedOfficialAccountIfNeeded(): Promise<void> {
+    const OFFICIAL_ID = 'official_ruleset_lib';
+    const OFFICIAL_UID = 1000100;
+    const OFFICIAL_PHONE = '1000100';
+    const TEMP_PASSWORD = 'Temp@1000100';
+
+    const existing = await db('users').where({ id: OFFICIAL_ID }).first();
+    const password_hash = await bcrypt.hash(TEMP_PASSWORD, BCRYPT_ROUNDS);
+    const basePayload = {
+      uid: OFFICIAL_UID,
+      phone: OFFICIAL_PHONE,
+      password_hash,
+      nickname: '官方规则库',
+      avatar_url: '',
+      user_type: JSON.stringify(['creator']),
+      creator_level: 3,
+      coins: 0,
+      subscription_type: 'creator' as const,
+    };
+
+    if (existing) {
+      await db('users').where({ id: OFFICIAL_ID }).update(basePayload);
+      return;
+    }
+
+    await db('users').insert({
+      id: OFFICIAL_ID,
+      ...basePayload,
+    });
+  }
+
   private rowToUser(row: Record<string, unknown>): User {
     return {
       id: row['id'] as string,
