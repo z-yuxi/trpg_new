@@ -7,7 +7,16 @@ import { useTheme } from '../composables/useTheme';
 type MobileAssistantTab = 'cmds' | 'map' | 'dice' | 'secret' | 'broadcast';
 type MobileView = 'chat' | 'scenes' | 'assistant' | 'gm';
 
-const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null; mobileView?: MobileView; pendingMovesCount?: number; npcs?: Array<{ id: string; name: string }> }>();
+// 移动端半屏面板
+type QuickPanel = 'none' | 'dice' | 'charcard' | 'commands' | 'more';
+const activeQuickPanel = ref<QuickPanel>('none');
+
+function openQuickPanel(p: QuickPanel) {
+  activeQuickPanel.value = activeQuickPanel.value === p ? 'none' : p;
+}
+function closeQuickPanel() { activeQuickPanel.value = 'none'; }
+
+const props = defineProps<{ campaignName?: string; roomCode?: string; isGm?: boolean; campaignId?: string; globalTime?: { day: number; hour: number; minute: number } | null; mobileView?: MobileView; pendingMovesCount?: number; npcs?: Array<{ id: string; name: string }>; quickDiceCommands?: Array<{ label: string; command: string }>; quickCommandList?: Array<{ name: string; description: string }>; charCardSummary?: { name: string; hp?: number; maxHp?: number; attrs?: Record<string, number> } | null }>();
 const emit = defineEmits<{
   'toggle-gm-console': [];
   'export-log': [];
@@ -16,6 +25,8 @@ const emit = defineEmits<{
   'announce-time': [];
   'play-as-npc': [npcId: string];
   'open-approve': [];
+  'quick-dice': [command: string];
+  'quick-command': [command: string];
 }>();
 const router = useRouter();
 const { currentTheme, toggleTheme } = useTheme();
@@ -173,13 +184,100 @@ function playAsNpc(npcId: string) {
       </aside>
     </div>
 
-    <!-- 移动端底部快捷栏 -->
+    <!-- 移动端底部快捷栏（附录J：高频操作聚焦） -->
     <div v-if="isMobile" class="mobile-quick-bar">
-      <button class="quick-btn" :class="{ active: currentMobileView === 'chat' }" @click="emit('update:mobileView', 'chat')"><SvgIcon name="icon-send" :size="20" /><span>聊天</span></button>
-      <button class="quick-btn" :class="{ active: currentMobileView === 'scenes' }" @click="emit('update:mobileView', 'scenes')"><SvgIcon name="icon-list" :size="20" /><span>场景</span></button>
-      <button class="quick-btn" :class="{ active: currentMobileView === 'assistant' }" @click="openAssistantTab('cmds')"><SvgIcon name="icon-scroll" :size="20" /><span>助理台</span></button>
-      <button v-if="isGm" class="quick-btn" :class="{ active: currentMobileView === 'gm' }" @click="handleQuickMore"><SvgIcon name="icon-settings" :size="20" /><span>GM</span></button>
+      <button class="quick-btn" :class="{ active: activeQuickPanel === 'dice' }" @click="openQuickPanel('dice')">
+        <span class="quick-icon">🎲</span><span>骰子</span>
+      </button>
+      <button class="quick-btn" :class="{ active: activeQuickPanel === 'charcard' }" @click="openQuickPanel('charcard')">
+        <SvgIcon name="icon-char" :size="20" /><span>角色卡</span>
+      </button>
+      <button class="quick-btn" :class="{ active: activeQuickPanel === 'commands' }" @click="openQuickPanel('commands')">
+        <SvgIcon name="icon-scroll" :size="20" /><span>指令</span>
+      </button>
+      <button class="quick-btn" :class="{ active: activeQuickPanel === 'more' }" @click="openQuickPanel('more')">
+        <SvgIcon name="icon-more" :size="20" /><span>更多</span>
+      </button>
     </div>
+
+    <!-- 半屏骰子快捷面板 -->
+    <teleport to="body">
+      <div v-if="isMobile && activeQuickPanel !== 'none'" class="quick-panel-overlay" @click="closeQuickPanel" />
+
+      <!-- 🎲 骰子面板 -->
+      <div v-if="isMobile && activeQuickPanel === 'dice'" class="quick-panel">
+        <div class="quick-panel-drag" @click="closeQuickPanel" />
+        <h4 class="quick-panel-title">快捷骰子</h4>
+        <div class="dice-shortcuts">
+          <button
+            v-for="d in (quickDiceCommands ?? [{ label: '侦查 d100', command: '.ra 侦查' }, { label: '骰 1d100', command: '.r 1d100' }, { label: '骰 1d6', command: '.r 1d6' }, { label: '骰 1d20', command: '.r 1d20' }])"
+            :key="d.command"
+            class="dice-shortcut-btn"
+            @click="emit('quick-dice', d.command); closeQuickPanel()"
+          >{{ d.label }}</button>
+        </div>
+      </div>
+
+      <!-- 角色卡摘要面板 -->
+      <div v-if="isMobile && activeQuickPanel === 'charcard'" class="quick-panel">
+        <div class="quick-panel-drag" @click="closeQuickPanel" />
+        <h4 class="quick-panel-title">角色卡</h4>
+        <div v-if="charCardSummary" class="char-summary">
+          <div class="char-summary-name">{{ charCardSummary.name }}</div>
+          <div v-if="charCardSummary.hp != null" class="char-hp-row">
+            <span>HP</span>
+            <div class="char-hp-bar">
+              <div class="char-hp-fill" :style="{ width: `${Math.round((charCardSummary.hp / (charCardSummary.maxHp || 1)) * 100)}%` }" />
+            </div>
+            <span class="char-hp-text">{{ charCardSummary.hp }}/{{ charCardSummary.maxHp }}</span>
+          </div>
+          <div class="char-attrs">
+            <div v-for="(val, key) in charCardSummary.attrs" :key="key" class="char-attr-item">
+              <span class="char-attr-key">{{ key }}</span>
+              <span class="char-attr-val">{{ val }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="quick-panel-empty">请在助理台绑定角色卡</div>
+        <button class="char-edit-btn" @click="openAssistantTab('dice'); closeQuickPanel()">查看完整角色卡</button>
+      </div>
+
+      <!-- 指令速查面板 -->
+      <div v-if="isMobile && activeQuickPanel === 'commands'" class="quick-panel">
+        <div class="quick-panel-drag" @click="closeQuickPanel" />
+        <h4 class="quick-panel-title">指令速查</h4>
+        <div class="cmd-list">
+          <button
+            v-for="cmd in (quickCommandList ?? [])"
+            :key="cmd.name"
+            class="cmd-list-item"
+            @click="emit('quick-command', `.${cmd.name} `); closeQuickPanel()"
+          >
+            <span class="cmd-name">.{{ cmd.name }}</span>
+            <span class="cmd-desc">{{ cmd.description }}</span>
+          </button>
+          <div v-if="!quickCommandList?.length" class="quick-panel-empty">暂无指令</div>
+        </div>
+      </div>
+
+      <!-- 更多面板 -->
+      <div v-if="isMobile && activeQuickPanel === 'more'" class="quick-panel">
+        <div class="quick-panel-drag" @click="closeQuickPanel" />
+        <h4 class="quick-panel-title">更多</h4>
+        <div class="more-actions">
+          <button class="more-action-btn" @click="emit('update:mobileView', 'scenes'); closeQuickPanel()">📍 场景列表</button>
+          <button class="more-action-btn" @click="openAssistantTab('cmds'); closeQuickPanel()">🗂 助理台</button>
+          <button class="more-action-btn" @click="openAssistantTab('dice'); closeQuickPanel()">🎲 投骰历史</button>
+          <template v-if="isGm">
+            <button class="more-action-btn gm-action" @click="emit('announce-time'); closeQuickPanel()">📢 宣布时间</button>
+            <button class="more-action-btn gm-action" @click="emit('open-approve'); closeQuickPanel()">
+              ✅ 审批<span v-if="pendingMovesCount" class="more-badge">{{ pendingMovesCount }}</span>
+            </button>
+            <button class="more-action-btn gm-action" @click="emit('update:mobileView', 'gm'); closeQuickPanel()">🎭 导演台</button>
+          </template>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -291,7 +389,100 @@ function playAsNpc(npcId: string) {
 }
 .quick-btn:hover,
 .quick-btn.active { color: var(--color-accent); }
-.gm-console-wrap { flex-shrink: 0; overflow: hidden; }
+.quick-icon { font-size: 20px; line-height: 1; }
+
+/* ===== 半屏面板 ===== */
+.quick-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 198;
+  background: rgba(0,0,0,.35);
+}
+.quick-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 199;
+  background: var(--color-card-bg);
+  border-radius: 16px 16px 0 0;
+  padding: 0 16px 24px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  max-height: 55vh;
+  overflow-y: auto;
+  animation: slideUpPanel .22s cubic-bezier(.22,.61,.36,1) both;
+}
+@keyframes slideUpPanel {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.quick-panel-drag {
+  width: 40px; height: 4px;
+  background: var(--border-default);
+  border-radius: 2px;
+  margin: 10px auto 12px;
+  cursor: pointer;
+}
+.quick-panel-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-body);
+}
+.quick-panel-empty { font-size: var(--text-sm); color: var(--text-muted); padding: 8px 0; }
+
+/* 骰子面板 */
+.dice-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dice-shortcut-btn {
+  padding: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: none; color: var(--text-body); font-size: var(--text-sm); cursor: pointer;
+  text-align: center;
+}
+.dice-shortcut-btn:active { background: var(--color-hover-bg, rgba(255,255,255,.06)); }
+
+/* 角色卡面板 */
+.char-summary { padding: 8px 0; }
+.char-summary-name { font-size: var(--text-lg); font-weight: 600; margin-bottom: 8px; color: var(--text-body); }
+.char-hp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: var(--text-sm); }
+.char-hp-bar { flex: 1; height: 8px; background: var(--border-default); border-radius: 4px; overflow: hidden; }
+.char-hp-fill { height: 100%; background: #22c55e; border-radius: 4px; transition: width .3s; }
+.char-hp-text { color: var(--text-muted); font-size: var(--text-xs); }
+.char-attrs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.char-attr-item { background: var(--color-page-bg); border-radius: var(--radius-sm); padding: 4px 8px; font-size: var(--text-xs); }
+.char-attr-key { color: var(--text-muted); margin-right: 4px; }
+.char-attr-val { font-weight: 600; color: var(--text-body); }
+.char-edit-btn {
+  width: 100%; padding: 10px; border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md); background: none; color: var(--color-accent);
+  font-size: var(--text-sm); cursor: pointer;
+}
+
+/* 指令面板 */
+.cmd-list { display: flex; flex-direction: column; gap: 2px; }
+.cmd-list-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 8px; border: none; border-radius: var(--radius-sm);
+  background: none; cursor: pointer; text-align: left; width: 100%;
+}
+.cmd-list-item:active { background: var(--color-hover-bg, rgba(255,255,255,.06)); }
+.cmd-name { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-accent); min-width: 80px; }
+.cmd-desc { font-size: var(--text-xs); color: var(--text-muted); }
+
+/* 更多面板 */
+.more-actions { display: flex; flex-direction: column; gap: 4px; }
+.more-action-btn {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 10px; border: none; border-radius: var(--radius-md);
+  background: none; color: var(--text-body); font-size: var(--text-base); cursor: pointer; width: 100%; text-align: left;
+}
+.more-action-btn:active { background: var(--color-hover-bg, rgba(255,255,255,.06)); }
+.more-action-btn.gm-action { color: #92400e; }
+.more-badge {
+  margin-left: auto; background: var(--color-danger); color: #fff;
+  font-size: 11px; padding: 1px 6px; border-radius: 8px;
+}
+
+
 
 @media (max-width: 768px) {
   .room-topbar {

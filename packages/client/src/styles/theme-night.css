@@ -83,4 +83,21 @@
   --el-border-color:         rgba(255, 255, 255, 0.10);
   --el-fill-color-light:     rgba(255, 255, 255, 0.05);
   --el-mask-color:           rgba(0, 0, 0, 0.7);
+
+  /* ── L3 画布专用别名（canvas-serializer 等组件使用，需与主题保持一致） ── */
+  --color-bg-main:    #030712;
+  --color-bg-sidebar: #1f2937;
+  --color-bg-card:    #111827;
+  --color-bg-hover:   rgba(255, 255, 255, 0.05);
+  --color-bg-input:   #1f2937;
+  --color-border:     rgba(255, 255, 255, 0.14);
+  --color-error:      #ef4444;
+
+  /* 模组编辑器 / 通用组件别名 */
+  --color-text:             #d1d5db;
+  --color-surface:          #111827;
+  --color-surface-2:        #1f2937;
+  --color-hover:            rgba(255, 255, 255, 0.07);
+  --color-text-placeholder: #6b7280;
+  --color-primary-light:    rgba(59, 130, 246, 0.15);
 }

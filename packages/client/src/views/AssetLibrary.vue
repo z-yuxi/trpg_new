@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import TTag from '../components/base/TTag.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import { api } from '../utils/api';
 import { useAuthStore } from '../stores/auth-store';
+
+const router = useRouter();
 
 /* ========== 类型 ========== */
 interface Ruleset {
@@ -235,7 +238,7 @@ function ratingLabel(r?: number) {
             衍生自：{{ rs.base_ruleset }}
           </div>
           <p class="ruleset-desc">{{ rs.description || '暂无描述' }}</p>
-          <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
+          <TButton type="secondary" size="sm" style="margin-top: var(--space-3)" @click="router.push(`/ruleset/${rs.id}`)">查看详情</TButton>
         </div>
       </div>
     </template>

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { mergeRulesetGraphs } from '@trpg/shared';
 
 const node = (id: string, extra: object = {}) => ({ node_id: id, type: 'dice_roll', ...extra });
@@ -9,7 +9,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A'), node('B')], connections: [] };
     const theirs = { atoms: [node('A'), node('B')], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    expect(result.merged_graph.atoms).toHaveLength(2);
+    expect(result.merged_graph!.atoms).toHaveLength(2);
     expect(result.conflicts).toHaveLength(0);
   });
 
@@ -18,7 +18,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A')], connections: [] };
     const theirs = { atoms: [node('A'), node('C', { label: '新增' })], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    const ids = result.merged_graph.atoms.map((n: any) => n.node_id);
+    const ids = result.merged_graph!.atoms.map((n: any) => n.node_id);
     expect(ids).toContain('A');
     expect(ids).toContain('C');
     expect(result.conflicts).toHaveLength(0);
@@ -29,7 +29,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A'), node('D', { label: '本地新增' })], connections: [] };
     const theirs = { atoms: [node('A')], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    const ids = result.merged_graph.atoms.map((n: any) => n.node_id);
+    const ids = result.merged_graph!.atoms.map((n: any) => n.node_id);
     expect(ids).toContain('A');
     expect(ids).toContain('D');
     expect(result.conflicts).toHaveLength(0);
@@ -40,7 +40,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A', { label: 'orig' })], connections: [] };
     const theirs = { atoms: [node('A', { label: 'updated by parent' })], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    expect((result.merged_graph.atoms[0] as any).label).toBe('updated by parent');
+    expect((result.merged_graph!.atoms[0] as any).label).toBe('updated by parent');
     expect(result.conflicts).toHaveLength(0);
   });
 
@@ -49,7 +49,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A', { label: 'local edit' })], connections: [] };
     const theirs = { atoms: [node('A', { label: 'orig' })], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    expect((result.merged_graph.atoms[0] as any).label).toBe('local edit');
+    expect((result.merged_graph!.atoms[0] as any).label).toBe('local edit');
     expect(result.conflicts).toHaveLength(0);
   });
 
@@ -61,7 +61,7 @@ describe('mergeRulesetGraphs', () => {
     expect(result.conflicts).toHaveLength(1);
     expect(result.conflicts[0].node_id).toBe('A');
     expect(result.conflicts[0].type).toBe('modified_both');
-    expect((result.merged_graph.atoms[0] as any).label).toBe('mine');
+    expect((result.merged_graph!.atoms[0] as any).label).toBe('mine');
   });
 
   it('双方修改同一节点但结果相同 — 无冲突', () => {
@@ -70,7 +70,7 @@ describe('mergeRulesetGraphs', () => {
     const theirs = { atoms: [node('A', { label: 'same' })], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
     expect(result.conflicts).toHaveLength(0);
-    expect((result.merged_graph.atoms[0] as any).label).toBe('same');
+    expect((result.merged_graph!.atoms[0] as any).label).toBe('same');
   });
 
   it('theirs 删除节点，ours 未修改 — 接受删除', () => {
@@ -78,7 +78,7 @@ describe('mergeRulesetGraphs', () => {
     const ours = { atoms: [node('A'), node('B')], connections: [] };
     const theirs = { atoms: [node('A')], connections: [] };
     const result = mergeRulesetGraphs(base, ours, theirs);
-    const ids = result.merged_graph.atoms.map((n: any) => n.node_id);
+    const ids = result.merged_graph!.atoms.map((n: any) => n.node_id);
     expect(ids).not.toContain('B');
     expect(result.conflicts).toHaveLength(0);
   });
@@ -90,14 +90,14 @@ describe('mergeRulesetGraphs', () => {
     const result = mergeRulesetGraphs(base, ours, theirs);
     expect(result.conflicts).toHaveLength(1);
     expect(result.conflicts[0].node_id).toBe('B');
-    const ids = result.merged_graph.atoms.map((n: any) => n.node_id);
+    const ids = result.merged_graph!.atoms.map((n: any) => n.node_id);
     expect(ids).toContain('B');
   });
 
   it('空图合并 — 返回空', () => {
     const empty = { atoms: [], connections: [] };
     const result = mergeRulesetGraphs(empty, empty, empty);
-    expect(result.merged_graph.atoms).toHaveLength(0);
+    expect(result.merged_graph!.atoms).toHaveLength(0);
     expect(result.conflicts).toHaveLength(0);
   });
 });

@@ -46,11 +46,20 @@ export class TableLookupAtom implements AtomNode {
       }
     }
 
+    // threshold_value: result_row[1] if it's a number, else null
+    const thresholdValue = resultRow !== null && resultRow.length >= 2 && typeof resultRow[1] === 'number'
+      ? (resultRow[1] as number)
+      : null;
+
     return {
-      result: { result_row: resultRow, found: resultRow !== null },
+      result: {
+        result_row: resultRow,
+        found: resultRow !== null,
+        threshold_value: thresholdValue,
+      },
       logs: {
         input_summary: `lookup_key=${lookupKey}, mode=${mode}, rows=${tableData.length}`,
-        output_summary: resultRow ? `found: ${JSON.stringify(resultRow)}` : 'not found',
+        output_summary: resultRow ? `found: ${JSON.stringify(resultRow)}, threshold_value=${thresholdValue}` : 'not found',
       },
     };
   }

@@ -212,6 +212,23 @@
 
   --color-tag-default-bg:   var(--gray-100);
   --color-tag-default-text: var(--slate-600);
+
+  /* L3 画布专用别名（day 默认值，夜间主题会覆盖） */
+  --color-bg-main:    var(--surface-page);
+  --color-bg-sidebar: var(--surface-elevated, var(--surface-card));
+  --color-bg-card:    var(--surface-card);
+  --color-bg-hover:   var(--surface-hover);
+  --color-bg-input:   var(--color-input-bg);
+  --color-border:     var(--border-default);
+  --color-error:      var(--color-danger);
+
+  /* 模组编辑器 / 通用组件别名 */
+  --color-text:             var(--text-body);
+  --color-surface:          var(--surface-card);
+  --color-surface-2:        var(--surface-hover);
+  --color-hover:            var(--surface-hover);
+  --color-text-placeholder: var(--text-muted);
+  --color-primary-light:    var(--color-info-bg);
 }
 
 /* ===================================================

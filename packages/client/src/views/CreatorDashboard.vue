@@ -1,8 +1,14 @@
 ﻿<script setup lang="ts">
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
 
 const route = useRoute();
+
+// 模组编辑器和规则集编辑器需要全屏无内边距容器
+const isEditorRoute = computed(() =>
+  route.name === 'ModuleEditor' || route.name === 'RulesetEditor'
+);
 
 const navItems = [
   { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者面板' },
@@ -37,7 +43,7 @@ function isActive(path: string) {
     </aside>
 
     <!-- 主内容区 -->
-    <main class="creator-main">
+    <main class="creator-main" :class="{ 'creator-main--fullscreen': isEditorRoute }">
       <RouterView />
     </main>
   </div>
@@ -96,6 +102,13 @@ function isActive(path: string) {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-6);
+  min-height: 0;
+}
+
+/* 编辑器页面：去掉 padding 和滚动，让内部组件自己管理高度 */
+.creator-main--fullscreen {
+  padding: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {

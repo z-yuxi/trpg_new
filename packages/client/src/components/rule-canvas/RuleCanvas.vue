@@ -44,6 +44,7 @@ const {
   fitView,
   zoomTo,
   viewport,
+  project,
   onConnect,
   onEdgeContextMenu,
   onNodesInitialized,
@@ -166,13 +167,25 @@ onEdgeContextMenu(({ event, edge }: EdgeMouseEvent) => {
 let nodeCounter = 0;
 function addNodeByType(atomType: string, position?: { x: number; y: number }) {
   const id = `${atomType}_${Date.now()}_${nodeCounter++}`;
+
+  // 无位置时：将节点放置到当前视口中心
+  let resolvedPosition = position;
+  if (!resolvedPosition) {
+    const wrapper = canvasWrapperRef.value;
+    if (wrapper) {
+      const cx = wrapper.clientWidth / 2;
+      const cy = wrapper.clientHeight / 2;
+      resolvedPosition = project({ x: cx, y: cy });
+    } else {
+      resolvedPosition = { x: 100 + (nodes.value.length % 5) * 220, y: 100 + Math.floor(nodes.value.length / 5) * 160 };
+    }
+    // 小偶尔偏移避免堆叠
+    resolvedPosition = { x: resolvedPosition.x + (nodes.value.length % 3) * 30 - 30, y: resolvedPosition.y + Math.floor(nodes.value.length / 3) * 30 - 30 };
+  }
   const newNode: Node<AtomNodeData> = {
     id,
     type: 'atomNode',
-    position: position ?? {
-      x: 100 + (nodes.value.length % 5) * 220,
-      y: 100 + Math.floor(nodes.value.length / 5) * 160,
-    },
+    position: resolvedPosition,
     data: {
       atom_type: atomType,
       config: {},
@@ -183,6 +196,7 @@ function addNodeByType(atomType: string, position?: { x: number; y: number }) {
   addNodes([newNode]);
   pushHistory();
   emitGraph();
+
 
   // 如果是第一个 result_collector，自动设为输出节点
   if (atomType === 'result_collector' && !outputNodeId.value) {
@@ -355,28 +369,112 @@ function runTopologyValidation() {
 // ── 预览执行 ─────────────────────────────────────────────────────────────
 const showPreviewPanel = ref(false);
 const previewCommand = ref('/r 1d6');
-const mockAttrRaw = ref('{"力量": 60}');
-const mockSkillRaw = ref('{"侦查": 70}');
-const mockResourceRaw = ref('{"HP": {"current": 10, "max": 14}}');
 const previewRunning = ref(false);
 const previewError = ref<string | null>(null);
+
+// 结构化模拟角色数据
+interface MockAttr { name: string; value: number }
+const mockAttrs = ref<MockAttr[]>([
+  { name: '力量', value: 60 },
+  { name: '体质', value: 55 },
+]);
+const mockSkills = ref<MockAttr[]>([
+  { name: '侦查', value: 70 },
+]);
+interface MockResource { name: string; current: number; max: number }
+const mockResources = ref<MockResource[]>([
+  { name: 'HP', current: 10, max: 14 },
+]);
+
+function addMockAttr() { mockAttrs.value.push({ name: '', value: 0 }); }
+function removeMockAttr(i: number) { mockAttrs.value.splice(i, 1); }
+function addMockSkill() { mockSkills.value.push({ name: '', value: 0 }); }
+function removeMockSkill(i: number) { mockSkills.value.splice(i, 1); }
+function addMockResource() { mockResources.value.push({ name: '', current: 0, max: 0 }); }
+function removeMockResource(i: number) { mockResources.value.splice(i, 1); }
+
+// 执行结果
+interface PreviewLog { node_id: string; atom_type?: string; inputs?: unknown; output?: unknown; duration_ms?: number; }
+interface PreviewResult {
+  success?: boolean;
+  result?: string;
+  output?: unknown;
+  logs?: PreviewLog[];
+  dice_rolls?: Array<{ expression: string; value: number; detail?: string }>;
+}
+const previewResult = ref<PreviewResult | null>(null);
+
+/** 从图中自动生成 mock 数据（读取所有 character_skill_reader 节点所需字段） */
+function autoGenerateMock() {
+  const existingAttrs = new Set(mockAttrs.value.map((a) => a.name));
+  const existingSkills = new Set(mockSkills.value.map((s) => s.name));
+
+  for (const node of nodes.value) {
+    if ((node.data as any)?.atom_type === 'character_skill_reader') {
+      const config = (node.data as any)?.config ?? {};
+      const fieldName = config['field_name']?.value as string | undefined;
+      const fieldType = (config['field_type']?.value as string) ?? 'skill';
+      if (fieldName) {
+        if (fieldType === 'attribute' && !existingAttrs.has(fieldName)) {
+          mockAttrs.value.push({ name: fieldName, value: 50 });
+          existingAttrs.add(fieldName);
+        } else if (fieldType !== 'attribute' && !existingSkills.has(fieldName)) {
+          mockSkills.value.push({ name: fieldName, value: 50 });
+          existingSkills.add(fieldName);
+        }
+      }
+    }
+  }
+}
 
 async function runPreview() {
   if (!props.rulesetId || props.rulesetId === 'new') return;
   previewRunning.value = true;
   previewError.value = null;
+  previewResult.value = null;
   // 清除所有节点预览值和边的动画样式
   nodes.value.forEach((n) => { if (n.data) n.data.preview = null; });
   edges.value.forEach((e) => { (e as any).animated = false; (e as any).style = {}; });
-  try {
-    let attributes: Record<string, number> = {};
-    let skills: Record<string, number> = {};
-    let resources: Record<string, { current: number; max: number }> = {};
-    try { attributes = JSON.parse(mockAttrRaw.value); } catch { /**/ }
-    try { skills = JSON.parse(mockSkillRaw.value); } catch { /**/ }
-    try { resources = JSON.parse(mockResourceRaw.value); } catch { /**/ }
 
-    const data = await api.post<{ logs?: Array<{ node_id: string; output: unknown }> }>(
+  // 预检：确认 character_skill_reader 节点所需字段已在 mock 数据中存在
+  const mockAttrNames = new Set(mockAttrs.value.filter((a) => a.name).map((a) => a.name));
+  const mockSkillNames = new Set(mockSkills.value.filter((s) => s.name).map((s) => s.name));
+  const mockResourceNames = new Set(mockResources.value.filter((r) => r.name).map((r) => r.name));
+  const missingFields: string[] = [];
+
+  for (const node of nodes.value) {
+    if ((node.data as any)?.atom_type === 'character_skill_reader') {
+      const config = (node.data as any)?.config ?? {};
+      const fieldName = config['field_name']?.value as string | undefined;
+      const fieldType = (config['field_type']?.value as string) ?? 'skill';
+      if (fieldName) {
+        const allMock = new Set([...mockAttrNames, ...mockSkillNames, ...mockResourceNames]);
+        if (fieldType === 'attribute' && !mockAttrNames.has(fieldName) && !allMock.has(fieldName)) {
+          missingFields.push(`属性"${fieldName}"`);
+        } else if ((fieldType === 'skill') && !mockSkillNames.has(fieldName) && !allMock.has(fieldName)) {
+          missingFields.push(`技能"${fieldName}"`);
+        } else if (fieldType.startsWith('resource') && !mockResourceNames.has(fieldName)) {
+          missingFields.push(`资源"${fieldName}"`);
+        }
+      }
+    }
+  }
+
+  if (missingFields.length > 0) {
+    previewError.value = `模拟数据缺少以下字段：${missingFields.join('、')}。请在下方添加或点击「自动生成」。`;
+    previewRunning.value = false;
+    return;
+  }
+
+  try {
+    const attributes: Record<string, number> = {};
+    const skills: Record<string, number> = {};
+    const resources: Record<string, { current: number; max: number }> = {};
+    mockAttrs.value.forEach((a) => { if (a.name) attributes[a.name] = a.value; });
+    mockSkills.value.forEach((s) => { if (s.name) skills[s.name] = s.value; });
+    mockResources.value.forEach((r) => { if (r.name) resources[r.name] = { current: r.current, max: r.max }; });
+
+    const data = await api.post<PreviewResult>(
       `/rulesets/${props.rulesetId}/execute`,
       {
         command: previewCommand.value,
@@ -384,17 +482,40 @@ async function runPreview() {
       },
     );
 
+    // 处理后端结构化错误
+    if (data && (data as any).success === false && (data as any).error) {
+      const errMsg = (data as any).error as string;
+      previewError.value = errMsg;
+      // 解析错误中的 node_id（格式："Node 'xxx' (yyy) threw: zzz"）
+      const nodeMatch = errMsg.match(/Node '([^']+)'/);
+      if (nodeMatch) {
+        const errorNodeId = nodeMatch[1];
+        const errNode = nodes.value.find((n) => n.id === errorNodeId);
+        if (errNode) {
+          errNode.data = { ...errNode.data, hasError: true, errorMessage: errMsg } as any;
+        }
+        edges.value.forEach((e) => {
+          if (e.target === errorNodeId) {
+            (e as any).style = { stroke: '#e74c3c', strokeWidth: 2, strokeDasharray: '5,5' };
+          }
+        });
+      }
+      return;
+    }
+
+    previewResult.value = data;
+
     // 将执行日志注入到对应节点的 preview
     const executedNodeIds = new Set<string>();
     for (const log of data.logs ?? []) {
       const node = nodes.value.find((n) => n.id === log.node_id);
       if (node && node.data) {
-        node.data = { ...node.data, preview: log.output };
+        node.data = { ...node.data, preview: log.output } as any;
         executedNodeIds.add(log.node_id);
       }
     }
 
-    // 数据流动画：已执行的节点间连线高亮绿色，其余灰显
+    // 数据流动画
     edges.value.forEach((e) => {
       const srcExecuted = executedNodeIds.has(e.source);
       const tgtExecuted = executedNodeIds.has(e.target);
@@ -407,10 +528,17 @@ async function runPreview() {
       }
     });
   } catch (e) {
-    previewError.value = String(e);
+    previewError.value = (e instanceof Error) ? e.message : String(e);
   } finally {
     previewRunning.value = false;
   }
+}
+
+function clearPreviewResult() {
+  previewResult.value = null;
+  previewError.value = null;
+  nodes.value.forEach((n) => { if (n.data) { (n.data as any).preview = null; (n.data as any).hasError = false; } });
+  edges.value.forEach((e) => { (e as any).animated = false; (e as any).style = {}; });
 }
 
 // ── 缩放显示 ─────────────────────────────────────────────────────────────
@@ -506,9 +634,11 @@ defineExpose({
           :snap-grid="[20, 20]"
           :min-zoom="0.25"
           :max-zoom="4"
-          fit-view-on-init
+          :default-viewport="{ x: 0, y: 0, zoom: 1 }"
           @nodes-change="emitGraph"
           @edges-change="emitGraph"
+          @dragover="onDragOver"
+          @drop="onDrop"
         >
           <Background pattern-color="var(--color-border, #2a2a3e)" />
           <MiniMap
@@ -563,27 +693,99 @@ defineExpose({
             <button class="rm-btn" @click="showPreviewPanel = false">×</button>
           </div>
           <div class="preview-panel__body">
-            <label class="preview-label">命令</label>
+            <!-- 命令输入 -->
+            <label class="preview-label">测试命令</label>
             <input v-model="previewCommand" class="preview-input" placeholder="/r 1d6" />
 
-            <label class="preview-label">模拟属性 (JSON)</label>
-            <textarea v-model="mockAttrRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟属性 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟属性</span>
+                <button class="preview-add-btn" @click="addMockAttr">+ 添加</button>
+              </div>
+              <div v-for="(attr, i) in mockAttrs" :key="i" class="preview-row">
+                <input v-model="attr.name" class="preview-row-name" placeholder="属性名" />
+                <input v-model.number="attr.value" type="number" class="preview-row-val" />
+                <button class="preview-rm-btn" @click="removeMockAttr(i)">×</button>
+              </div>
+            </div>
 
-            <label class="preview-label">模拟技能 (JSON)</label>
-            <textarea v-model="mockSkillRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟技能 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟技能</span>
+                <button class="preview-add-btn" @click="addMockSkill">+ 添加</button>
+              </div>
+              <div v-for="(sk, i) in mockSkills" :key="i" class="preview-row">
+                <input v-model="sk.name" class="preview-row-name" placeholder="技能名" />
+                <input v-model.number="sk.value" type="number" class="preview-row-val" />
+                <button class="preview-rm-btn" @click="removeMockSkill(i)">×</button>
+              </div>
+            </div>
 
-            <label class="preview-label">模拟资源 (JSON)</label>
-            <textarea v-model="mockResourceRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟资源 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟资源</span>
+                <button class="preview-add-btn" @click="addMockResource">+ 添加</button>
+              </div>
+              <div v-for="(res, i) in mockResources" :key="i" class="preview-row">
+                <input v-model="res.name" class="preview-row-name" placeholder="资源名" />
+                <input v-model.number="res.current" type="number" class="preview-row-val" placeholder="当前" />
+                <span class="preview-row-sep">/</span>
+                <input v-model.number="res.max" type="number" class="preview-row-val" placeholder="最大" />
+                <button class="preview-rm-btn" @click="removeMockResource(i)">×</button>
+              </div>
+            </div>
 
-            <button
-              class="preview-run-btn"
-              :disabled="previewRunning"
-              @click="runPreview"
-            >
-              {{ previewRunning ? '执行中…' : '▶ 执行' }}
-            </button>
+            <div class="preview-actions">
+              <button class="preview-auto-btn" @click="autoGenerateMock" title="从图中自动提取所需字段并填入默认值50">
+                ⚡ 自动生成
+              </button>
+              <button
+                class="preview-run-btn"
+                :disabled="previewRunning"
+                @click="runPreview"
+              >
+                {{ previewRunning ? '执行中…' : '▶ 执行' }}
+              </button>
+              <button v-if="previewResult || previewError" class="preview-clear-btn" @click="clearPreviewResult">
+                ✕ 清除
+              </button>
+            </div>
 
             <div v-if="previewError" class="preview-error">{{ previewError }}</div>
+
+            <!-- 执行结果 -->
+            <template v-if="previewResult">
+              <div class="preview-result-block" :class="previewResult.success === false ? 'preview-result-block--fail' : 'preview-result-block--ok'">
+                <div class="preview-result-label">执行结果</div>
+                <div class="preview-result-text">{{ previewResult.result ?? (previewResult.success ? '成功' : '失败') }}</div>
+              </div>
+
+              <!-- 骰点记录 -->
+              <template v-if="previewResult.dice_rolls?.length">
+                <div class="preview-label preview-label--mt">骰点过程</div>
+                <table class="preview-table">
+                  <thead><tr><th>表达式</th><th>结果</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(dr, i) in previewResult.dice_rolls" :key="i">
+                      <td>{{ dr.expression }}</td>
+                      <td class="preview-dice-val">{{ dr.value }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+
+              <!-- 节点日志 -->
+              <template v-if="previewResult.logs?.length">
+                <div class="preview-label preview-label--mt">节点日志 ({{ previewResult.logs.length }} 步)</div>
+                <div v-for="(log, i) in previewResult.logs" :key="i" class="preview-log-row">
+                  <span class="preview-log-node">{{ ATOM_DEFINITIONS[log.atom_type ?? '']?.label ?? log.node_id }}</span>
+                  <span class="preview-log-output">→ {{ JSON.stringify(log.output) }}</span>
+                </div>
+              </template>
+            </template>
           </div>
         </div>
       </div>
@@ -688,6 +890,14 @@ defineExpose({
 .rule-canvas__flow {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* 强制 VueFlow 根 div 填满容器 */
+.rule-canvas__flow :deep(.vue-flow) {
+  width: 100%;
+  height: 100%;
 }
 
 .rule-canvas__props {
@@ -774,8 +984,14 @@ defineExpose({
   box-sizing: border-box;
 }
 
+.preview-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 .preview-run-btn {
-  width: 100%;
+  flex: 1;
   padding: 7px;
   background: var(--color-primary, #7b68ee);
   color: #fff;
@@ -789,6 +1005,31 @@ defineExpose({
 
 .preview-run-btn:hover { opacity: 0.85; }
 .preview-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.preview-auto-btn {
+  padding: 7px 10px;
+  background: var(--color-bg-card, #1e1e2e);
+  color: var(--color-text-secondary, #aaa);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+.preview-auto-btn:hover { color: var(--color-primary, #7b68ee); border-color: var(--color-primary, #7b68ee); }
+
+.preview-clear-btn {
+  padding: 7px 10px;
+  background: none;
+  color: var(--color-text-secondary, #888);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.12s;
+}
+.preview-clear-btn:hover { color: var(--color-error, #e74c3c); border-color: var(--color-error, #e74c3c); }
 
 .preview-error {
   padding: 6px 8px;
@@ -808,6 +1049,42 @@ defineExpose({
 }
 
 .rm-btn:hover { color: var(--color-error, #e74c3c); }
+
+/* ── 预览面板 - 结构化输入 ── */
+.preview-section { display: flex; flex-direction: column; gap: 4px; }
+.preview-section-header { display: flex; align-items: center; justify-content: space-between; }
+.preview-add-btn {
+  font-size: 11px; padding: 1px 6px;
+  background: none; border: 1px solid var(--color-border, #3a3a4e);
+  border-radius: 3px; color: var(--color-text-secondary, #888); cursor: pointer;
+}
+.preview-add-btn:hover { color: var(--color-primary, #7b68ee); border-color: var(--color-primary, #7b68ee); }
+
+.preview-row { display: flex; align-items: center; gap: 4px; }
+.preview-row-name { flex: 1; min-width: 0; padding: 3px 6px; background: var(--color-bg-input, #2a2a3e); border: 1px solid var(--color-border, #3a3a4e); border-radius: 3px; color: var(--color-text-primary, #e0e0e0); font-size: 12px; }
+.preview-row-val { width: 56px; flex-shrink: 0; padding: 3px 6px; background: var(--color-bg-input, #2a2a3e); border: 1px solid var(--color-border, #3a3a4e); border-radius: 3px; color: var(--color-text-primary, #e0e0e0); font-size: 12px; }
+.preview-row-sep { color: var(--color-text-secondary, #888); font-size: 12px; }
+.preview-rm-btn { background: none; border: none; color: var(--color-text-secondary, #888); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+.preview-rm-btn:hover { color: var(--color-error, #e74c3c); }
+
+/* ── 预览结果展示 ── */
+.preview-label--mt { margin-top: 8px; }
+.preview-result-block {
+  padding: 8px 10px; border-radius: 6px; border-left: 3px solid;
+}
+.preview-result-block--ok { background: rgba(39, 174, 96, 0.12); border-color: #27ae60; }
+.preview-result-block--fail { background: rgba(231, 76, 60, 0.12); border-color: #e74c3c; }
+.preview-result-label { font-size: 10px; color: var(--color-text-secondary, #888); margin-bottom: 2px; }
+.preview-result-text { font-size: 13px; font-weight: 600; color: var(--color-text-primary, #e0e0e0); }
+
+.preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.preview-table th { color: var(--color-text-secondary, #888); font-weight: 500; padding: 2px 4px; border-bottom: 1px solid var(--color-border, #3a3a4e); text-align: left; }
+.preview-table td { padding: 2px 4px; color: var(--color-text-primary, #e0e0e0); }
+.preview-dice-val { font-weight: 600; color: var(--node-accent, #7b68ee); }
+
+.preview-log-row { display: flex; gap: 6px; font-size: 11px; padding: 2px 0; border-bottom: 1px solid var(--color-border, #2a2a3e); }
+.preview-log-node { color: var(--color-text-secondary, #888); flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-log-output { color: var(--color-text-primary, #e0e0e0); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 拓扑校验面板 ── */
 .validation-panel {

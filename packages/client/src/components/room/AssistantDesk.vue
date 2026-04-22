@@ -147,6 +147,9 @@ watch(activeTab, (tab) => {
   if (tab === 'clues' && notebookClues.value.length === 0) {
     loadNotebookClues();
   }
+  if (tab === 'secret') {
+    loadGmNotes();
+  }
 });
 
 // ── commands ──────────────────────────────────────────────────────────
@@ -196,7 +199,47 @@ function exportSecretCSV() {
   a.href = url; a.download = `secret_dice_${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url);
 }
 
-// ── broadcast ─────────────────────────────────────────────────────────
+// ── GM 私密笔记 ───────────────────────────────────────────────────────
+interface GmNote { id: string; content: string; created_at: string; }
+const gmNotes = ref<GmNote[]>([]);
+const newNoteContent = ref('');
+const noteSaving = ref(false);
+
+async function loadGmNotes() {
+  if (!props.isGm) return;
+  try {
+    const list = await api.get<GmNote[]>(`/campaigns/${props.campaignId}/gm-notes`);
+    gmNotes.value = list;
+  } catch { /* ignore */ }
+}
+
+async function saveGmNote() {
+  if (!newNoteContent.value.trim()) return;
+  noteSaving.value = true;
+  try {
+    const note = await api.post<GmNote>(`/campaigns/${props.campaignId}/gm-notes`, { content: newNoteContent.value });
+    gmNotes.value.unshift(note);
+    newNoteContent.value = '';
+  } catch { /* ignore */ } finally { noteSaving.value = false; }
+}
+
+async function deleteGmNote(id: string) {
+  try {
+    await api.delete(`/campaigns/${props.campaignId}/gm-notes/${id}`);
+    gmNotes.value = gmNotes.value.filter(n => n.id !== id);
+  } catch { /* ignore */ }
+}
+
+function exportNotesCSV() {
+  const header = '时间,内容';
+  const rows = gmNotes.value.map(n => `"${new Date(n.created_at).toLocaleString('zh-CN')}","${n.content.replace(/"/g, '""')}"`);
+  const blob = new Blob(['\uFEFF' + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `gm_notes_${Date.now()}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
+// broadcast ─────────────────────────────────────────────────────────
 const broadcastContent = ref('');
 function doBroadcast() {
   if (broadcastContent.value.trim()) {
@@ -368,6 +411,26 @@ function fmt(d: any): string {
           <span class="dice-time">{{ fmt(m.created_at) }}</span>
         </div>
         <div v-if="secretDice.length === 0" class="empty-hint">暂无暗骰记录</div>
+
+        <!-- GM 私密笔记 -->
+        <div class="notes-section">
+          <div class="secret-header" style="margin-top:16px">
+            <span class="pane-label">私密笔记</span>
+            <button class="export-btn" @click="exportNotesCSV" :disabled="gmNotes.length === 0">导出 CSV</button>
+          </div>
+          <div class="notes-list">
+            <div v-for="note in gmNotes" :key="note.id" class="note-row">
+              <span class="note-content">{{ note.content }}</span>
+              <span class="note-time">{{ fmt(note.created_at) }}</span>
+              <button class="note-delete-btn" @click="deleteGmNote(note.id)" title="删除">×</button>
+            </div>
+            <div v-if="gmNotes.length === 0" class="empty-hint">暂无私密笔记</div>
+          </div>
+          <div class="note-input-row">
+            <textarea v-model="newNoteContent" class="note-textarea" placeholder="添加私密笔记…" rows="2" @keydown.ctrl.enter="saveGmNote" />
+            <button class="note-save-btn" @click="saveGmNote" :disabled="noteSaving || !newNoteContent.trim()">保存</button>
+          </div>
+        </div>
       </div>
 
       <!-- GM 广播 -->
@@ -490,6 +553,35 @@ function fmt(d: any): string {
 }
 .export-btn:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
 .export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* GM 私密笔记 */
+.notes-section { margin-top: var(--space-3); border-top: 1px solid var(--border-default); padding-top: var(--space-3); }
+.notes-list { max-height: 200px; overflow-y: auto; margin-bottom: var(--space-2); }
+.note-row {
+  display: flex; align-items: flex-start; gap: 6px; padding: 4px 0;
+  border-bottom: 1px solid var(--border-default); font-size: var(--text-xs);
+}
+.note-content { flex: 1; color: var(--text-body); white-space: pre-wrap; word-break: break-all; }
+.note-time { color: var(--text-muted); flex-shrink: 0; }
+.note-delete-btn {
+  flex-shrink: 0; border: none; background: none; color: var(--text-muted);
+  cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px;
+}
+.note-delete-btn:hover { color: var(--color-danger); }
+.note-input-row { display: flex; gap: 6px; align-items: flex-end; }
+.note-textarea {
+  flex: 1; padding: var(--space-2); border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm); background: var(--surface-card);
+  color: var(--text-primary); font-size: var(--text-xs); resize: none;
+}
+.note-save-btn {
+  padding: 6px 12px; border: none; border-radius: var(--radius-sm);
+  background: var(--color-accent); color: #fff; cursor: pointer; font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+.note-save-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+
 
 /* 广播 */
 .broadcast-input {

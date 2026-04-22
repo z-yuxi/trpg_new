@@ -15,6 +15,15 @@
       <span class="toolbar-sep" />
       <button class="toolbar-btn" title="撤销" @click="editor?.chain().focus().undo().run()">↩</button>
       <button class="toolbar-btn" title="重做" @click="editor?.chain().focus().redo().run()">↪</button>
+      <span class="toolbar-sep" />
+      <!-- 块类型快捷按钮 -->
+      <button
+        v-for="blk in blockButtons"
+        :key="blk.id"
+        class="toolbar-btn"
+        :title="blk.label"
+        @click="insertBlock(blk.id)"
+      >{{ blk.icon }}</button>
       <span class="toolbar-spacer" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
@@ -132,6 +141,16 @@ watch(() => props.modelValue, (val) => {
 });
 
 // ── 工具栏 ────────────────────────────────────────────────
+// 块类型工具栏按钮
+const blockButtons = [
+  { id: 'scene_block',  icon: '📍', label: '插入场景块' },
+  { id: 'npc_block',   icon: '🧑', label: '插入NPC块' },
+  { id: 'event_block', icon: '⚡', label: '插入事件块' },
+  { id: 'clue_block',  icon: '🔍', label: '插入线索块' },
+  { id: 'check_block', icon: '🎲', label: '插入检定块' },
+  { id: 'dialog_block',icon: '💬', label: '插入对话块' },
+];
+
 const toolbarButtons = computed(() => {
   if (!editor.value) return [];
   const e = editor.value;
@@ -222,9 +241,14 @@ function handleKeyup(e: KeyboardEvent) {
     const coords = editor.value.view.coordsAtPos(from - slashQuery.value.length - 1);
     const editorRect = (editor.value.view.dom as HTMLElement).closest('.module-editor-core')?.getBoundingClientRect();
     if (editorRect) {
+      const menuH = 300; // max-height of slash menu
+      const spaceBelow = editorRect.bottom - coords.bottom;
+      const top = spaceBelow > menuH
+        ? coords.bottom - editorRect.top + 4
+        : coords.top - editorRect.top - menuH - 4;
       slashMenuStyle.value = {
-        top: `${coords.bottom - editorRect.top + 4}px`,
-        left: `${coords.left - editorRect.left}px`,
+        top: `${top}px`,
+        left: `${Math.max(0, coords.left - editorRect.left)}px`,
       };
     }
   } else {

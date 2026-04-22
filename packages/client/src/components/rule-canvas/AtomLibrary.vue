@@ -74,8 +74,7 @@ const categoryColors: Record<string, string> = {
             :style="{ '--cat-color': categoryColors[cat.key] }"
             draggable="true"
             @dragstart="onDragStart($event, atom.atom_type)"
-            @dblclick="emit('add-node', atom.atom_type)"
-            :title="'拖拽到画布，或双击添加'"
+            :title="'拖拽到画布添加'"
           >
             <span class="atom-card__icon">{{ atom.icon }}</span>
             <div class="atom-card__info">
@@ -92,7 +91,7 @@ const categoryColors: Record<string, string> = {
     </div>
 
     <div class="atom-library__tips">
-      <p>拖拽节点到画布，或双击快速添加</p>
+      <p>拖拽节点到画布即可添加</p>
       <p>从输出端口拖向输入端口可连线</p>
     </div>
   </div>

@@ -88,41 +88,66 @@ export function convertL1ToL3(l1: L1Config): ConversionResult {
     node_id: readerId,
     atom_type: 'character_skill_reader',
     inputs: {
+      field_type: { type: 'static', value: 'skill' },
       field_name: { type: 'static', value: 'skill_value' },
     },
   });
   pos(readerId, 0, 1, layout);
 
-  // 3. 难度等级调整（IfElse 链）
+  // 3. 难度等级调整（table_lookup + formula_eval）
   let modifierId: string | null = null;
   const nonTrivialLevels = l1.difficulty_levels.filter((d) => d.threshold !== 0);
   if (nonTrivialLevels.length > 0) {
-    // 生成一个 FormulaEval 节点，公式根据难度修正技能值
+    // 将 difficulty_levels 编码为查找表： [[name, threshold], ...]
+    const tableData = l1.difficulty_levels.map((d) => [d.name, d.threshold]);
+    const lookupId = uid('table_lookup');
+    nodes.push({
+      node_id: lookupId,
+      atom_type: 'table_lookup',
+      inputs: {
+        table_data: { type: 'static', value: tableData },
+        lookup_key: { type: 'static', value: l1.difficulty_levels[0]?.name ?? '普通' },
+        mode: { type: 'static', value: 'exact' },
+      },
+    });
+    pos(lookupId, 1, 2, layout);
+
+    // 用 formula_eval 计算修正后的技能阈值
+    // table_lookup 返回 result_row 为 [name, threshold] 数组，用 index 1 取得修正值
+    // 使用 formula_eval 计算： variables.skill + variables.modifier
     modifierId = uid('formula_eval');
-    // 用最难的一档作为默认修正示例（实际由运行时 difficulty 参数决定）
     nodes.push({
       node_id: modifierId,
       atom_type: 'formula_eval',
       inputs: {
-        formula: { type: 'static', value: 'skill_value + difficulty_modifier' },
-        variables: { type: 'ref', node_id: readerId, output_key: 'value' },
+        formula: { type: 'static', value: 'skill + modifier' },
+        variables: { type: 'static', value: { skill: 0, modifier: 0 } },
+        skill: { type: 'ref', node_id: readerId, output_key: 'value' },
+        modifier: { type: 'ref', node_id: lookupId, output_key: 'threshold_value' },
       },
     });
     pos(modifierId, 1, 1, layout);
   }
 
+  // 将 roll_under/roll_over 模式映射为实际运算符
+  const operatorMap: Record<string, string> = {
+    less_than: '<',
+    greater_than: '>',
+  };
+  const operator = operatorMap[mode] ?? '<';
+
   // 4. ThresholdCompare 节点
   const cmpId = uid('threshold_compare');
   const thresholdRef = modifierId
-    ? { type: 'ref' as const, node_id: modifierId, output_key: 'result' }
+    ? { type: 'ref' as const, node_id: modifierId, output_key: 'value' }
     : { type: 'ref' as const, node_id: readerId, output_key: 'value' };
   nodes.push({
     node_id: cmpId,
     atom_type: 'threshold_compare',
     inputs: {
-      value: { type: 'ref', node_id: diceId, output_key: 'result' },
+      value: { type: 'ref', node_id: diceId, output_key: 'total' },
       threshold: thresholdRef,
-      mode: { type: 'static', value: mode },
+      operator: { type: 'static', value: operator },
     },
   });
   pos(cmpId, 2, 0, layout);
@@ -133,9 +158,9 @@ export function convertL1ToL3(l1: L1Config): ConversionResult {
     node_id: critSuccId,
     atom_type: 'threshold_compare',
     inputs: {
-      value: { type: 'ref', node_id: diceId, output_key: 'result' },
+      value: { type: 'ref', node_id: diceId, output_key: 'total' },
       threshold: { type: 'static', value: l1.crit_success_max },
-      mode: { type: 'static', value: 'less_than_or_equal' },
+      operator: { type: 'static', value: '<=' },
     },
   });
   pos(critSuccId, 2, 1, layout);
@@ -145,9 +170,9 @@ export function convertL1ToL3(l1: L1Config): ConversionResult {
     node_id: critFailId,
     atom_type: 'threshold_compare',
     inputs: {
-      value: { type: 'ref', node_id: diceId, output_key: 'result' },
+      value: { type: 'ref', node_id: diceId, output_key: 'total' },
       threshold: { type: 'static', value: l1.crit_fail_min },
-      mode: { type: 'static', value: 'greater_than_or_equal' },
+      operator: { type: 'static', value: '>=' },
     },
   });
   pos(critFailId, 2, 2, layout);
@@ -209,7 +234,8 @@ function _buildDicePool(
     atom_type: 'formula_eval',
     inputs: {
       formula: { type: 'static', value: `countSuccesses(dice, ${successThreshold})` },
-      dice: { type: 'ref', node_id: diceId, output_key: 'result' },
+      variables: { type: 'static', value: { dice: [] } },
+      dice: { type: 'ref', node_id: diceId, output_key: 'rolls' },
     },
   });
   pos(formulaId, 1, 0, layout);
@@ -220,9 +246,9 @@ function _buildDicePool(
     node_id: cmpId,
     atom_type: 'threshold_compare',
     inputs: {
-      value: { type: 'ref', node_id: formulaId, output_key: 'result' },
+      value: { type: 'ref', node_id: formulaId, output_key: 'value' },
       threshold: { type: 'static', value: poolTarget },
-      mode: { type: 'static', value: 'greater_or_equal' },
+      operator: { type: 'static', value: '>=' },
     },
   });
   pos(cmpId, 2, 0, layout);

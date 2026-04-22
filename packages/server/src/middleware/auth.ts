@@ -36,6 +36,9 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
 }
 
+/** Alias for authMiddleware — used by routes that import requireAuth */
+export const requireAuth = authMiddleware;
+
 /** Optional auth - sets req.user if token is present, but continues even without */
 export async function optionalAuthMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];

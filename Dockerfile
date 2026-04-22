@@ -52,6 +52,7 @@ RUN pnpm install --frozen-lockfile --prod
 # 复制构建产物
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/packages/server/dist ./packages/server/dist
+COPY --from=builder /app/packages/server/assets ./packages/server/assets
 
 EXPOSE 3000
 

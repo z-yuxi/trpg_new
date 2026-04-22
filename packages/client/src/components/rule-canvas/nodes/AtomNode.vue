@@ -173,11 +173,13 @@ const categoryColors: Record<string, string> = {
 
 <style scoped>
 .atom-node {
-  min-width: 200px;
+  min-width: 180px;
+  max-width: 260px;
+  width: 220px;
   background: var(--color-bg-card, #1e1e2e);
   border: 2px solid var(--node-accent, #4a90e2);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-primary, #e0e0e0);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: box-shadow 0.15s, border-color 0.15s;
@@ -243,8 +245,8 @@ const categoryColors: Record<string, string> = {
   align-items: flex-end;
 }
 
-.atom-node__port-label { font-size: 11px; opacity: 0.9; }
-.atom-node__port-type { font-size: 10px; opacity: 0.6; font-family: monospace; }
+.atom-node__port-label { font-size: 12px; opacity: 0.9; }
+.atom-node__port-type { font-size: 11px; opacity: 0.6; font-family: monospace; }
 
 .atom-node__handle {
   width: 10px !important;
@@ -253,13 +255,14 @@ const categoryColors: Record<string, string> = {
 }
 
 .atom-node__static-input {
-  font-size: 11px;
-  padding: 2px 5px;
+  font-size: 12px;
+  padding: 3px 6px;
   background: var(--color-bg-input, #2a2a3e);
   border: 1px solid var(--color-border, #444);
   border-radius: 3px;
   color: var(--color-text-primary, #e0e0e0);
-  width: 80px;
+  width: 90px;
+  flex-shrink: 0;
   margin-left: auto;
 }
 

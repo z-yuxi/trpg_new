@@ -72,11 +72,14 @@ async function loadProducts() {
   loading.value = true;
   try {
     const [rsData, modData] = await Promise.all([
-      api.get<Ruleset[]>('/rulesets/mine'),
-      api.get<Module[]>('/modules/mine'),
+      api.get<unknown>('/rulesets/mine'),
+      api.get<unknown>('/modules/mine'),
     ]);
-    rulesets.value = rsData;
-    modules.value = modData;
+    // /rulesets/mine 可能返回数组或 { data: [] } 两种格式
+    const rs = Array.isArray(rsData) ? rsData : ((rsData as any)?.data ?? []);
+    const mods = Array.isArray(modData) ? modData : ((modData as any)?.data ?? []);
+    rulesets.value = rs as Ruleset[];
+    modules.value = mods as Module[];
   } catch {
     ElMessage.error('加载作品列表失败');
   } finally {

@@ -43,6 +43,7 @@ const editSceneForm = ref({
   type: 'spatial' as 'spatial' | 'virtual' | 'lobby',
   description: '',
   history_visibility: 'all' as 'none' | 'recent' | 'all',
+  visible_history_count: 50,
 });
 const sceneEditLoading = ref(false);
 
@@ -53,6 +54,7 @@ function openEditScene(scene: any) {
     type: scene.type,
     description: scene.description ?? '',
     history_visibility: scene.history_visibility ?? 'all',
+    visible_history_count: scene.visible_history_count ?? 50,
   };
   showEditScene.value = true;
 }
@@ -153,6 +155,10 @@ async function confirmDeleteScene() {
         <option value="recent">recent — 仅最近历史</option>
         <option value="none">none — 不可查看历史</option>
       </select>
+      <template v-if="editSceneForm.history_visibility === 'recent'">
+        <label class="form-label" style="margin-top:10px">新成员可见最近条数</label>
+        <input type="number" v-model.number="editSceneForm.visible_history_count" min="1" max="500" class="field-input" placeholder="默认 50" />
+      </template>
       <label class="form-label" style="margin-top:12px">描述</label>
       <textarea v-model="editSceneForm.description" class="field-input" rows="2" style="resize:vertical" />
     </div>

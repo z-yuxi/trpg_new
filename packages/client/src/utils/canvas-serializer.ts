@@ -38,8 +38,9 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
       { key: 'expression', label: '骰子表达式', type: 'string', required: true },
     ],
     outputs: [
-      { key: 'result', label: '结果值', type: 'number' },
+      { key: 'total', label: '总点数', type: 'number' },
       { key: 'details', label: '详情文本', type: 'string' },
+      { key: 'rolls', label: '各骰结果', type: 'any' },
     ],
   },
   character_skill_reader: {
@@ -49,10 +50,12 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     category: 'data',
     icon: '👤',
     inputs: [
+      { key: 'field_type', label: '字段类型(attribute/skill/resource_current/resource_max)', type: 'string', required: true },
       { key: 'field_name', label: '字段名', type: 'string', required: true },
     ],
     outputs: [
       { key: 'value', label: '数值', type: 'number' },
+      { key: 'field_name', label: '字段名', type: 'string' },
     ],
   },
   formula_eval: {
@@ -63,10 +66,11 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     icon: '📐',
     inputs: [
       { key: 'formula', label: '公式', type: 'string', required: true },
-      { key: 'variables', label: '变量', type: 'any' },
+      { key: 'variables', label: '变量(Record<string,number>)', type: 'any', required: true },
     ],
     outputs: [
-      { key: 'result', label: '结果', type: 'number' },
+      { key: 'value', label: '计算结果', type: 'number' },
+      { key: 'formula', label: '公式文本', type: 'string' },
     ],
   },
   if_else: {
@@ -77,11 +81,12 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     icon: '🔀',
     inputs: [
       { key: 'condition', label: '条件', type: 'boolean', required: true },
-      { key: 'if_true', label: '为真时', type: 'any', required: true },
-      { key: 'if_false', label: '为假时', type: 'any', required: true },
+      { key: 'then_value', label: '为真时', type: 'any', required: true },
+      { key: 'else_value', label: '为假时', type: 'any', required: true },
     ],
     outputs: [
-      { key: 'result', label: '结果', type: 'any' },
+      { key: 'value', label: '结果', type: 'any' },
+      { key: 'branch', label: '分支(then/else)', type: 'string' },
     ],
   },
   threshold_compare: {
@@ -93,10 +98,12 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     inputs: [
       { key: 'value', label: '输入值', type: 'number', required: true },
       { key: 'threshold', label: '阈值', type: 'number', required: true },
+      { key: 'operator', label: '运算符(<,<=,>,>=,==,!=)', type: 'string', required: true },
     ],
     outputs: [
       { key: 'passed', label: '是否通过', type: 'boolean' },
-      { key: 'margin', label: '差值', type: 'number' },
+      { key: 'value', label: '输入值', type: 'number' },
+      { key: 'threshold', label: '阈值', type: 'number' },
     ],
   },
   multiply: {
@@ -110,7 +117,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
       { key: 'b', label: '数值 B', type: 'number', required: true },
     ],
     outputs: [
-      { key: 'result', label: '结果', type: 'number' },
+      { key: 'value', label: '乘积', type: 'number' },
     ],
   },
   resource_modify: {
@@ -120,11 +127,16 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     category: 'effect',
     icon: '💊',
     inputs: [
-      { key: 'resource_name', label: '资源名', type: 'string', required: true },
+      { key: 'current_value', label: '当前值', type: 'number', required: true },
+      { key: 'max_value', label: '最大值', type: 'number', required: true },
       { key: 'delta', label: '变化量', type: 'number', required: true },
+      { key: 'min_value', label: '最小值(默认0)', type: 'number' },
     ],
     outputs: [
+      { key: 'old_value', label: '旧值', type: 'number' },
       { key: 'new_value', label: '新值', type: 'number' },
+      { key: 'delta', label: '实际变化量', type: 'number' },
+      { key: 'clamped', label: '是否被截断', type: 'boolean' },
     ],
   },
   result_collector: {
@@ -172,6 +184,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     outputs: [
       { key: 'result_row', label: '匹配行', type: 'any' },
       { key: 'found', label: '是否找到', type: 'boolean' },
+      { key: 'threshold_value', label: '行第二列数值', type: 'number' },
     ],
   },
   random_table: {

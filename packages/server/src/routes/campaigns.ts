@@ -176,6 +176,7 @@ router.put('/:id/scenes/:sceneId', async (req, res) => {
     if (req.body.description !== undefined) updates.description = req.body.description;
     if (req.body.type !== undefined) updates.type = req.body.type;
     if (req.body.history_visibility !== undefined) updates.history_visibility = req.body.history_visibility;
+    if (req.body.visible_history_count !== undefined) updates.visible_history_count = Number(req.body.visible_history_count);
     await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).update(updates);
     const scene = await db('scenes').where({ id: req.params.sceneId }).first();
     res.json(scene);

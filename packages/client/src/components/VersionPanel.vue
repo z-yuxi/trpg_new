@@ -4,8 +4,9 @@
  * 规则集版本管理面板：版本历史、保存版本、回滚、版本对比、从上游同步
  */
 import { ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { api } from '../utils/api';
+import type { RulesetVersionDiff, MergeConflict, MergeResult } from '@trpg/shared';
 
 const props = defineProps<{
   rulesetId: string;
@@ -24,6 +25,8 @@ interface VersionItem {
   version_number: string;
   changelog: string;
   created_at: string;
+  created_by?: string;
+  snapshot_hash?: string;
 }
 
 const versions = ref<VersionItem[]>([]);
@@ -45,6 +48,27 @@ onMounted(fetchVersions);
 // ── 保存版本 ───────────────────────────────────────────────────────────────
 const changelogInput = ref('');
 const saving = ref(false);
+
+/** 自动生成 changelog 建议（对比最新版本与当前 diff） */
+async function suggestChangelog() {
+  if (versions.value.length === 0) return;
+  const latestVersion = versions.value[0];
+  try {
+    const diff = await api.get<{ nodes: { added: unknown[]; removed: unknown[]; modified: unknown[] }; connections: { added: unknown[]; removed: unknown[] } }>(
+      `/rulesets/${props.rulesetId}/versions/compare?a=${latestVersion.id}&b=${latestVersion.id}`,
+    );
+    // 直接用比较接口只能比两个已保存版本；在此获取最新版本的 diff 供参考
+    const parts: string[] = [];
+    if (diff.nodes?.added?.length) parts.push(`- 新增 ${diff.nodes.added.length} 个节点`);
+    if (diff.nodes?.removed?.length) parts.push(`- 删除 ${diff.nodes.removed.length} 个节点`);
+    if (diff.nodes?.modified?.length) parts.push(`- 修改 ${diff.nodes.modified.length} 个节点`);
+    if (diff.connections?.added?.length) parts.push(`- 新增 ${diff.connections.added.length} 条连接`);
+    if (diff.connections?.removed?.length) parts.push(`- 删除 ${diff.connections.removed.length} 条连接`);
+    if (parts.length > 0) changelogInput.value = parts.join('\n');
+  } catch {
+    // 忽略建议失败
+  }
+}
 
 async function saveVersion() {
   if (!props.rulesetId || props.rulesetId === 'new') {
@@ -68,7 +92,17 @@ async function saveVersion() {
 const rollbacking = ref<string | null>(null);
 
 async function rollback(versionId: string, versionNumber: string) {
-  if (!confirm(`确认回滚到版本 ${versionNumber}？当前草稿内容将被替换。`)) return;
+  try {
+    await ElMessageBox.confirm(
+      `将回滚到版本 ${versionNumber}，当前未保存的修改将丢失，是否继续？`,
+      '回滚确认', {
+        confirmButtonText: '确定回滚',
+        cancelButtonText: '取消',
+        type: 'warning',
+      });
+  } catch {
+    return;
+  }
   rollbacking.value = versionId;
   try {
     await api.post(`/rulesets/${props.rulesetId}/versions/${versionId}/rollback`, {});
@@ -85,7 +119,7 @@ async function rollback(versionId: string, versionNumber: string) {
 // ── 版本对比 ──────────────────────────────────────────────────────────────
 const compareA = ref('');
 const compareB = ref('');
-const diffResult = ref<{ added_nodes: string[]; removed_nodes: string[]; modified_nodes: string[] } | null>(null);
+const diffResult = ref<RulesetVersionDiff | null>(null);
 const comparing = ref(false);
 
 async function compareVersions() {
@@ -96,7 +130,7 @@ async function compareVersions() {
   comparing.value = true;
   diffResult.value = null;
   try {
-    diffResult.value = await api.get<{ added_nodes: string[]; removed_nodes: string[]; modified_nodes: string[] }>(
+    diffResult.value = await api.get<RulesetVersionDiff>(
       `/rulesets/${props.rulesetId}/versions/compare?a=${compareA.value}&b=${compareB.value}`,
     );
   } catch (e: unknown) {
@@ -108,24 +142,55 @@ async function compareVersions() {
 
 // ── 从上游同步 ─────────────────────────────────────────────────────────────
 const merging = ref(false);
+const showConflictDialog = ref(false);
+const pendingConflicts = ref<MergeConflict[]>([]);
+const conflictResolutions = ref<Record<string, 'ours' | 'theirs'>>({});
+const resolvingMerge = ref(false);
 
 async function mergeFromParent() {
   if (!props.parentId) return;
-  if (!confirm('从上游规则集合并变更？如有冲突需手动解决。')) return;
+  try {
+    await ElMessageBox.confirm('从上游规则集合并变更？如有冲突需手动解决。', '合并确认', {
+      confirmButtonText: '确定合并',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
   merging.value = true;
   try {
-    const data = await api.post<{ conflicts?: string[] }>(`/rulesets/${props.rulesetId}/merge-from-parent`, {});
-    emit('merged', data);
-    const conflicts = data.conflicts ?? [];
-    if (conflicts.length > 0) {
-      ElMessage.warning(`合并完成，但有 ${conflicts.length} 个冲突需手动解决`);
+    const data = await api.post<MergeResult>(`/rulesets/${props.rulesetId}/merge-from-parent`, {});
+    if (data.status === 'conflicts' && data.conflicts.length > 0) {
+      pendingConflicts.value = data.conflicts;
+      conflictResolutions.value = Object.fromEntries(data.conflicts.map((c) => [c.node_id, 'ours' as const]));
+      showConflictDialog.value = true;
     } else {
+      emit('merged', data);
       ElMessage.success('已从上游合并，无冲突');
     }
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '合并失败');
   } finally {
     merging.value = false;
+  }
+}
+
+async function confirmResolveMerge() {
+  resolvingMerge.value = true;
+  try {
+    const resolutions = pendingConflicts.value.map((c) => ({
+      node_id: c.node_id,
+      keep: conflictResolutions.value[c.node_id] ?? 'ours',
+    }));
+    const ruleset = await api.post(`/rulesets/${props.rulesetId}/resolve-merge`, { resolutions });
+    showConflictDialog.value = false;
+    emit('merged', ruleset as object);
+    ElMessage.success('冲突已解决，合并完成');
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '解决冲突失败');
+  } finally {
+    resolvingMerge.value = false;
   }
 }
 
@@ -148,6 +213,7 @@ function formatDate(dateStr: string): string {
           placeholder="变更说明（可选）"
           @keydown.enter="saveVersion"
         />
+        <button v-if="versions.length > 0" class="action-btn" @click="suggestChangelog" title="自动生成变更说明建议">✨ 建议</button>
         <button class="action-btn action-btn--primary" :disabled="saving" @click="saveVersion">
           {{ saving ? '保存中…' : '💾 保存版本' }}
         </button>
@@ -179,19 +245,33 @@ function formatDate(dateStr: string): string {
       </div>
 
       <div v-if="diffResult" class="diff-result">
-        <div v-if="diffResult.added_nodes.length > 0" class="diff-group diff-added">
-          <span class="diff-label">+ 新增节点（{{ diffResult.added_nodes.length }}）</span>
-          <ul><li v-for="id in diffResult.added_nodes" :key="id">{{ id }}</li></ul>
+        <!-- 节点变化 -->
+        <div v-if="diffResult.nodes?.added?.length" class="diff-group diff-added">
+          <span class="diff-label">+ 新增节点（{{ diffResult.nodes.added.length }}）</span>
+          <ul><li v-for="n in diffResult.nodes.added" :key="n.node_id">{{ n.atom_type }} <span class="diff-id">#{{ n.node_id.slice(0,6) }}</span></li></ul>
         </div>
-        <div v-if="diffResult.removed_nodes.length > 0" class="diff-group diff-removed">
-          <span class="diff-label">- 删除节点（{{ diffResult.removed_nodes.length }}）</span>
-          <ul><li v-for="id in diffResult.removed_nodes" :key="id">{{ id }}</li></ul>
+        <div v-if="diffResult.nodes?.removed?.length" class="diff-group diff-removed">
+          <span class="diff-label">- 删除节点（{{ diffResult.nodes.removed.length }}）</span>
+          <ul><li v-for="n in diffResult.nodes.removed" :key="n.node_id">{{ n.atom_type }} <span class="diff-id">#{{ n.node_id.slice(0,6) }}</span></li></ul>
         </div>
-        <div v-if="diffResult.modified_nodes.length > 0" class="diff-group diff-modified">
-          <span class="diff-label">～ 修改节点（{{ diffResult.modified_nodes.length }}）</span>
-          <ul><li v-for="id in diffResult.modified_nodes" :key="id">{{ id }}</li></ul>
+        <div v-if="diffResult.nodes?.modified?.length" class="diff-group diff-modified">
+          <span class="diff-label">～ 修改节点（{{ diffResult.nodes.modified.length }}）</span>
+          <ul><li v-for="n in diffResult.nodes.modified" :key="n.node_id">{{ n.atom_type }} <span class="diff-id">#{{ n.node_id.slice(0,6) }}</span>：{{ n.changed_fields?.join(', ') }}</li></ul>
         </div>
-        <div v-if="!diffResult.added_nodes.length && !diffResult.removed_nodes.length && !diffResult.modified_nodes.length"
+        <!-- 连接变化 -->
+        <div v-if="diffResult.connections?.added?.length" class="diff-group diff-added">
+          <span class="diff-label">+ 新增连接（{{ diffResult.connections.added.length }}）</span>
+          <ul><li v-for="(c,i) in diffResult.connections.added" :key="i">{{ c.source }}→{{ c.target }}</li></ul>
+        </div>
+        <div v-if="diffResult.connections?.removed?.length" class="diff-group diff-removed">
+          <span class="diff-label">- 删除连接（{{ diffResult.connections.removed.length }}）</span>
+          <ul><li v-for="(c,i) in diffResult.connections.removed" :key="i">{{ c.source }}→{{ c.target }}</li></ul>
+        </div>
+        <!-- 命令变化 -->
+        <div v-if="diffResult.commands?.added?.length || diffResult.commands?.removed?.length || diffResult.commands?.modified?.length" class="diff-group diff-modified">
+          <span class="diff-label">⚙ 命令变更（+{{ diffResult.commands?.added?.length ?? 0 }} -{{ diffResult.commands?.removed?.length ?? 0 }} ~{{ diffResult.commands?.modified?.length ?? 0 }}）</span>
+        </div>
+        <div v-if="!diffResult.nodes?.added?.length && !diffResult.nodes?.removed?.length && !diffResult.nodes?.modified?.length && !diffResult.connections?.added?.length && !diffResult.connections?.removed?.length"
           class="diff-same">两个版本内容相同</div>
       </div>
     </section>
@@ -211,8 +291,10 @@ function formatDate(dateStr: string): string {
             <div class="version-item__header">
               <span class="version-num">{{ v.version_number }}</span>
               <span class="version-date">{{ formatDate(v.created_at) }}</span>
+              <span v-if="v.created_by" class="version-author">by {{ v.created_by }}</span>
             </div>
             <div v-if="v.changelog" class="version-changelog">{{ v.changelog }}</div>
+            <div v-if="v.snapshot_hash" class="version-hash">SHA: {{ v.snapshot_hash.slice(0, 8) }}</div>
             <button
               class="action-btn action-btn--sm action-btn--danger"
               :disabled="rollbacking === v.id"
@@ -225,6 +307,46 @@ function formatDate(dateStr: string): string {
       </ul>
     </section>
   </div>
+
+  <!-- 合并冲突解决对话框 -->
+  <el-dialog
+    v-model="showConflictDialog"
+    title="合并冲突 - 请选择保留版本"
+    width="680px"
+    :close-on-click-modal="false"
+  >
+    <div class="conflict-list">
+      <div v-for="c in pendingConflicts" :key="c.node_id" class="conflict-item">
+        <div class="conflict-header">
+          <span class="conflict-node-id">节点 {{ c.node_id.slice(0,8) }}</span>
+        </div>
+        <div class="conflict-sides">
+          <div class="conflict-side">
+            <div class="conflict-side-label">本地（Ours）</div>
+            <pre class="conflict-code">{{ JSON.stringify(c.our_node, null, 2) }}</pre>
+          </div>
+          <div class="conflict-side">
+            <div class="conflict-side-label">上游（Theirs）</div>
+            <pre class="conflict-code">{{ JSON.stringify(c.their_node, null, 2) }}</pre>
+          </div>
+        </div>
+        <div class="conflict-choice">
+          <label class="conflict-radio">
+            <input type="radio" :value="'ours'" v-model="conflictResolutions[c.node_id]" /> 保留本地
+          </label>
+          <label class="conflict-radio">
+            <input type="radio" :value="'theirs'" v-model="conflictResolutions[c.node_id]" /> 采用上游
+          </label>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <button class="action-btn" @click="showConflictDialog = false">取消</button>
+      <button class="action-btn action-btn--primary" :disabled="resolvingMerge" @click="confirmResolveMerge">
+        {{ resolvingMerge ? '提交中…' : '确认合并' }}
+      </button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
@@ -319,6 +441,20 @@ function formatDate(dateStr: string): string {
 .diff-same { font-size: 12px; color: var(--color-text-secondary, #888); text-align: center; padding: 8px; }
 .diff-group ul { margin: 0; padding-left: 16px; }
 .diff-group li { margin: 2px 0; font-family: monospace; }
+.diff-id { color: var(--color-text-secondary, #888); font-size: 11px; }
+
+/* 冲突解决对话框 */
+.conflict-list { display: flex; flex-direction: column; gap: 16px; max-height: 480px; overflow-y: auto; }
+.conflict-item { border: 1px solid var(--color-border, #3a3a4e); border-radius: 6px; overflow: hidden; }
+.conflict-header { padding: 6px 12px; background: color-mix(in srgb, #f5a623 15%, transparent); font-size: 12px; font-weight: 600; }
+.conflict-node-id { font-family: monospace; }
+.conflict-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.conflict-side { padding: 8px; border-top: 1px solid var(--color-border, #3a3a4e); }
+.conflict-side:first-child { border-right: 1px solid var(--color-border, #3a3a4e); }
+.conflict-side-label { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--color-text-secondary, #888); }
+.conflict-code { font-family: monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; margin: 0; max-height: 120px; overflow-y: auto; }
+.conflict-choice { padding: 8px 12px; display: flex; gap: 16px; border-top: 1px solid var(--color-border, #3a3a4e); background: var(--color-bg-input, #2a2a3e); }
+.conflict-radio { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
 
 /* 版本时间线 */
 .version-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
@@ -350,6 +486,8 @@ function formatDate(dateStr: string): string {
 .version-item__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .version-num { font-size: 12px; font-weight: 600; color: var(--color-primary, #7b68ee); }
 .version-date { font-size: 11px; color: var(--color-text-secondary, #888); }
+.version-author { font-size: 11px; color: var(--color-text-secondary, #888); font-style: italic; }
+.version-hash { font-size: 10px; color: var(--color-text-secondary, #666); font-family: monospace; margin-top: 2px; }
 .version-changelog { font-size: 12px; color: var(--color-text-secondary, #aaa); }
 
 .loading-text, .empty-text {

@@ -255,7 +255,8 @@ async function handleExportPdf() {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // 延迟撤销，确保浏览器有足够时间读取 Blob 数据再触发下载
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   } catch (err) {
     console.error('导出失败', err);
     alert(err instanceof Error ? err.message : '导出失败');

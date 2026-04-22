@@ -23,11 +23,18 @@ async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
-  if (request.method === 'GET' && response.ok) {
-    cache.put(request, response.clone());
+  try {
+    const response = await fetch(request);
+    if (request.method === 'GET' && response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    return new Response(JSON.stringify({ error: 'offline' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
-  return response;
 }
 
 // 安装：预缓存核心资源
@@ -51,6 +58,18 @@ self.addEventListener('activate', (event) => {
 // 请求拦截：API/Socket → 不缓存；导航 → Network First；静态资源 → Cache First
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // 开发环境（localhost / 127.0.0.1）：完全不拦截，交由浏览器直接处理
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return;
+
+  // 跳过 Vite HMR / 模块请求（防御纵深：防止旧 SW 缓存影响 dev server）
+  if (
+    url.pathname.startsWith('/@vite/') ||
+    url.pathname.startsWith('/@fs/') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.searchParams.has('t') // Vite 热更新时间戳参数
+  ) return;
 
   if (url.pathname.startsWith('/socket.io/')) return;
 

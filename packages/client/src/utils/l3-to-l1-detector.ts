@@ -18,10 +18,11 @@ const L1_ALLOWED_ATOM_TYPES = new Set([
   'formula_eval',
   'threshold_compare',
   'result_collector',
+  'table_lookup',  // 难度等级查找表
 ]);
 
 export type DetectResult =
-  | { matched: true; check_mode: 'roll_under' | 'roll_over' | 'dice_pool'; extracted: Partial<L1Config> }
+  | { matched: true; check_mode: 'roll_under' | 'roll_over' | 'dice_pool'; extracted: Partial<L1Config>; guessed_fields: string[] }
   | { matched: false; reason: 'l3-only' | 'empty-graph' };
 
 // ── 主检测函数 ──────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ export function detectL3ToL1(graph: CommandGraph): DetectResult {
           dice_pool_success_threshold: successThreshold,
           dice_pool_target: poolTarget,
         },
+        guessed_fields: ['dice_pool_success_threshold', 'dice_pool_target'],
       };
     }
   }
@@ -102,16 +104,16 @@ export function detectL3ToL1(graph: CommandGraph): DetectResult {
     return { matched: false, reason: 'l3-only' };
   }
 
-  const modeValue = getStaticString(mainCmp, 'mode') ?? 'less_than';
+  const operatorValue = getStaticString(mainCmp, 'operator') ?? '<';
   const checkMode: 'roll_under' | 'roll_over' =
-    modeValue === 'greater_than' ? 'roll_over' : 'roll_under';
+    operatorValue === '>' ? 'roll_over' : 'roll_under';
 
   // 提取大成功/大失败阈值（可选）
   const critSuccNode = cmpNodes.find(
-    (n) => n.node_id !== mainCmp.node_id && getStaticString(n, 'mode') === 'less_than_or_equal',
+    (n) => n.node_id !== mainCmp.node_id && getStaticString(n, 'operator') === '<=',
   );
   const critFailNode = cmpNodes.find(
-    (n) => n.node_id !== mainCmp.node_id && getStaticString(n, 'mode') === 'greater_than_or_equal',
+    (n) => n.node_id !== mainCmp.node_id && getStaticString(n, 'operator') === '>=',
   );
 
   const critSuccessMax = critSuccNode ? getStaticNumber(critSuccNode, 'threshold') ?? 5 : 5;
@@ -126,11 +128,35 @@ export function detectL3ToL1(graph: CommandGraph): DetectResult {
     ...(critFailNode ? [critFailNode.node_id] : []),
     ...nodes.filter((n) => n.atom_type === 'character_skill_reader').map((n) => n.node_id),
     ...nodes.filter((n) => n.atom_type === 'formula_eval').map((n) => n.node_id),
+    ...nodes.filter((n) => n.atom_type === 'table_lookup').map((n) => n.node_id),
   ]);
   const hasExtra = nodes.some((n) => !allowedIds.has(n.node_id));
   if (hasExtra) {
     return { matched: false, reason: 'l3-only' };
   }
+
+  const guessed_fields: string[] = [];
+
+  // ── 回填 difficulty_levels（从 table_lookup 节点提取）───────────────────
+  let difficultyLevels: L1Config['difficulty_levels'] | undefined;
+  const lookupNode = nodes.find((n) => n.atom_type === 'table_lookup');
+  if (lookupNode) {
+    const tableData = getStaticValue(lookupNode, 'table_data');
+    if (Array.isArray(tableData)) {
+      difficultyLevels = (tableData as Array<[string, number]>).map(([name, threshold]) => ({
+        name: String(name),
+        threshold: Number(threshold),
+      }));
+    }
+  }
+
+  // ── 回填 attributes（从 character_skill_reader 节点提取）────────────────
+  const readerNodes = nodes.filter((n) => n.atom_type === 'character_skill_reader');
+  const attributes: L1Config['attributes'] = readerNodes.map((r) => {
+    const fieldName = getStaticString(r, 'field_name') ?? '';
+    if (fieldName) guessed_fields.push(`attributes[${fieldName}].roll_formula`);
+    return { name: fieldName, roll_formula: '' };
+  });
 
   return {
     matched: true,
@@ -140,7 +166,10 @@ export function detectL3ToL1(graph: CommandGraph): DetectResult {
       default_dice: defaultDice,
       crit_success_max: critSuccessMax,
       crit_fail_min: critFailMin,
+      ...(difficultyLevels ? { difficulty_levels: difficultyLevels } : {}),
+      ...(attributes.length > 0 ? { attributes } : {}),
     },
+    guessed_fields,
   };
 }
 
@@ -157,5 +186,11 @@ function getStaticNumber(node: CommandGraphNode, key: string): number | undefine
     const n = Number((v as any).value);
     return isNaN(n) ? undefined : n;
   }
+  return undefined;
+}
+
+function getStaticValue(node: CommandGraphNode, key: string): unknown {
+  const v = node.inputs[key];
+  if (v && (v as any).type === 'static') return (v as any).value;
   return undefined;
 }

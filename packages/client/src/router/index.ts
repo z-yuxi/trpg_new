@@ -34,6 +34,12 @@ const routes = [
     ],
   },
   {
+    path: '/ruleset/:id',
+    name: 'RulesetDetail',
+    component: () => import('../views/RulesetDetail.vue'),
+    meta: { title: '规则集详情' },
+  },
+  {
     path: '/room/:id',
     name: 'Room',
     component: () => import('../views/Room.vue'),

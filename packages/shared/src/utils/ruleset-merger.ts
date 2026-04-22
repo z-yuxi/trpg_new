@@ -88,7 +88,8 @@ export function mergeRulesetGraphs(base: SimpleGraph, ours: SimpleGraph, theirs:
   }
 
   return {
+    status: conflicts.length > 0 ? 'conflicts' : 'clean',
     merged_graph: { atoms: merged, connections: theirs.connections as object[] },
     conflicts,
-  };
+  } as MergeResult;
 }
