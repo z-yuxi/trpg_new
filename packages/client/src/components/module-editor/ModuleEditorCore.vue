@@ -15,6 +15,15 @@
       <span class="toolbar-sep" />
       <button class="toolbar-btn" title="撤销" @click="editor?.chain().focus().undo().run()">↩</button>
       <button class="toolbar-btn" title="重做" @click="editor?.chain().focus().redo().run()">↪</button>
+      <span class="toolbar-sep" />
+      <!-- 块类型快捷按钮 -->
+      <button
+        v-for="blk in blockButtons"
+        :key="blk.id"
+        class="toolbar-btn"
+        :title="blk.label"
+        @click="insertBlock(blk.id)"
+      >{{ blk.icon }}</button>
       <span class="toolbar-spacer" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
@@ -132,6 +141,16 @@ watch(() => props.modelValue, (val) => {
 });
 
 // ── 工具栏 ────────────────────────────────────────────────
+// 块类型工具栏按钮
+const blockButtons = [
+  { id: 'scene_block',  icon: '📍', label: '插入场景块' },
+  { id: 'npc_block',   icon: '🧑', label: '插入NPC块' },
+  { id: 'event_block', icon: '⚡', label: '插入事件块' },
+  { id: 'clue_block',  icon: '🔍', label: '插入线索块' },
+  { id: 'check_block', icon: '🎲', label: '插入检定块' },
+  { id: 'dialog_block',icon: '💬', label: '插入对话块' },
+];
+
 const toolbarButtons = computed(() => {
   if (!editor.value) return [];
   const e = editor.value;
@@ -222,9 +241,14 @@ function handleKeyup(e: KeyboardEvent) {
     const coords = editor.value.view.coordsAtPos(from - slashQuery.value.length - 1);
     const editorRect = (editor.value.view.dom as HTMLElement).closest('.module-editor-core')?.getBoundingClientRect();
     if (editorRect) {
+      const menuH = 300; // max-height of slash menu
+      const spaceBelow = editorRect.bottom - coords.bottom;
+      const top = spaceBelow > menuH
+        ? coords.bottom - editorRect.top + 4
+        : coords.top - editorRect.top - menuH - 4;
       slashMenuStyle.value = {
-        top: `${coords.bottom - editorRect.top + 4}px`,
-        left: `${coords.left - editorRect.left}px`,
+        top: `${top}px`,
+        left: `${Math.max(0, coords.left - editorRect.left)}px`,
       };
     }
   } else {
@@ -255,8 +279,8 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 2px;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--color-border, #e0e0e0);
-  background: var(--color-surface, #fff);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-card);
   flex-shrink: 0;
 }
 
@@ -271,13 +295,13 @@ onBeforeUnmount(() => {
   transition: background 0.15s;
 }
 
-.toolbar-btn:hover { background: var(--color-hover, #f5f5f5); }
-.toolbar-btn.active { background: var(--color-primary-light, #e3f2fd); color: var(--color-primary, #1976d2); }
+.toolbar-btn:hover { background: var(--surface-hover); }
+.toolbar-btn.active { background: var(--color-primary-light); color: var(--color-primary); }
 
 .toolbar-sep {
   width: 1px;
   height: 20px;
-  background: var(--color-border, #e0e0e0);
+  background: var(--border-default);
   margin: 0 4px;
 }
 
@@ -320,13 +344,13 @@ onBeforeUnmount(() => {
 :deep(.tiptap h2) { font-size: 1.4em; margin: 0.9em 0 0.35em; }
 :deep(.tiptap h3) { font-size: 1.15em; margin: 0.8em 0 0.3em; }
 :deep(.tiptap ul, .tiptap ol) { padding-left: 1.5em; }
-:deep(.tiptap hr) { border: none; border-top: 1px solid var(--color-border, #e0e0e0); margin: 1.5em 0; }
+:deep(.tiptap hr) { border: none; border-top: 1px solid var(--border-default); margin: 1.5em 0; }
 
 /* 业务块通用样式 */
 :deep(.block-view) {
   border-radius: 6px;
   margin: 8px 0;
-  border: 1px solid var(--color-border, #e0e0e0);
+  border: 1px solid var(--border-default);
   overflow: hidden;
 }
 
@@ -335,13 +359,13 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--color-surface-2, #fafafa);
+  background: var(--surface-page);
   cursor: pointer;
   user-select: none;
 }
 
 :deep(.block-title) { flex: 1; font-weight: 600; font-size: 14px; }
-:deep(.block-tag) { font-size: 11px; padding: 2px 6px; border-radius: 3px; background: var(--color-hover, #f0f0f0); color: var(--color-text-secondary, #666); }
+:deep(.block-tag) { font-size: 11px; padding: 2px 6px; border-radius: 3px; background: var(--surface-hover); color: var(--text-body); }
 :deep(.collapse-btn) { font-size: 11px; color: var(--color-text-secondary, #888); }
 
 :deep(.block-body) { padding: 8px 12px; }
@@ -351,8 +375,8 @@ onBeforeUnmount(() => {
 .slash-menu {
   position: absolute;
   z-index: 100;
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border, #e0e0e0);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   min-width: 200px;
@@ -373,7 +397,7 @@ onBeforeUnmount(() => {
 }
 
 .slash-item:hover,
-.slash-item--active { background: var(--color-hover, #f5f5f5); }
+.slash-item--active { background: var(--surface-hover); }
 
 .slash-item-icon { width: 20px; text-align: center; font-size: 16px; }
 

@@ -103,30 +103,30 @@ const categoryColors: Record<string, string> = {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--color-bg-sidebar, #16161e);
-  border-right: 1px solid var(--color-border, #2a2a3e);
+  background: var(--surface-card);
+  border-right: 1px solid var(--border-default);
   overflow: hidden;
 }
 
 .atom-library__header {
   padding: 12px;
-  border-bottom: 1px solid var(--color-border, #2a2a3e);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .atom-library__title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   margin: 0 0 8px;
 }
 
 .atom-library__search {
   width: 100%;
   padding: 5px 8px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   font-size: 12px;
   box-sizing: border-box;
 }
@@ -159,13 +159,13 @@ const categoryColors: Record<string, string> = {
   border: 1px solid transparent;
   border-left: 3px solid var(--cat-color, #888);
   border-radius: 4px;
-  background: var(--color-bg-card, #1e1e2e);
+  background: var(--surface-hover);
   cursor: grab;
   transition: background 0.12s, border-color 0.12s;
 }
 
 .atom-card:hover {
-  background: color-mix(in srgb, var(--cat-color) 12%, var(--color-bg-card, #1e1e2e));
+  background: color-mix(in srgb, var(--cat-color) 12%, var(--surface-hover));
   border-color: var(--cat-color, #888);
 }
 
@@ -187,7 +187,7 @@ const categoryColors: Record<string, string> = {
 .atom-card__label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -195,14 +195,14 @@ const categoryColors: Record<string, string> = {
 
 .atom-card__desc {
   font-size: 11px;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   line-height: 1.3;
 }
 
 .atom-library__empty {
   text-align: center;
   padding: 24px 0;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 

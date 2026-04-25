@@ -225,7 +225,7 @@ onMounted(fetchThreads);
   width: 48px;
   height: 48px;
   border-radius: 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #5B8DB8) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 18%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;

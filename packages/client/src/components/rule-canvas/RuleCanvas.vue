@@ -44,6 +44,7 @@ const {
   fitView,
   zoomTo,
   viewport,
+  project,
   onConnect,
   onEdgeContextMenu,
   onNodesInitialized,
@@ -166,13 +167,25 @@ onEdgeContextMenu(({ event, edge }: EdgeMouseEvent) => {
 let nodeCounter = 0;
 function addNodeByType(atomType: string, position?: { x: number; y: number }) {
   const id = `${atomType}_${Date.now()}_${nodeCounter++}`;
+
+  // 无位置时：将节点放置到当前视口中心
+  let resolvedPosition = position;
+  if (!resolvedPosition) {
+    const wrapper = canvasWrapperRef.value;
+    if (wrapper) {
+      const cx = wrapper.clientWidth / 2;
+      const cy = wrapper.clientHeight / 2;
+      resolvedPosition = project({ x: cx, y: cy });
+    } else {
+      resolvedPosition = { x: 100 + (nodes.value.length % 5) * 220, y: 100 + Math.floor(nodes.value.length / 5) * 160 };
+    }
+    // 小偶尔偏移避免堆叠
+    resolvedPosition = { x: resolvedPosition.x + (nodes.value.length % 3) * 30 - 30, y: resolvedPosition.y + Math.floor(nodes.value.length / 3) * 30 - 30 };
+  }
   const newNode: Node<AtomNodeData> = {
     id,
     type: 'atomNode',
-    position: position ?? {
-      x: 100 + (nodes.value.length % 5) * 220,
-      y: 100 + Math.floor(nodes.value.length / 5) * 160,
-    },
+    position: resolvedPosition,
     data: {
       atom_type: atomType,
       config: {},
@@ -183,6 +196,7 @@ function addNodeByType(atomType: string, position?: { x: number; y: number }) {
   addNodes([newNode]);
   pushHistory();
   emitGraph();
+
 
   // 如果是第一个 result_collector，自动设为输出节点
   if (atomType === 'result_collector' && !outputNodeId.value) {
@@ -355,34 +369,66 @@ function runTopologyValidation() {
 // ── 预览执行 ─────────────────────────────────────────────────────────────
 const showPreviewPanel = ref(false);
 const previewCommand = ref('/r 1d6');
-const mockAttrRaw = ref('{"力量": 60}');
-const mockSkillRaw = ref('{"侦查": 70}');
-const mockResourceRaw = ref('{"HP": {"current": 10, "max": 14}}');
 const previewRunning = ref(false);
 const previewError = ref<string | null>(null);
+
+// 结构化模拟角色数据
+interface MockAttr { name: string; value: number }
+const mockAttrs = ref<MockAttr[]>([
+  { name: '力量', value: 60 },
+  { name: '体质', value: 55 },
+]);
+const mockSkills = ref<MockAttr[]>([
+  { name: '侦查', value: 70 },
+]);
+interface MockResource { name: string; current: number; max: number }
+const mockResources = ref<MockResource[]>([
+  { name: 'HP', current: 10, max: 14 },
+]);
+
+function addMockAttr() { mockAttrs.value.push({ name: '', value: 0 }); }
+function removeMockAttr(i: number) { mockAttrs.value.splice(i, 1); }
+function addMockSkill() { mockSkills.value.push({ name: '', value: 0 }); }
+function removeMockSkill(i: number) { mockSkills.value.splice(i, 1); }
+function addMockResource() { mockResources.value.push({ name: '', current: 0, max: 0 }); }
+function removeMockResource(i: number) { mockResources.value.splice(i, 1); }
+
+// 执行结果
+interface PreviewLog { node_id: string; atom_type?: string; inputs?: unknown; output?: unknown; duration_ms?: number; }
+interface PreviewResult {
+  success?: boolean;
+  result?: string;
+  output?: unknown;
+  logs?: PreviewLog[];
+  dice_rolls?: Array<{ expression: string; value: number; detail?: string }>;
+}
+const previewResult = ref<PreviewResult | null>(null);
 
 async function runPreview() {
   if (!props.rulesetId || props.rulesetId === 'new') return;
   previewRunning.value = true;
   previewError.value = null;
+  previewResult.value = null;
   // 清除所有节点预览值和边的动画样式
   nodes.value.forEach((n) => { if (n.data) n.data.preview = null; });
   edges.value.forEach((e) => { (e as any).animated = false; (e as any).style = {}; });
   try {
-    let attributes: Record<string, number> = {};
-    let skills: Record<string, number> = {};
-    let resources: Record<string, { current: number; max: number }> = {};
-    try { attributes = JSON.parse(mockAttrRaw.value); } catch { /**/ }
-    try { skills = JSON.parse(mockSkillRaw.value); } catch { /**/ }
-    try { resources = JSON.parse(mockResourceRaw.value); } catch { /**/ }
+    const attributes: Record<string, number> = {};
+    const skills: Record<string, number> = {};
+    const resources: Record<string, { current: number; max: number }> = {};
+    mockAttrs.value.forEach((a) => { if (a.name) attributes[a.name] = a.value; });
+    mockSkills.value.forEach((s) => { if (s.name) skills[s.name] = s.value; });
+    mockResources.value.forEach((r) => { if (r.name) resources[r.name] = { current: r.current, max: r.max }; });
 
-    const data = await api.post<{ logs?: Array<{ node_id: string; output: unknown }> }>(
+    const data = await api.post<PreviewResult>(
       `/rulesets/${props.rulesetId}/execute`,
       {
         command: previewCommand.value,
         mock_context: { attributes, skills, resources },
       },
     );
+
+    previewResult.value = data;
 
     // 将执行日志注入到对应节点的 preview
     const executedNodeIds = new Set<string>();
@@ -394,7 +440,7 @@ async function runPreview() {
       }
     }
 
-    // 数据流动画：已执行的节点间连线高亮绿色，其余灰显
+    // 数据流动画
     edges.value.forEach((e) => {
       const srcExecuted = executedNodeIds.has(e.source);
       const tgtExecuted = executedNodeIds.has(e.target);
@@ -506,14 +552,16 @@ defineExpose({
           :snap-grid="[20, 20]"
           :min-zoom="0.25"
           :max-zoom="4"
-          fit-view-on-init
+          :default-viewport="{ x: 0, y: 0, zoom: 1 }"
           @nodes-change="emitGraph"
           @edges-change="emitGraph"
+          @dragover="onDragOver"
+          @drop="onDrop"
         >
-          <Background pattern-color="var(--color-border, #2a2a3e)" />
+          <Background pattern-color="var(--border-default)" />
           <MiniMap
             class="rule-canvas__minimap"
-            node-color="var(--color-primary, #7b68ee)"
+            node-color="var(--color-primary, #5B8DB8)"
           />
           <Controls class="rule-canvas__controls" />
 
@@ -563,17 +611,50 @@ defineExpose({
             <button class="rm-btn" @click="showPreviewPanel = false">×</button>
           </div>
           <div class="preview-panel__body">
-            <label class="preview-label">命令</label>
+            <!-- 命令输入 -->
+            <label class="preview-label">测试命令</label>
             <input v-model="previewCommand" class="preview-input" placeholder="/r 1d6" />
 
-            <label class="preview-label">模拟属性 (JSON)</label>
-            <textarea v-model="mockAttrRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟属性 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟属性</span>
+                <button class="preview-add-btn" @click="addMockAttr">+ 添加</button>
+              </div>
+              <div v-for="(attr, i) in mockAttrs" :key="i" class="preview-row">
+                <input v-model="attr.name" class="preview-row-name" placeholder="属性名" />
+                <input v-model.number="attr.value" type="number" class="preview-row-val" />
+                <button class="preview-rm-btn" @click="removeMockAttr(i)">×</button>
+              </div>
+            </div>
 
-            <label class="preview-label">模拟技能 (JSON)</label>
-            <textarea v-model="mockSkillRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟技能 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟技能</span>
+                <button class="preview-add-btn" @click="addMockSkill">+ 添加</button>
+              </div>
+              <div v-for="(sk, i) in mockSkills" :key="i" class="preview-row">
+                <input v-model="sk.name" class="preview-row-name" placeholder="技能名" />
+                <input v-model.number="sk.value" type="number" class="preview-row-val" />
+                <button class="preview-rm-btn" @click="removeMockSkill(i)">×</button>
+              </div>
+            </div>
 
-            <label class="preview-label">模拟资源 (JSON)</label>
-            <textarea v-model="mockResourceRaw" class="preview-textarea" rows="3" />
+            <!-- 模拟资源 -->
+            <div class="preview-section">
+              <div class="preview-section-header">
+                <span class="preview-label">模拟资源</span>
+                <button class="preview-add-btn" @click="addMockResource">+ 添加</button>
+              </div>
+              <div v-for="(res, i) in mockResources" :key="i" class="preview-row">
+                <input v-model="res.name" class="preview-row-name" placeholder="资源名" />
+                <input v-model.number="res.current" type="number" class="preview-row-val" placeholder="当前" />
+                <span class="preview-row-sep">/</span>
+                <input v-model.number="res.max" type="number" class="preview-row-val" placeholder="最大" />
+                <button class="preview-rm-btn" @click="removeMockResource(i)">×</button>
+              </div>
+            </div>
 
             <button
               class="preview-run-btn"
@@ -584,6 +665,37 @@ defineExpose({
             </button>
 
             <div v-if="previewError" class="preview-error">{{ previewError }}</div>
+
+            <!-- 执行结果 -->
+            <template v-if="previewResult">
+              <div class="preview-result-block" :class="previewResult.success === false ? 'preview-result-block--fail' : 'preview-result-block--ok'">
+                <div class="preview-result-label">执行结果</div>
+                <div class="preview-result-text">{{ previewResult.result ?? (previewResult.success ? '成功' : '失败') }}</div>
+              </div>
+
+              <!-- 骰点记录 -->
+              <template v-if="previewResult.dice_rolls?.length">
+                <div class="preview-label preview-label--mt">骰点过程</div>
+                <table class="preview-table">
+                  <thead><tr><th>表达式</th><th>结果</th></tr></thead>
+                  <tbody>
+                    <tr v-for="(dr, i) in previewResult.dice_rolls" :key="i">
+                      <td>{{ dr.expression }}</td>
+                      <td class="preview-dice-val">{{ dr.value }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+
+              <!-- 节点日志 -->
+              <template v-if="previewResult.logs?.length">
+                <div class="preview-label preview-label--mt">节点日志 ({{ previewResult.logs.length }} 步)</div>
+                <div v-for="(log, i) in previewResult.logs" :key="i" class="preview-log-row">
+                  <span class="preview-log-node">{{ ATOM_DEFINITIONS[log.atom_type ?? '']?.label ?? log.node_id }}</span>
+                  <span class="preview-log-output">→ {{ JSON.stringify(log.output) }}</span>
+                </div>
+              </template>
+            </template>
           </div>
         </div>
       </div>
@@ -597,7 +709,7 @@ defineExpose({
   flex-direction: column;
   height: 100%;
   outline: none;
-  background: var(--color-bg-main, #12121a);
+  background: var(--surface-page);
 }
 
 /* ── 工具栏 ── */
@@ -606,8 +718,8 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  background: var(--color-bg-sidebar, #16161e);
-  border-bottom: 1px solid var(--color-border, #2a2a3e);
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-default);
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -621,20 +733,20 @@ defineExpose({
 .toolbar-btn {
   padding: 4px 10px;
   font-size: 12px;
-  background: var(--color-bg-card, #1e1e2e);
-  color: var(--color-text-primary, #e0e0e0);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.12s;
   white-space: nowrap;
 }
 
-.toolbar-btn:hover { background: var(--color-bg-hover, #2a2a3e); }
+.toolbar-btn:hover { background: var(--surface-hover); }
 
 .toolbar-btn--primary {
-  background: var(--color-primary, #7b68ee);
-  border-color: var(--color-primary, #7b68ee);
+  background: var(--color-primary, #5B8DB8);
+  border-color: var(--color-primary, #5B8DB8);
   color: #fff;
 }
 
@@ -651,7 +763,7 @@ defineExpose({
 
 .toolbar-zoom-slider {
   width: 80px;
-  accent-color: var(--color-primary, #7b68ee);
+  accent-color: var(--color-primary, #5B8DB8);
 }
 
 .toolbar-label { font-size: 12px; color: var(--color-text-secondary, #888); }
@@ -659,10 +771,10 @@ defineExpose({
 .toolbar-select {
   font-size: 12px;
   padding: 3px 6px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   max-width: 200px;
 }
 
@@ -688,14 +800,22 @@ defineExpose({
 .rule-canvas__flow {
   flex: 1;
   overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* 强制 VueFlow 根 div 填满容器 */
+.rule-canvas__flow :deep(.vue-flow) {
+  width: 100%;
+  height: 100%;
 }
 
 .rule-canvas__props {
   width: 280px;
   flex-shrink: 0;
   overflow-y: auto;
-  background: var(--color-bg-sidebar, #16161e);
-  border-left: 1px solid var(--color-border, #2a2a3e);
+  background: var(--surface-card);
+  border-left: 1px solid var(--border-default);
 }
 
 /* ── 画布内提示 ── */
@@ -753,10 +873,10 @@ defineExpose({
 .preview-input {
   width: 100%;
   padding: 5px 8px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   font-size: 12px;
   box-sizing: border-box;
 }
@@ -764,10 +884,10 @@ defineExpose({
 .preview-textarea {
   width: 100%;
   padding: 5px 8px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   font-size: 11px;
   font-family: monospace;
   resize: vertical;
@@ -777,7 +897,7 @@ defineExpose({
 .preview-run-btn {
   width: 100%;
   padding: 7px;
-  background: var(--color-primary, #7b68ee);
+  background: var(--color-primary, #5B8DB8);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -809,12 +929,48 @@ defineExpose({
 
 .rm-btn:hover { color: var(--color-error, #e74c3c); }
 
+/* ── 预览面板 - 结构化输入 ── */
+.preview-section { display: flex; flex-direction: column; gap: 4px; }
+.preview-section-header { display: flex; align-items: center; justify-content: space-between; }
+.preview-add-btn {
+  font-size: 11px; padding: 1px 6px;
+  background: none; border: 1px solid var(--border-default);
+  border-radius: 3px; color: var(--text-secondary); cursor: pointer;
+}
+.preview-add-btn:hover { color: var(--color-primary, #5B8DB8); border-color: var(--color-primary, #5B8DB8); }
+
+.preview-row { display: flex; align-items: center; gap: 4px; }
+.preview-row-name { flex: 1; min-width: 0; padding: 3px 6px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 3px; color: var(--text-primary); font-size: 12px; }
+.preview-row-val { width: 56px; flex-shrink: 0; padding: 3px 6px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 3px; color: var(--text-primary); font-size: 12px; }
+.preview-row-sep { color: var(--color-text-secondary, #888); font-size: 12px; }
+.preview-rm-btn { background: none; border: none; color: var(--color-text-secondary, #888); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+.preview-rm-btn:hover { color: var(--color-error, #e74c3c); }
+
+/* ── 预览结果展示 ── */
+.preview-label--mt { margin-top: 8px; }
+.preview-result-block {
+  padding: 8px 10px; border-radius: 6px; border-left: 3px solid;
+}
+.preview-result-block--ok { background: rgba(39, 174, 96, 0.12); border-color: #27ae60; }
+.preview-result-block--fail { background: rgba(231, 76, 60, 0.12); border-color: #e74c3c; }
+.preview-result-label { font-size: 10px; color: var(--color-text-secondary, #888); margin-bottom: 2px; }
+.preview-result-text { font-size: 13px; font-weight: 600; color: var(--color-text-primary, #e0e0e0); }
+
+.preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.preview-table th { color: var(--text-secondary); font-weight: 500; padding: 2px 4px; border-bottom: 1px solid var(--border-default); text-align: left; }
+.preview-table td { padding: 2px 4px; color: var(--color-text-primary, #e0e0e0); }
+.preview-dice-val { font-weight: 600; color: var(--node-accent, #7b68ee); }
+
+.preview-log-row { display: flex; gap: 6px; font-size: 11px; padding: 2px 0; border-bottom: 1px solid var(--border-default); }
+.preview-log-node { color: var(--color-text-secondary, #888); flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-log-output { color: var(--color-text-primary, #e0e0e0); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── 拓扑校验面板 ── */
 .validation-panel {
   min-width: 260px;
   max-width: 360px;
-  background: var(--color-bg-sidebar, #16161e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);

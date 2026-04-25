@@ -185,8 +185,8 @@ const categoryColors: Record<string, string> = {
 }
 
 .atom-node--selected {
-  border-color: var(--color-primary, #7b68ee);
-  box-shadow: 0 0 0 2px var(--color-primary, #7b68ee), 0 4px 16px rgba(0, 0, 0, 0.5);
+  border-color: var(--color-primary, #5B8DB8);
+  box-shadow: 0 0 0 2px var(--color-primary, #5B8DB8), 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .atom-node__header {

@@ -219,7 +219,7 @@ onMounted(loadModules);
 }
 .cover {
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #2563eb) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #5B8DB8) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;

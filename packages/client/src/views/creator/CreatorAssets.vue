@@ -206,9 +206,9 @@ onMounted(loadAssets);
   color: var(--text-secondary); transition: all var(--transition-fast);
 }
 .filter-pill.active {
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, transparent);
-  border-color: var(--color-primary, #2563eb);
-  color: var(--color-primary, #2563eb);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
+  border-color: var(--color-primary, #5B8DB8);
+  color: var(--color-primary, #5B8DB8);
   font-weight: 600;
 }
 

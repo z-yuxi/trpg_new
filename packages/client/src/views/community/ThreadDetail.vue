@@ -279,7 +279,7 @@ onMounted(fetchThread);
 .markdown-body :deep(blockquote) {
   margin: 0 0 var(--space-2);
   padding-left: var(--space-3);
-  border-left: 3px solid color-mix(in srgb, var(--color-primary, #2563eb) 45%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--color-primary, #5B8DB8) 45%, transparent);
   color: var(--text-secondary);
 }
 .markdown-body :deep(code) {

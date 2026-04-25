@@ -535,8 +535,8 @@ onUnmounted(() => {
 }
 
 .floor-item--first {
-  border-color: color-mix(in srgb, var(--color-primary, #2563eb) 30%, var(--color-card-border));
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 4%, var(--color-bg-card));
+  border-color: color-mix(in srgb, var(--color-primary, #5B8DB8) 30%, var(--color-card-border));
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 4%, var(--color-bg-card));
 }
 
 .floor-item--deleted {
@@ -566,7 +566,7 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 12%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 12%, transparent);
   color: var(--color-text-primary);
   font-size: var(--text-xs);
   font-weight: 700;
@@ -575,10 +575,10 @@ onUnmounted(() => {
 
 .floor-label {
   font-size: var(--text-xs);
-  color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #5B8DB8);
   padding: 0 6px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
 }
 
 .floor-actions {
@@ -605,8 +605,8 @@ onUnmounted(() => {
 }
 
 .action-btn:hover {
-  color: var(--color-primary, #2563eb);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, transparent);
+  color: var(--color-primary, #5B8DB8);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
 }
 
 .action-btn--liked {
@@ -693,7 +693,7 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   font-size: var(--text-xs);
-  color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #5B8DB8);
   padding: var(--space-1) 0;
   text-align: left;
 }
@@ -747,7 +747,7 @@ onUnmounted(() => {
   color: var(--color-text-muted);
   margin-bottom: var(--space-2);
   padding: var(--space-1) var(--space-2);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, var(--color-bg-secondary));
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 8%, var(--color-bg-secondary));
   border-radius: var(--radius-sm);
 }
 

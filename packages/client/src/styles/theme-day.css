@@ -5,20 +5,23 @@
 
 :root[data-theme='day'] {
   /* 主色 */
-  --color-primary:        #0f172a;   /* Slate 900 */
-  --color-primary-hover:  #1e293b;   /* Slate 800 */
-  --color-primary-active: #020617;   /* Slate 950 */
-  --color-primary-light:  rgba(15, 23, 42, 0.08);
+  --color-primary:        #5B8DB8;   /* 品牌雾霾蓝 */
+  --color-primary-hover:  #4A7A9F;
+  --color-primary-active: #3D6A8F;
+  --color-primary-light:  rgba(91, 141, 184, 0.12);
 
   /* 功能色 */
-  --color-info:        #2563eb;
-  --color-info-bg:     #eff6ff;
+  --color-info:        var(--color-primary);
+  --color-info-bg:     var(--color-primary-light);
   --color-success:     #16a34a;
   --color-success-bg:  #f0fdf4;
   --color-warning:     #f59e0b;
   --color-warning-bg:  #fffbeb;
-  --color-danger:      #dc2626;
-  --color-danger-bg:   #fef2f2;
+  --color-danger:        #B85450;
+  --color-danger-hover:  #A04743;
+  --color-danger-active: #8A3D3A;
+  --color-danger-light:  rgba(184, 84, 80, 0.1);
+  --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层 */
   --surface-page:     #f9fafb;
@@ -37,12 +40,12 @@
   /* 边框 */
   --border-default: #e5e7eb;
   --border-hover:   #d1d5db;
-  --border-active:  #0f172a;
+  --border-active:  var(--color-primary);
 
   /* 按钮专用 */
-  --btn-primary-bg:     #0f172a;
+  --btn-primary-bg:     var(--color-primary);
   --btn-primary-text:   #ffffff;
-  --btn-primary-hover:  #1e293b;
+  --btn-primary-hover:  var(--color-primary-hover);
 
   --btn-secondary-bg:     #ffffff;
   --btn-secondary-text:   #374151;
@@ -61,7 +64,7 @@
   --color-card-border:    #e5e7eb;
   --color-input-bg:       #f9fafb;
   --color-input-border:   #e5e7eb;
-  --color-input-focus:    #0f172a;
+  --color-input-focus:    var(--color-primary);
   --color-text-primary:   #111827;
   --color-text-secondary: #6b7280;
   --color-text-muted:     #9ca3af;
@@ -70,12 +73,12 @@
   --color-tag-default-text: #475569;
 
   /* Element Plus 覆盖 */
-  --el-color-primary:        #2563eb;
-  --el-color-primary-light-3: #93bbfd;
-  --el-color-primary-light-5: #9dc0fe;
-  --el-color-primary-light-7: #bdd5fe;
-  --el-color-primary-light-9: #deeaff;
-  --el-color-primary-dark-2:  #1d4ed8;
+  --el-color-primary:        #5B8DB8;
+  --el-color-primary-light-3: rgba(91, 141, 184, 0.7);
+  --el-color-primary-light-5: rgba(91, 141, 184, 0.5);
+  --el-color-primary-light-7: rgba(91, 141, 184, 0.3);
+  --el-color-primary-light-9: rgba(91, 141, 184, 0.1);
+  --el-color-primary-dark-2:  #4A7A9F;
   --el-bg-color:             #ffffff;
   --el-bg-color-page:        #f9fafb;
   --el-text-color-primary:   #111827;

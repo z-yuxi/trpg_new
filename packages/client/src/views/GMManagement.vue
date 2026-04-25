@@ -592,9 +592,9 @@ onMounted(() => {
 }
 
 .gm-nav-item.active {
-  color: var(--color-primary, #2563eb);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 8%, var(--color-page-bg));
-  border-left-color: var(--color-primary, #2563eb);
+  color: var(--color-primary, #5B8DB8);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 8%, var(--color-page-bg));
+  border-left-color: var(--color-primary, #5B8DB8);
   font-weight: 600;
 }
 
@@ -644,7 +644,7 @@ onMounted(() => {
 
   .gm-nav-item.active {
     border-left-color: transparent;
-    border-bottom-color: var(--color-primary, #2563eb);
+    border-bottom-color: var(--color-primary, #5B8DB8);
   }
 }
 </style>

@@ -292,7 +292,7 @@ onMounted(async () => {
 .extra-item {
   padding: var(--space-3);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 7%, var(--color-bg-secondary));
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 7%, var(--color-bg-secondary));
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -324,7 +324,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 12%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 12%, transparent);
   color: var(--color-text-primary);
   font-size: var(--text-xs);
   font-weight: 700;

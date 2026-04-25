@@ -62,21 +62,24 @@
      2.2 语义化颜色变量 — 日间模式默认值
      =================================================== */
 
-  /* 主色（Slate 900 - 近黑） */
-  --color-primary:        var(--slate-900);
-  --color-primary-hover:  var(--slate-800);
-  --color-primary-active: #020617;           /* Slate 950 */
-  --color-primary-light:  rgba(15, 23, 42, 0.08);
+  /* 主色（品牌雾霾蓝） */
+  --color-primary:        #5B8DB8;
+  --color-primary-hover:  #4A7A9F;
+  --color-primary-active: #3D6A8F;
+  --color-primary-light:  rgba(91, 141, 184, 0.12);
 
   /* 功能色 */
-  --color-info:        var(--blue-600);
-  --color-info-bg:     var(--blue-50);
+  --color-info:        var(--color-primary);
+  --color-info-bg:     var(--color-primary-light);
   --color-success:     var(--green-600);
   --color-success-bg:  var(--green-50);
   --color-warning:     var(--amber-500);
   --color-warning-bg:  var(--amber-50);
-  --color-danger:      var(--red-600);
-  --color-danger-bg:   var(--red-50);
+  --color-danger:        #B85450;
+  --color-danger-hover:  #A04743;
+  --color-danger-active: #8A3D3A;
+  --color-danger-light:  rgba(184, 84, 80, 0.1);
+  --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层 */
   --surface-page:     var(--gray-50);
@@ -95,7 +98,7 @@
   /* 边框 */
   --border-default: var(--gray-200);
   --border-hover:   var(--gray-300);
-  --border-active:  var(--slate-900);
+  --border-active:  var(--color-primary);
 
   /* 按钮专用（日间：深色背景 + 白字） */
   --btn-primary-bg:     var(--color-primary);
@@ -131,6 +134,7 @@
   --space-10: 40px;
   --space-11: 44px;
   --space-12: 48px;
+  --space-16: 64px;
 
   /* ===================================================
      2.4 圆角（Radius）

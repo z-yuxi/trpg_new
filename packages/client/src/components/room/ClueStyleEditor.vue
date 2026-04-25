@@ -132,13 +132,13 @@ async function saveStyle() {
 .theme-item:hover { background: var(--surface-hover); }
 
 .theme-item.active {
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 10%, transparent);
-  border-color: var(--color-primary, #2563eb);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
+  border-color: var(--color-primary, #5B8DB8);
 }
 
 .theme-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
 .theme-desc { font-size: var(--text-xs); color: var(--text-muted); flex: 1; }
-.theme-check { margin-left: auto; color: var(--color-primary, #2563eb); font-size: var(--text-sm); }
+.theme-check { margin-left: auto; color: var(--color-primary, #5B8DB8); font-size: var(--text-sm); }
 
 .preview-area { flex: 1; min-width: 0; }
 

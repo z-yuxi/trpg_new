@@ -4,21 +4,24 @@
    ============================================================ */
 
 :root[data-theme='night'] {
-  /* 主色反色 — Slate 200 背景 + Slate 900 文字 */
-  --color-primary:        #e2e8f0;   /* Slate 200 */
-  --color-primary-hover:  #f1f5f9;   /* Slate 100，更浅 */
-  --color-primary-active: #cbd5e1;   /* Slate 300，稍深 */
-  --color-primary-light:  rgba(226, 232, 240, 0.15);
+  /* 主色提亮（品牌提亮蓝） */
+  --color-primary:        #6B9DC8;
+  --color-primary-hover:  #7AACE0;
+  --color-primary-active: #5A8DB8;
+  --color-primary-light:  rgba(91, 141, 184, 0.2);
 
   /* 功能色（提亮，适配深色背景） */
-  --color-info:        #3b82f6;
-  --color-info-bg:     rgba(59, 130, 246, 0.15);
+  --color-info:        var(--color-primary);
+  --color-info-bg:     var(--color-primary-light);
   --color-success:     #22c55e;
   --color-success-bg:  rgba(34, 197, 94, 0.15);
   --color-warning:     #f59e0b;
   --color-warning-bg:  rgba(245, 158, 11, 0.15);
-  --color-danger:      #ef4444;
-  --color-danger-bg:   rgba(239, 68, 68, 0.15);
+  --color-danger:        #C86460;
+  --color-danger-hover:  #D8736F;
+  --color-danger-active: #B85A56;
+  --color-danger-light:  rgba(184, 84, 80, 0.15);
+  --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层反色 */
   --surface-page:     #030712;   /* Gray 950 */
@@ -37,12 +40,12 @@
   /* 边框 */
   --border-default: rgba(255, 255, 255, 0.10);
   --border-hover:   rgba(255, 255, 255, 0.20);
-  --border-active:  #e2e8f0;   /* Slate 200 */
+  --border-active:  var(--color-primary);
 
-  /* 按钮反色（浅色背景 + 深色文字） */
-  --btn-primary-bg:     #e2e8f0;   /* Slate 200 */
-  --btn-primary-text:   #0f172a;   /* Slate 900 */
-  --btn-primary-hover:  #f1f5f9;   /* Slate 100 */
+  /* 按鈕反色（品牌蓝背景 + 白字） */
+  --btn-primary-bg:     var(--color-primary);
+  --btn-primary-text:   #ffffff;
+  --btn-primary-hover:  var(--color-primary-hover);
 
   --btn-secondary-bg:     transparent;
   --btn-secondary-text:   #d1d5db;
@@ -61,7 +64,7 @@
   --color-card-border:    rgba(255, 255, 255, 0.10);
   --color-input-bg:       #1f2937;
   --color-input-border:   rgba(255, 255, 255, 0.10);
-  --color-input-focus:    #e2e8f0;
+  --color-input-focus:    var(--color-primary);
   --color-text-primary:   #f9fafb;
   --color-text-secondary: #9ca3af;
   --color-text-muted:     #6b7280;

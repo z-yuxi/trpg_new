@@ -24,6 +24,8 @@ interface VersionItem {
   version_number: string;
   changelog: string;
   created_at: string;
+  created_by?: string;
+  snapshot_hash?: string;
 }
 
 const versions = ref<VersionItem[]>([]);
@@ -211,8 +213,10 @@ function formatDate(dateStr: string): string {
             <div class="version-item__header">
               <span class="version-num">{{ v.version_number }}</span>
               <span class="version-date">{{ formatDate(v.created_at) }}</span>
+              <span v-if="v.created_by" class="version-author">by {{ v.created_by }}</span>
             </div>
             <div v-if="v.changelog" class="version-changelog">{{ v.changelog }}</div>
+            <div v-if="v.snapshot_hash" class="version-hash">SHA: {{ v.snapshot_hash.slice(0, 8) }}</div>
             <button
               class="action-btn action-btn--sm action-btn--danger"
               :disabled="rollbacking === v.id"
@@ -272,19 +276,19 @@ function formatDate(dateStr: string): string {
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   font-size: 12px;
 }
 
 .version-select {
   padding: 5px 8px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   font-size: 12px;
   flex: 1;
 }
@@ -294,17 +298,17 @@ function formatDate(dateStr: string): string {
 .action-btn {
   padding: 5px 10px;
   font-size: 12px;
-  background: var(--color-bg-card, #1e1e2e);
-  color: var(--color-text-primary, #e0e0e0);
-  border: 1px solid var(--color-border, #3a3a4e);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.12s;
 }
-.action-btn:hover { background: var(--color-bg-hover, #2a2a3e); }
+.action-btn:hover { background: var(--surface-hover); }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.action-btn--primary { background: var(--color-primary, #7b68ee); border-color: var(--color-primary, #7b68ee); color: #fff; }
+.action-btn--primary { background: var(--color-primary, #5B8DB8); border-color: var(--color-primary, #5B8DB8); color: #fff; }
 .action-btn--primary:hover { opacity: 0.85; }
 .action-btn--danger { border-color: var(--color-error, #e74c3c); color: var(--color-error, #e74c3c); font-size: 11px; padding: 3px 8px; }
 .action-btn--sm { font-size: 11px; padding: 3px 8px; }
@@ -335,21 +339,23 @@ function formatDate(dateStr: string): string {
   top: 14px;
   bottom: 0;
   width: 1px;
-  background: var(--color-border, #3a3a4e);
+  background: var(--border-default);
 }
 .version-item:last-child::before { display: none; }
 .version-item__dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-primary, #7b68ee);
+  background: var(--color-primary, #5B8DB8);
   flex-shrink: 0;
   margin-top: 2px;
 }
 .version-item__content { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .version-item__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.version-num { font-size: 12px; font-weight: 600; color: var(--color-primary, #7b68ee); }
+.version-num { font-size: 12px; font-weight: 600; color: var(--color-primary, #5B8DB8); }
 .version-date { font-size: 11px; color: var(--color-text-secondary, #888); }
+.version-author { font-size: 11px; color: var(--color-text-secondary, #888); font-style: italic; }
+.version-hash { font-size: 10px; color: var(--color-text-secondary, #666); font-family: monospace; margin-top: 2px; }
 .version-changelog { font-size: 12px; color: var(--color-text-secondary, #aaa); }
 
 .loading-text, .empty-text {

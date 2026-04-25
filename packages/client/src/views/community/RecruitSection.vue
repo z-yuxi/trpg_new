@@ -354,7 +354,7 @@ onMounted(loadRulesets);
   gap: var(--space-3);
   padding: var(--space-4);
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-primary, #2563eb) 6%, var(--color-bg-secondary));
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 6%, var(--color-bg-secondary));
 }
 .field-panel__title { font-size: var(--text-base); font-weight: 700; color: var(--text-primary); }
 .field-panel__desc { color: var(--text-muted); font-size: var(--text-sm); }
