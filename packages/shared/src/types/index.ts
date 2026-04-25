@@ -31,6 +31,9 @@ export interface Campaign {
   name: string;
   ruleset_id: string;
   module_id: string | null;
+  cover_url: string | null;
+  module_name: string | null;
+  ruleset_name: string;
   gm_user_id: string;
   assistant_gm_ids: string[];
   global_story_time: StoryTime;
@@ -351,7 +354,22 @@ export interface RulesetVersion {
 
 /** 两个版本之间的 diff */
 export interface RulesetVersionDiff {
-  added_nodes: string[];    // node_id 列表
+  nodes: {
+    added: Array<{ node_id: string; atom_type: string }>;
+    removed: Array<{ node_id: string; atom_type: string }>;
+    modified: Array<{ node_id: string; atom_type: string; changed_fields: string[] }>;
+  };
+  connections: {
+    added: Array<{ source: string; target: string; sourceHandle?: string; targetHandle?: string }>;
+    removed: Array<{ source: string; target: string; sourceHandle?: string; targetHandle?: string }>;
+  };
+  commands: {
+    added: string[];
+    removed: string[];
+    modified: string[];
+  };
+  // 旧字段兼容（废弃，勿新增使用）
+  added_nodes: string[];
   removed_nodes: string[];
   modified_nodes: string[];
   added_connections: string[];
@@ -373,10 +391,11 @@ export interface MergeConflict {
 }
 
 export interface MergeResult {
+  status: 'clean' | 'conflicts';
   merged_graph: {
     atoms: object[];
     connections: object[];
-  };
+  } | null;
   conflicts: MergeConflict[];
 }
 

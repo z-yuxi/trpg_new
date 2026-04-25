@@ -66,10 +66,10 @@ onMounted(async () => {
     <section class="banner">
       <div class="banner-inner">
         <h1 class="banner-title">开始冒险</h1>
-        <p class="banner-sub">与志同道合的玩家共同探索桌游世界</p>
+        <p class="banner-subtitle">与志同道合的玩家共同探索桌游世界</p>
         <div class="banner-actions">
           <button class="btn-primary" @click="router.push('/campaigns')">我的战役</button>
-          <button class="btn-ghost" @click="router.push('/community/recruit')">组团招募</button>
+          <button class="btn-secondary" @click="router.push('/community/recruit')">组团招募</button>
         </div>
       </div>
     </section>
@@ -89,7 +89,12 @@ onMounted(async () => {
           </div>
           <div v-else class="campaign-scroll">
             <div v-for="c in campaigns" :key="c.id" class="campaign-card" @click="router.push(`/room/${c.id}`)">
-              <div class="campaign-cover">{{ c.name?.charAt(0) }}</div>
+              <div class="campaign-cover">
+                <img v-if="c.cover_url" class="cover-image" :src="c.cover_url" :alt="c.name" />
+                <div v-else class="cover-fallback" aria-hidden="true">
+                  <SvgIcon :name="c.module_id ? 'icon-market' : 'icon-ruleset'" :size="40" class="fallback-icon" />
+                </div>
+              </div>
               <div class="campaign-info">
                 <div class="campaign-name">{{ c.name }}</div>
                 <div class="campaign-meta">
@@ -114,7 +119,7 @@ onMounted(async () => {
             <h2 class="section-title">快速组队入口</h2>
           </div>
           <div class="quick-grid">
-            <button v-for="item in quickActions" :key="item.title" class="quick-card" @click="router.push(item.path)">
+            <button v-for="item in quickActions" :key="item.title" class="quick-entry-card" @click="router.push(item.path)">
               <strong>{{ item.title }}</strong>
               <span>{{ item.desc }}</span>
             </button>
@@ -180,20 +185,55 @@ onMounted(async () => {
 
 <style scoped>
 .home-page { max-width: 1100px; margin: 0 auto; padding: 0 var(--space-4) var(--space-8); }
-.banner { background: var(--slate-900); border-radius: var(--radius-lg); padding: var(--space-8) var(--space-6); margin-bottom: var(--space-6); color: #fff; }
-.banner-title { font-size: 32px; font-weight: 800; margin: 0 0 var(--space-2); }
-.banner-sub { font-size: var(--text-base); opacity: 0.88; margin: 0 0 var(--space-5); }
+.banner {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-6);
+  margin-bottom: var(--space-6);
+}
+.banner-title { font-size: 32px; font-weight: 800; margin: 0 0 var(--space-2); color: var(--text-inverse); }
+.banner-subtitle { font-size: var(--text-base); color: rgba(255, 255, 255, 0.85); margin: 0 0 var(--space-5); }
 .banner-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
-.btn-primary { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: #fff; color: var(--slate-900); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
-.btn-ghost { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: 2px solid rgba(255,255,255,0.6); background: none; color: #fff; font-size: var(--text-sm); cursor: pointer; }
+.btn-primary {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.btn-primary:hover { background: var(--btn-primary-hover); }
+.btn-secondary {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
 .content-layout { display: grid; grid-template-columns: 1fr 280px; gap: var(--space-6); align-items: start; }
 .main-col { min-width: 0; }
 .side-col { display: flex; flex-direction: column; gap: var(--space-4); }
 .section { margin-bottom: var(--space-7); }
 .quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
-.quick-card { display: flex; flex-direction: column; gap: var(--space-1); text-align: left; padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--radius-xl); background: var(--surface-card); cursor: pointer; box-shadow: var(--shadow-sm); }
-.quick-card strong { color: var(--text-primary); }
-.quick-card span { color: var(--text-secondary); font-size: var(--text-sm); }
+.quick-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: left;
+  padding: var(--space-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.quick-entry-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-md); }
+.quick-entry-card strong { color: var(--text-primary); }
+.quick-entry-card span { color: var(--text-secondary); font-size: var(--text-sm); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
 .section-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0; }
 .see-all { background: none; border: none; color: var(--color-accent); font-size: var(--text-sm); cursor: pointer; }
@@ -203,7 +243,10 @@ onMounted(async () => {
 .campaign-scroll::-webkit-scrollbar { display: none; }
 .campaign-card { min-width: 180px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; flex-shrink: 0; transition: border-color var(--transition-fast); }
 .campaign-card:hover { border-color: var(--border-hover); }
-.campaign-cover { height: 80px; background: var(--slate-800); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: rgba(255,255,255,0.7); }
+.campaign-cover { height: 120px; background: var(--surface-hover); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.cover-image { width: 100%; height: 100%; object-fit: cover; }
+.cover-fallback { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.fallback-icon { color: var(--color-primary); opacity: 0.5; }
 .campaign-info { padding: var(--space-3); }
 .campaign-name { font-weight: 600; font-size: var(--text-sm); color: var(--text-primary); margin-bottom: var(--space-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .campaign-meta { display: flex; align-items: center; gap: var(--space-2); }

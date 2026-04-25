@@ -3,12 +3,21 @@ import { generateId, generateRoomCode } from '@trpg/shared';
 import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, GridOverlay, ScheduledMove, StoryTime } from '@trpg/shared';
 
 function rowToCampaign(row: Record<string, unknown>): Campaign {
+  const moduleCover = typeof row['module_cover_url'] === 'string' && row['module_cover_url']
+    ? row['module_cover_url'] as string
+    : null;
+  const rulesetCover = typeof row['ruleset_cover_url'] === 'string' && row['ruleset_cover_url']
+    ? row['ruleset_cover_url'] as string
+    : null;
   return {
     id: row['id'] as string,
     room_code: row['room_code'] as string,
     name: row['name'] as string,
     ruleset_id: row['ruleset_id'] as string,
     module_id: row['module_id'] as string | null,
+    cover_url: moduleCover ?? rulesetCover,
+    module_name: (row['module_name'] as string | null) ?? null,
+    ruleset_name: (row['ruleset_name'] as string | null) ?? '',
     gm_user_id: row['gm_user_id'] as string,
     assistant_gm_ids: typeof row['assistant_gm_ids'] === 'string'
       ? JSON.parse(row['assistant_gm_ids'] as string)
@@ -109,16 +118,34 @@ export class CampaignService {
   }
 
   async findByUserId(user_id: string): Promise<Campaign[]> {
-    const gmQuery = db('campaigns')
-      .select('campaigns.*', db.raw("'gm' as role"))
-      .where({ gm_user_id: user_id });
+    const gmQuery = db('campaigns as c')
+      .leftJoin('modules as m', 'm.id', 'c.module_id')
+      .leftJoin('rulesets as r', 'r.id', 'c.ruleset_id')
+      .select(
+        'c.*',
+        'm.name as module_name',
+        'm.cover_url as module_cover_url',
+        'r.name as ruleset_name',
+        db.raw('NULL as ruleset_cover_url'),
+        db.raw("'gm' as role"),
+      )
+      .where({ 'c.gm_user_id': user_id });
 
     const playerQuery = db('campaigns as c')
       .join('character_scene_states as css', 'css.campaign_id', 'c.id')
       .join('character_sheets as cs', 'cs.id', 'css.character_id')
+      .leftJoin('modules as m', 'm.id', 'c.module_id')
+      .leftJoin('rulesets as r', 'r.id', 'c.ruleset_id')
       .where('cs.user_id', user_id)
       .andWhereNot('c.gm_user_id', user_id)
-      .select('c.*', db.raw("'player' as role"));
+      .select(
+        'c.*',
+        'm.name as module_name',
+        'm.cover_url as module_cover_url',
+        'r.name as ruleset_name',
+        db.raw('NULL as ruleset_cover_url'),
+        db.raw("'player' as role"),
+      );
 
     const rows = await gmQuery
       .union(playerQuery)
