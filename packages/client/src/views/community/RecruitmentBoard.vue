@@ -165,7 +165,8 @@ onMounted(loadPosts);
     </div>
     <EmptyState
       v-else-if="posts.length === 0"
-      icon-name="state-empty"
+      icon-name=""
+      illustration-name="illust-empty"
       title="暂无招募帖"
       description="暂无符合条件的招募帖，换个筛选条件试试。"
     />

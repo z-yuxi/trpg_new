@@ -39,4 +39,3 @@ export const CheckBlockExtension = Node.create({
     return VueNodeViewRenderer(CheckBlockView as any);
   },
 });
-

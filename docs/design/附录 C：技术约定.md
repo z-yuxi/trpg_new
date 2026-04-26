@@ -83,6 +83,7 @@
 | `/` | 首页 | 未登录跳转 `/login` |
 | `/login` | 登录/注册 | |
 | `/community` | 广场 | 招募帖列表 |
+| `/assets/modules/:id` | 模组详情 | 模组介绍、规则包信息、招募入口 |
 | `/my-campaigns` | 我的跑团 | 跑团列表 |
 | `/room/:id` | 跑团房间（叙事模式） | 主要游戏界面，三栏聊天布局 |
 | `/campaign/:id/gm/:module` | GM 导演模式 | 全屏管理页面；`module` 可为 `now`/`scenes`/`npcs`/`clues`/`timeline`/`settings` |
@@ -945,11 +946,21 @@ CREATE TABLE recruitment_posts (
   title VARCHAR(128) NOT NULL,
   campaign_id VARCHAR(64) NULL,
   ruleset_id VARCHAR(64) NOT NULL,
+  module_id VARCHAR(64) NULL COMMENT '关联模组ID，用于模组详情精确筛选招募帖',
+  module_name VARCHAR(128) NULL COMMENT '关联模组名称冗余，用于历史兼容与展示',
   player_count_max INT NOT NULL,
   status ENUM('open', 'closed', 'full') DEFAULT 'open',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_recruitment_module_status_created (module_id, status, created_at),
+  INDEX idx_recruitment_module_name (module_name)
 );
 ```
+
+模组直达招募查询约定：
+
+1. 接口：`GET /api/v1/recruitment?module_id={module_id}&status=open&page=1&limit=10`
+2. 过滤优先级：`module_id` 精确匹配 > `module_name` 历史兼容模糊匹配。
+3. 历史帖子迁移前允许 `module_id` 为空；新发布招募帖要求同时写入 `module_id` 与 `module_name`。
 
 ---
 ## 29. 第三方服务降级策略
@@ -1139,7 +1150,7 @@ async function queryWithTimeFilter(
 | 400 | TIME_ROLLBACK_DENIED | 剧情时间不能回退 |
 | 400 | SCENE_NOT_ACTIVE | 目标场景已归档或隐藏，不可进入 |
 | 400 | SCENE_DELETE_PROTECTED | 场景有历史数据，不可物理删除，请使用归档 |
-| 403 | OB_EXPORT_DENIED | 旁观者无法导出日志 |
+| 403 | FORBIDDEN | 无权限导出日志（含旁观者、非团成员、越权视角请求） |
 | 409 | CONCURRENT_APPROVE | 另一位GM正在审批同一移动请求 |
 
 ### C.6 Socket.IO 事件清单（新增）

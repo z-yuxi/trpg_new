@@ -5,7 +5,7 @@ import SvgIcon from '../components/SvgIcon.vue';
 const route = useRoute();
 
 const navItems = [
-  { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者面板' },
+  { path: '/creator/dashboard',  icon: 'icon-npc',       label: '创作者专区' },
   { path: '/creator/workshop',   icon: 'icon-list',      label: '规则工坊' },
   { path: '/creator/modules',    icon: 'icon-book',      label: '模组编辑器' },
   { path: '/creator/assets',     icon: 'icon-dice',      label: '素材库' },
@@ -21,7 +21,7 @@ function isActive(path: string) {
   <div class="creator-layout">
     <!-- 左侧导航 -->
     <aside class="creator-sidebar">
-      <div class="sidebar-title">创作台</div>
+      <div class="sidebar-title">创作者专区</div>
       <nav class="sidebar-nav">
         <RouterLink
           v-for="item in navItems"

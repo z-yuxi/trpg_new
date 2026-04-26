@@ -5,6 +5,13 @@ import { authMiddleware } from '../middleware/auth';
 import { campaignService, scheduledMoveService } from '../services/campaign-service';
 import { clueService } from '../services/clue-service';
 import { characterInstanceService } from '../services/character-sheet-service';
+import {
+  grantObPermission,
+  revokeObPermission,
+  canManageSceneObPermission,
+  listSceneActiveObPermissions,
+  getSceneActiveObPermissionMap,
+} from '../services/scene-ob-permission-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { generateId, snowflake } from '@trpg/shared';
@@ -19,6 +26,10 @@ const createSchema = z.object({
   name: z.string().min(1),
   ruleset_id: z.string().min(1),
   module_id: z.string().optional(),
+});
+
+const sceneObPermissionSchema = z.object({
+  user_id: z.string().min(1),
 });
 
 function parseStoryTime(value: unknown): StoryTime | null {
@@ -157,7 +168,14 @@ router.post('/:id/scenes', async (req, res) => {
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scenes' }); return; }
     const id = generateId();
-    await db('scenes').insert({ id, campaign_id: req.params.id, name: req.body.name, type: req.body.type, description: req.body.description ?? '' });
+    await db('scenes').insert({
+      id,
+      campaign_id: req.params.id,
+      name: req.body.name,
+      type: req.body.type,
+      description: req.body.description ?? '',
+      created_by: req.user!.id,
+    });
     const scene = await db('scenes').where({ id }).first();
     res.status(201).json(scene);
   } catch (err: any) {
@@ -176,6 +194,7 @@ router.put('/:id/scenes/:sceneId', async (req, res) => {
     if (req.body.description !== undefined) updates.description = req.body.description;
     if (req.body.type !== undefined) updates.type = req.body.type;
     if (req.body.history_visibility !== undefined) updates.history_visibility = req.body.history_visibility;
+    if (req.body.visible_history_count !== undefined) updates.visible_history_count = Number(req.body.visible_history_count);
     await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).update(updates);
     const scene = await db('scenes').where({ id: req.params.sceneId }).first();
     res.json(scene);
@@ -274,6 +293,96 @@ router.get('/:id/scenes/:sceneId/participants', async (req, res) => {
     res.json(participants);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// GET /api/campaigns/:id/scenes/:sceneId/ob-permissions
+router.get('/:id/scenes/:sceneId/ob-permissions', async (req, res) => {
+  try {
+    const scene = await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).first();
+    if (!scene) {
+      res.status(404).json({ error: 'SCENE_NOT_FOUND' });
+      return;
+    }
+
+    const canManage = await canManageSceneObPermission(req.params.sceneId, req.user!.id);
+    if (!canManage) {
+      res.status(403).json({ error: 'FORBIDDEN' });
+      return;
+    }
+
+    const permissions = await listSceneActiveObPermissions(req.params.sceneId);
+    res.json(permissions);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'List failed' });
+  }
+});
+
+// POST /api/campaigns/:id/scenes/:sceneId/ob-permissions/grant
+router.post('/:id/scenes/:sceneId/ob-permissions/grant', async (req, res) => {
+  const parsed = sceneObPermissionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const scene = await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).first();
+    if (!scene) {
+      res.status(404).json({ error: 'SCENE_NOT_FOUND' });
+      return;
+    }
+
+    const result = await grantObPermission(req.params.sceneId, parsed.data.user_id, req.user!.id);
+
+    // 推送到被授权用户的个人频道
+    const socketId = await redis.get(RedisKeys.userSocket(parsed.data.user_id));
+    if (socketId) {
+      (io.to(socketId) as any).emit('ob_permission_granted', {
+        campaign_id: result.campaignId,
+        scene_id: req.params.sceneId,
+        user_id: parsed.data.user_id,
+        granted_at: result.permission.granted_at,
+      });
+    }
+
+    res.status(result.alreadyGranted ? 200 : 201).json(result.permission);
+  } catch (err: any) {
+    const status = typeof err?.status === 'number' ? err.status : 500;
+    res.status(status).json({ error: err?.message ?? 'Grant failed' });
+  }
+});
+
+// POST /api/campaigns/:id/scenes/:sceneId/ob-permissions/revoke
+router.post('/:id/scenes/:sceneId/ob-permissions/revoke', async (req, res) => {
+  const parsed = sceneObPermissionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const scene = await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).first();
+    if (!scene) {
+      res.status(404).json({ error: 'SCENE_NOT_FOUND' });
+      return;
+    }
+
+    const result = await revokeObPermission(req.params.sceneId, parsed.data.user_id, req.user!.id);
+
+    const socketId = await redis.get(RedisKeys.userSocket(parsed.data.user_id));
+    if (socketId) {
+      (io.to(socketId) as any).emit('ob_permission_revoked', {
+        campaign_id: result.campaignId,
+        scene_id: req.params.sceneId,
+        user_id: parsed.data.user_id,
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    const status = typeof err?.status === 'number' ? err.status : 500;
+    res.status(status).json({ error: err?.message ?? 'Revoke failed' });
   }
 });
 
@@ -469,6 +578,8 @@ router.get('/:id/messages', async (req, res) => {
 
     // 查询当前用户在本团内的角色 ID 列表
     let userCharIds: string[] = [];
+    let activeVirtualSceneIds = new Set<string>();
+    let activeObPermissionMap = new Map<string, Date>();
     if (!isGm) {
       const charRows = await db('character_sheets')
         .where({ user_id: userId })
@@ -476,18 +587,33 @@ router.get('/:id/messages', async (req, res) => {
         .where('character_scene_states.campaign_id', campaignId)
         .select('character_sheets.id as char_id');
       userCharIds = (charRows as { char_id: string }[]).map((r) => r.char_id);
+
+      if (userCharIds.length > 0) {
+        const participationRows = await db('scene_participations as sp')
+          .join('scenes as s', 's.id', 'sp.scene_id')
+          .whereIn('sp.character_id', userCharIds)
+          .whereNull('sp.left_at')
+          .where('s.type', 'virtual')
+          .where('s.campaign_id', campaignId)
+          .select('sp.scene_id');
+        activeVirtualSceneIds = new Set((participationRows as { scene_id: string }[]).map((row) => row.scene_id));
+      }
+
+      activeObPermissionMap = await getSceneActiveObPermissionMap(campaignId, userId);
     }
 
-    let query = db('chat_messages')
-      .where({ campaign_id: campaignId })
-      .orderBy('id', 'asc')
+    let query = db('chat_messages as cm')
+      .leftJoin('scenes as s', 's.id', 'cm.scene_id')
+      .where('cm.campaign_id', campaignId)
+      .select('cm.*', 's.type as scene_type')
+      .orderBy('cm.id', 'asc')
       .limit(50);
     if (req.query.after_id) {
-      query = (query as any).where('id', '>', String(req.query.after_id));
+      query = (query as any).where('cm.id', '>', String(req.query.after_id));
     }
     const sceneId = req.query.scene_id as string | undefined;
     if (sceneId) {
-      query = query.where({ scene_id: sceneId });
+      query = query.where('cm.scene_id', sceneId);
 
       // history_visibility 限制（非 GM）
       if (!isGm && sceneId) {
@@ -507,9 +633,12 @@ router.get('/:id/messages', async (req, res) => {
             }
           } else if (scene.history_visibility === 'recent') {
             const limit = scene.visible_history_count ?? 20;
-            query = db('chat_messages')
-              .where({ campaign_id: campaignId, scene_id: sceneId })
-              .orderBy('id', 'desc')
+            query = db('chat_messages as cm')
+              .leftJoin('scenes as s', 's.id', 'cm.scene_id')
+              .where('cm.campaign_id', campaignId)
+              .where('cm.scene_id', sceneId)
+              .select('cm.*', 's.type as scene_type')
+              .orderBy('cm.id', 'desc')
               .limit(limit);
           }
         }
@@ -531,6 +660,21 @@ router.get('/:id/messages', async (req, res) => {
     const filtered = isGm
       ? serialized
       : serialized.filter((msg) => {
+          const msgSceneType = String((msg as Record<string, unknown>)['scene_type'] ?? '');
+          const msgSceneId = String((msg as Record<string, unknown>)['scene_id'] ?? '');
+          if (msgSceneType === 'virtual') {
+            if (activeVirtualSceneIds.has(msgSceneId)) {
+              // 参与者正常可见
+            } else {
+              const grantedAt = activeObPermissionMap.get(msgSceneId);
+              if (!grantedAt) return false;
+
+              const createdAtRaw = (msg as Record<string, unknown>)['created_at'];
+              const createdAt = createdAtRaw instanceof Date ? createdAtRaw : new Date(String(createdAtRaw));
+              if (Number.isNaN(createdAt.getTime())) return false;
+              if (createdAt < grantedAt) return false;
+            }
+          }
           if ((msg as Record<string, unknown>)['sender_user_id'] === userId) return true;
           const msgType = (msg as Record<string, unknown>)['message_type'] as string;
           if (msgType === 'system' || msgType === 'announcement') return true;

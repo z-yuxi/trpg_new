@@ -3,6 +3,7 @@ import path from 'path';
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { db } from '../db';
+import { getSceneActiveObPermissionMap } from './scene-ob-permission-service';
 import {
   buildILFDocument,
   serializeILF,
@@ -153,6 +154,21 @@ function isVisibleToViewer(visibleTo: string[] | null, userId: string, character
   if (visibleTo.includes('*')) return true;
   if (visibleTo.includes(userId)) return true;
   return visibleTo.some((id) => characterIds.includes(id));
+}
+
+async function getActiveVirtualSceneIds(campaignId: string, characterIds: string[]): Promise<Set<string>> {
+  if (characterIds.length === 0) return new Set<string>();
+
+  const rows = await db('scene_participations as sp')
+    .join('scenes as s', 's.id', 'sp.scene_id')
+    .whereIn('sp.character_id', characterIds)
+    .whereNull('sp.left_at')
+    .where('s.type', 'virtual')
+    .where('s.campaign_id', campaignId)
+    .select('sp.scene_id')
+    .catch(() => [] as Array<{ scene_id: string }>);
+
+  return new Set(rows.map((row) => row.scene_id));
 }
 
 function normalizeMessageType(type: string): ILFMessage['type'] {
@@ -559,6 +575,8 @@ export async function exportCampaignLog(options: ExportCampaignLogOptions): Prom
     .select('cs.id', 'cs.name')
     .catch(() => [] as ViewerCharacterRow[]);
   const viewerCharacterIds = viewerCharacters.map((row) => row.id);
+  const activeVirtualSceneIds = await getActiveVirtualSceneIds(options.campaignId, viewerCharacterIds);
+  const activeObPermissionMap = await getSceneActiveObPermissionMap(options.campaignId, effectiveUserId);
 
   let sceneQuery = db('scenes').where({ campaign_id: options.campaignId });
   if (options.sceneIds && options.sceneIds.length > 0) {
@@ -600,6 +618,17 @@ export async function exportCampaignLog(options: ExportCampaignLogOptions): Prom
 
       if (options.perspective === 'full') return true;
       if (gmHidden) return false;
+      if (row.scene_type === 'virtual' && row.scene_id) {
+        if (activeVirtualSceneIds.has(row.scene_id)) {
+          // 当前参与者可见
+        } else {
+          const grantedAt = activeObPermissionMap.get(row.scene_id);
+          if (!grantedAt) return false;
+          const messageCreatedAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
+          if (Number.isNaN(messageCreatedAt.getTime())) return false;
+          if (messageCreatedAt < grantedAt) return false;
+        }
+      }
       return isVisibleToViewer(visibleTo, effectiveUserId, viewerCharacterIds);
     })
     .map((row) => {

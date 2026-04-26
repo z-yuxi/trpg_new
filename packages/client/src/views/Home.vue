@@ -17,8 +17,8 @@ const recruitments = ref<any[]>([]);
 const loading = ref(false);
 
 const quickActions = [
-  { title: '找团', desc: '浏览招募并加入适合你的战役', path: '/community/recruit' },
-  { title: '做GM', desc: '创建战役并开始组织你的队伍', path: '/campaigns' },
+  { title: '找团', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
+  { title: '做GM', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
   { title: '发招募', desc: '快速发布你的跑团招募帖', path: '/community/recruit' },
   { title: '发求组', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
 ];
@@ -65,11 +65,11 @@ onMounted(async () => {
   <div class="home-page">
     <section class="banner">
       <div class="banner-inner">
-        <h1 class="banner-title">开始冒险</h1>
-        <p class="banner-subtitle">与志同道合的玩家共同探索桌游世界</p>
+        <h1 class="banner-title">共叙，专注人与人之间的共同叙事</h1>
+        <p class="banner-subtitle">在这里，与同好相聚，共同书写属于彼此的故事。</p>
         <div class="banner-actions">
-          <button class="btn-primary" @click="router.push('/campaigns')">我的战役</button>
-          <button class="btn-secondary" @click="router.push('/community/recruit')">组团招募</button>
+          <button class="btn-primary" @click="router.push('/campaigns')">我的团</button>
+          <button class="btn-secondary" @click="router.push('/community/recruit')">招募板</button>
         </div>
       </div>
     </section>
@@ -78,7 +78,7 @@ onMounted(async () => {
       <div class="main-col">
         <section class="section" v-if="authStore.isLoggedIn">
           <div class="section-header">
-            <h2 class="section-title">进行中的战役</h2>
+            <h2 class="section-title">进行中的团</h2>
             <button class="see-all" @click="router.push('/campaigns')">查看全部 ›</button>
           </div>
           <div v-if="loading" class="campaign-scroll">
@@ -108,7 +108,7 @@ onMounted(async () => {
 
         <section class="section" v-if="!authStore.isLoggedIn">
           <div class="cta-card">
-            <h3>加入战役，开始冒险</h3>
+            <h3>加入一场共叙，开始你的故事</h3>
             <p>登录后可以创建或参与跑团战役</p>
             <button class="btn-accent" @click="router.push('/login')">立即登录</button>
           </div>
@@ -173,7 +173,7 @@ onMounted(async () => {
         <div class="side-card">
           <div class="side-title">新手指南</div>
           <div class="guide-list">
-            <button class="guide-link" @click="router.push('/getting-started#join')">1. 创建或加入战役</button>
+            <button class="guide-link" @click="router.push('/getting-started#join')">1. 创建或加入团</button>
             <button class="guide-link" @click="router.push('/getting-started#assets')">2. 浏览规则集和模组</button>
             <button class="guide-link" @click="router.push('/getting-started#recruit')">3. 去社区发起或加入招募</button>
           </div>

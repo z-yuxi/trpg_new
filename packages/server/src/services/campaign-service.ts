@@ -2,7 +2,13 @@ import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
 import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, GridOverlay, ScheduledMove, StoryTime } from '@trpg/shared';
 
-function rowToCampaign(row: Record<string, unknown>): Campaign {
+type CampaignWithDisplay = Campaign & {
+  cover_url: string | null;
+  module_name: string | null;
+  ruleset_name: string;
+};
+
+function rowToCampaign(row: Record<string, unknown>): CampaignWithDisplay {
   const moduleCover = typeof row['module_cover_url'] === 'string' && row['module_cover_url']
     ? row['module_cover_url'] as string
     : null;
@@ -32,7 +38,7 @@ function rowToCampaign(row: Record<string, unknown>): Campaign {
     enable_grid_map: Boolean(row['enable_grid_map']),
     enable_scene_connections: Boolean(row['enable_scene_connections']),
     created_at: row['created_at'] as Date,
-  };
+  } as CampaignWithDisplay;
 }
 
 function rowToScene(row: Record<string, unknown>): Scene {

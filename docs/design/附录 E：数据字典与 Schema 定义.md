@@ -258,6 +258,44 @@ interface RecruitmentFormData {
 }
 ```
 
+### 2.3.1 模组直达招募查询结构
+
+```typescript
+interface RecruitmentListQuery {
+  page?: number;
+  limit?: number;
+  sort?: 'latest' | 'oldest' | 'hottest';
+  status?: 'open' | 'full' | 'grouped' | 'closed';
+  type?: 'gm_recruit' | 'player_seek';
+  ruleset_id?: string;
+  module_id?: string;      // 模组详情直达入口核心参数（精确筛选）
+  module_name?: string;    // 历史兼容参数（仅兜底，不建议新逻辑依赖）
+  keyword?: string;
+  tag?: string;
+}
+
+interface RecruitmentListItem {
+  id: string;
+  title: string;
+  type: 'gm_recruit' | 'player_seek';
+  ruleset_id: string;
+  ruleset_name?: string;
+  module_id?: string | null;
+  module_name?: string | null;
+  player_count_joined: number;
+  player_count_max: number;
+  status: 'open' | 'full' | 'closed';
+  status_view: 'open' | 'full' | 'grouped' | 'closed';
+  created_at: string;
+}
+```
+
+说明：
+
+1. 模组详情页进入招募列表时，必须传递 `module_id`。
+2. 若历史帖子尚未回填 `module_id`，可在后端兜底使用 `module_name` 参与补充查询。
+3. 新增/编辑招募帖时，应尽量保证 `module_id` 与 `module_name` 同步写入。
+
 ### 2.4 预约移动与位置数据结构
 
 TypeScript

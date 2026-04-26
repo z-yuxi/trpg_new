@@ -1,11 +1,13 @@
 <template>
   <node-view-wrapper class="block-view block-view--scene">
     <div class="block-header" @click.prevent="toggleCollapse">
-      <span class="block-icon">📍</span>
+      <span class="block-icon"><SvgIcon name="icon-scene" :size="14" /></span>
       <span class="block-title">{{ attrs.scene_name || '未命名场景' }}</span>
       <span class="block-tag">{{ sceneTypeLabel }}</span>
-      <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
-      <span class="block-chevron">{{ isCollapsed ? '▶' : '▼' }}</span>
+      <button class="block-del" title="删除块" @click.stop="deleteNode">
+        <SvgIcon name="icon-close" :size="12" />
+      </button>
+      <span class="block-chevron"><SvgIcon :name="isCollapsed ? 'icon-chevron-right' : 'icon-chevron-down'" :size="12" /></span>
     </div>
     <Transition name="blk">
       <div v-if="!isCollapsed" class="block-body">
@@ -20,7 +22,7 @@
             @change="ua({ scene_type: sv($event) })">
             <option value="spatial">实体场所</option>
             <option value="virtual">虚拟场景</option>
-            <option value="lobby">枢纽/大厅</option>
+            <option value="lobby">公共场</option>
           </select>
         </div>
         <div class="form-row">
@@ -51,6 +53,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
+import SvgIcon from '../../SvgIcon.vue';
 
 const props = defineProps<{
   node: any;
@@ -77,7 +80,9 @@ const sceneTypeLabel = computed(() => {
 .block-view--scene { border-left: 4px solid var(--color-success, #4caf50); }
 .block-header { display:flex; align-items:center; gap:6px; padding:6px 10px;
   cursor:pointer; user-select:none; background:var(--surface-hover); }
-.block-icon { font-size:14px; }
+.block-icon,
+.block-del,
+.block-chevron { display:inline-flex; align-items:center; justify-content:center; }
 .block-title { flex:1; font-weight:600; font-size:13px;
   color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .block-tag { font-size:11px; padding:1px 6px; border-radius:10px;

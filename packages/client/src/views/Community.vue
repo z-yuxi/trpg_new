@@ -27,7 +27,7 @@ function isBoardActive(key: string) {
         <div class="nav-section">
           <div class="section-label">招募板</div>
           <router-link to="/community/recruit" class="nav-link" :class="{ active: isRecruitActive() }">
-            组团招募
+            招募板
           </router-link>
         </div>
 

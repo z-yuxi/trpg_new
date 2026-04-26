@@ -59,7 +59,7 @@
       <!-- 左侧大纲 -->
       <aside class="outline-panel" :class="{ 'outline-panel--collapsed': outlineCollapsed }">
         <button class="outline-toggle" @click="outlineCollapsed = !outlineCollapsed">
-          {{ outlineCollapsed ? '▶' : '◀' }}
+          <SvgIcon name="icon-chevron-right" :size="12" class="outline-toggle-icon" :class="{ 'outline-toggle-icon--expanded': !outlineCollapsed }" />
         </button>
         <div v-if="!outlineCollapsed" class="outline-content">
           <div class="outline-title">大纲</div>
@@ -72,7 +72,8 @@
             @click="scrollToBlock(item.id)"
           >
             <span class="outline-indent" :style="{ paddingLeft: `${(item.level ?? 0) * 12}px` }">
-              {{ outlineItemIcon(item.type) }} {{ item.label }}
+              <SvgIcon :name="outlineItemIcon(item.type)" :size="12" class="outline-item-icon" />
+              {{ item.label }}
             </span>
           </div>
         </div>
@@ -110,6 +111,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDialog.vue';
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
+import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 import { extractOutline } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
@@ -255,7 +257,8 @@ async function handleExportPdf() {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    URL.revokeObjectURL(url);
+    // 延迟撤销，确保浏览器有足够时间读取 Blob 数据再触发下载
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
   } catch (err) {
     console.error('导出失败', err);
     alert(err instanceof Error ? err.message : '导出失败');
@@ -327,7 +330,15 @@ const noticeCountdown = computed(() => {
 const outlineItems = ref<ModuleOutlineItem[]>([]);
 
 function outlineItemIcon(type: ModuleOutlineItem['type']) {
-  return { heading: '§', scene: '📍', npc: '🧑', event: '⚡', clue: '🔍', check: '🎲', dialog: '💬' }[type] ?? '•';
+  return {
+    heading: 'icon-list',
+    scene: 'icon-scene',
+    npc: 'icon-npc',
+    event: 'icon-timeline',
+    clue: 'icon-clue',
+    check: 'icon-dice',
+    dialog: 'icon-broadcast',
+  }[type] ?? 'icon-list';
 }
 
 function scrollToBlock(id: string) {
@@ -554,6 +565,9 @@ function goBack() {
   justify-content: center;
 }
 
+.outline-toggle-icon { transition: transform 0.2s ease; }
+.outline-toggle-icon--expanded { transform: rotate(180deg); }
+
 .outline-content { padding: 12px 8px; overflow-y: auto; flex: 1; }
 .outline-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary, #888); text-transform: uppercase; margin-bottom: 8px; padding: 0 4px; }
 .outline-empty { font-size: 12px; color: var(--color-text-placeholder, #bbb); padding: 4px; }
@@ -571,6 +585,14 @@ function goBack() {
 }
 
 .outline-item:hover { background: var(--color-hover, #f5f5f5); }
+
+.outline-indent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.outline-item-icon { color: var(--text-muted, #666); flex-shrink: 0; }
 
 .outline-item--heading { font-weight: 500; }
 .outline-item--scene, .outline-item--npc, .outline-item--event,

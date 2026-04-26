@@ -57,7 +57,8 @@ onMounted(loadCharacters);
     </div>
     <EmptyState
       v-else-if="normalizedCards.length === 0"
-      icon-name="state-empty"
+      icon-name=""
+      illustration-name="illust-empty"
       title="还没有角色卡"
       description="点击右上角创建你的第一个角色。"
       action-text="新建角色"

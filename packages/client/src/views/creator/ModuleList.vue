@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElDialog, ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
 
 interface ModuleItem {
@@ -140,7 +141,13 @@ onMounted(loadModules);
     </div>
 
     <div v-if="loading" class="empty-state">正在加载模组…</div>
-    <div v-else-if="modules.length === 0" class="empty-state">还没有模组，先创建一个吧。</div>
+    <EmptyState
+      v-else-if="modules.length === 0"
+      icon-name=""
+      illustration-name="illust-empty"
+      title="还没有模组"
+      description="先创建一个模组，开始构建你的跑团内容。"
+    />
     <div v-else class="module-grid">
       <article v-for="item in modules" :key="item.id" class="module-card">
         <div class="cover">{{ (item.name || '?').slice(0, 1) }}</div>
@@ -239,13 +246,6 @@ onMounted(loadModules);
 .meta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-muted); font-size: var(--text-xs); }
 .notice-countdown { color: var(--color-warning, #f59e0b); font-weight: 600; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.empty-state {
-  padding: var(--space-10);
-  text-align: center;
-  color: var(--text-muted);
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-xl);
-}
 .dialog-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .dialog-form label { color: var(--text-secondary); font-size: var(--text-sm); }
 .input {

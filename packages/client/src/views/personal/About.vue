@@ -21,7 +21,8 @@ function openFeedback() {
     <button class="back-btn" @click="router.back()">&#8592; 返回</button>
     <div class="settings-card">
       <h2 class="title">关于我们</h2>
-      <p class="desc">TRPG 是一个面向桌游爱好者的协作跑团平台，提供战役管理、角色卡编辑与实时房间协作体验。</p>
+      <p class="brand-line">共叙，专注人与人之间的共同叙事</p>
+      <p class="desc">共叙是一个专注人与人之间共同叙事的跑团平台，提供团管理、角色卡编辑、规则支持与实时房间协作体验。</p>
 
       <div class="meta-row">
         <span class="meta-key">当前版本</span>
@@ -52,6 +53,7 @@ function openFeedback() {
 .back-btn:hover { color: var(--color-accent); }
 .settings-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-6); }
 .title { margin: 0 0 var(--space-2); font-size: var(--text-xl); font-weight: 700; color: var(--text-primary); }
+.brand-line { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--color-accent); font-weight: 600; }
 .desc { margin: 0 0 var(--space-5); font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.7; }
 .meta-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) 0; border-top: 1px solid var(--border-default); margin-bottom: var(--space-5); }
 .meta-key { font-size: var(--text-sm); color: var(--text-secondary); }

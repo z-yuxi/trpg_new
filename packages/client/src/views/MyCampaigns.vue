@@ -91,10 +91,11 @@ function copyCode(code: string) {
     </div>
     <EmptyState
       v-else-if="campaigns.length === 0"
-      icon-name="state-empty"
-      title="还没有战役"
-      description="创建或加入一个团，开始你的冒险旅程。"
-      action-text="创建战役"
+      icon-name=""
+      illustration-name="illust-empty"
+      title="还没有团"
+      description="创建或加入一个团，开始一段属于你的共同叙事。"
+      action-text="创建团"
       @action="showCreateDialog = true"
     />
     <div v-else class="campaigns-grid">

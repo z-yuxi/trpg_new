@@ -23,7 +23,12 @@
         class="toolbar-btn"
         :title="blk.label"
         @click="insertBlock(blk.id)"
-      >{{ blk.icon }}</button>
+      >
+        <span v-if="isSvgIconName(blk.icon)" class="toolbar-btn__icon">
+          <SvgIcon :name="blk.icon" :size="16" />
+        </span>
+        <span v-else>{{ blk.icon }}</span>
+      </button>
       <span class="toolbar-spacer" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
@@ -48,7 +53,10 @@
           :class="{ 'slash-item--active': i === slashActiveIndex }"
           @click="applySlashItem(item)"
         >
-          <span class="slash-item-icon">{{ item.icon }}</span>
+          <span class="slash-item-icon">
+            <SvgIcon v-if="isSvgIconName(item.icon)" :name="item.icon" :size="16" />
+            <span v-else>{{ item.icon }}</span>
+          </span>
           <span class="slash-item-label">{{ item.label }}</span>
         </div>
         <div v-if="filteredSlashItems.length === 0" class="slash-empty">无匹配</div>
@@ -63,6 +71,7 @@ import { useEditor, EditorContent } from '@tiptap/vue-3';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
+import SvgIcon from '../SvgIcon.vue';
 
 import { SceneBlockExtension } from './extensions/SceneBlockExtension';
 import { NpcBlockExtension } from './extensions/NpcBlockExtension';
@@ -130,6 +139,10 @@ function tryParse(s: string) {
 
 const wordCount = computed(() => editor.value?.storage['characterCount']?.characters() ?? 0);
 
+function isSvgIconName(icon: string) {
+  return icon.startsWith('icon-') || icon.startsWith('state-');
+}
+
 // 监听外部 modelValue 变化（加载时）
 watch(() => props.modelValue, (val) => {
   if (!editor.value) return;
@@ -143,12 +156,12 @@ watch(() => props.modelValue, (val) => {
 // ── 工具栏 ────────────────────────────────────────────────
 // 块类型工具栏按钮
 const blockButtons = [
-  { id: 'scene_block',  icon: '📍', label: '插入场景块' },
-  { id: 'npc_block',   icon: '🧑', label: '插入NPC块' },
-  { id: 'event_block', icon: '⚡', label: '插入事件块' },
-  { id: 'clue_block',  icon: '🔍', label: '插入线索块' },
-  { id: 'check_block', icon: '🎲', label: '插入检定块' },
-  { id: 'dialog_block',icon: '💬', label: '插入对话块' },
+  { id: 'scene_block', icon: 'icon-scene', label: '插入场景块' },
+  { id: 'npc_block', icon: 'icon-npc', label: '插入NPC块' },
+  { id: 'event_block', icon: 'icon-timeline', label: '插入事件块' },
+  { id: 'clue_block', icon: 'icon-clue', label: '插入线索块' },
+  { id: 'check_block', icon: 'icon-dice', label: '插入检定块' },
+  { id: 'dialog_block', icon: 'icon-broadcast', label: '插入对话块' },
 ];
 
 const toolbarButtons = computed(() => {
@@ -187,12 +200,12 @@ const allSlashItems: SlashItem[] = [
   { id: 'bullet', icon: '•', label: '无序列表', action: () => editor.value?.chain().focus().toggleBulletList().run() },
   { id: 'ordered', icon: '1.', label: '有序列表', action: () => editor.value?.chain().focus().toggleOrderedList().run() },
   { id: 'divider', icon: '—', label: '分割线', action: () => editor.value?.chain().focus().setHorizontalRule().run() },
-  { id: 'scene', icon: '📍', label: '场景块', action: () => insertBlock('scene_block') },
-  { id: 'npc', icon: '🧑', label: 'NPC 块', action: () => insertBlock('npc_block') },
-  { id: 'event', icon: '⚡', label: '事件块', action: () => insertBlock('event_block') },
-  { id: 'clue', icon: '🔍', label: '线索块', action: () => insertBlock('clue_block') },
-  { id: 'check', icon: '🎲', label: '检定块', action: () => insertBlock('check_block') },
-  { id: 'dialog', icon: '💬', label: '对话块', action: () => insertBlock('dialog_block') },
+  { id: 'scene', icon: 'icon-scene', label: '场景块', action: () => insertBlock('scene_block') },
+  { id: 'npc', icon: 'icon-npc', label: 'NPC 块', action: () => insertBlock('npc_block') },
+  { id: 'event', icon: 'icon-timeline', label: '事件块', action: () => insertBlock('event_block') },
+  { id: 'clue', icon: 'icon-clue', label: '线索块', action: () => insertBlock('clue_block') },
+  { id: 'check', icon: 'icon-dice', label: '检定块', action: () => insertBlock('check_block') },
+  { id: 'dialog', icon: 'icon-broadcast', label: '对话块', action: () => insertBlock('dialog_block') },
 ];
 
 const filteredSlashItems = computed(() => {
@@ -285,6 +298,9 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 8px;
   border: none;
   background: transparent;
@@ -294,6 +310,8 @@ onBeforeUnmount(() => {
   color: var(--color-text, #333);
   transition: background 0.15s;
 }
+
+.toolbar-btn__icon { display: inline-flex; align-items: center; justify-content: center; }
 
 .toolbar-btn:hover { background: var(--surface-hover); }
 .toolbar-btn.active { background: var(--color-primary-light); color: var(--color-primary); }
@@ -399,7 +417,14 @@ onBeforeUnmount(() => {
 .slash-item:hover,
 .slash-item--active { background: var(--surface-hover); }
 
-.slash-item-icon { width: 20px; text-align: center; font-size: 16px; }
+.slash-item-icon {
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 16px;
+}
 
 .slash-empty { padding: 12px; color: var(--color-text-secondary, #888); font-size: 13px; text-align: center; }
 

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue';
 import TTag from '../components/base/TTag.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
+import EmptyState from '../components/base/EmptyState.vue';
 import { api } from '../utils/api';
 import { useAuthStore } from '../stores/auth-store';
 
@@ -120,7 +121,7 @@ function ratingLabel(r?: number) {
     <!-- 顶部标题 -->
     <div class="plaza-header">
       <h1 class="plaza-title">广场</h1>
-      <p class="plaza-subtitle">发现模组和规则集，开启你的冒险</p>
+      <p class="plaza-subtitle">发现模组与规则集，找到适合你的叙事起点</p>
     </div>
 
     <!-- 顶部二级 Tab -->
@@ -176,10 +177,13 @@ function ratingLabel(r?: number) {
 
     <!-- 模组集市 -->
     <template v-else-if="activeTab === 'modules'">
-      <div v-if="filteredModules.length === 0" class="empty-state">
-        <p>暂无模组</p>
-        <p class="empty-hint">模组接口尚未开放，敬请期待</p>
-      </div>
+      <EmptyState
+        v-if="filteredModules.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        title="暂无模组"
+        description="模组接口尚未开放，敬请期待。"
+      />
       <div v-else class="card-grid">
         <div v-for="m in filteredModules" :key="m.id" class="module-card">
           <!-- 封面 -->
@@ -216,9 +220,13 @@ function ratingLabel(r?: number) {
 
     <!-- 规则集市 -->
     <template v-else-if="activeTab === 'rulesets'">
-      <div v-if="filteredRulesets.length === 0" class="empty-state">
-        <p>暂无已发布规则集</p>
-      </div>
+      <EmptyState
+        v-if="filteredRulesets.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        title="暂无已发布规则集"
+        description="当前还没有可浏览的发布内容。"
+      />
       <div v-else class="card-grid">
         <div v-for="rs in filteredRulesets" :key="rs.id" class="ruleset-card">
           <div class="ruleset-header">

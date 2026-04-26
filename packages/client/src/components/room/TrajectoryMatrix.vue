@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import SvgIcon from '../SvgIcon.vue';
 import type { StoryTime } from '@trpg/shared';
 import { api } from '../../utils/api';
 
@@ -63,11 +64,11 @@ function isMovingType(moveType: string): boolean {
 }
 
 function moveIcon(moveType: string): string {
-  if (moveType === 'scheduled') return '🚶';
-  if (moveType === 'force_move') return '⚡';
-  if (moveType === 'join') return '↗';
-  if (moveType === 'leave') return '↘';
-  return '•';
+  if (moveType === 'scheduled') return 'icon-history';
+  if (moveType === 'force_move') return 'icon-broadcast';
+  if (moveType === 'join') return 'icon-chevron-up';
+  if (moveType === 'leave') return 'icon-chevron-down';
+  return 'icon-more';
 }
 
 const visibleCharacters = computed(() => {
@@ -181,6 +182,7 @@ onUnmounted(() => {
                 :class="{ moving: isMovingType(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '') }"
               >
                 <span class="chip-icon">{{ moveIcon(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '') }}</span>
+                <span class="chip-icon"><SvgIcon :name="moveIcon(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '')" :size="10" /></span>
                 <span class="chip-text">{{ sceneShort(getSegmentAt(char.id, slot.day, slot.hour)?.scene_name ?? '') }}</span>
               </div>
             </td>
@@ -200,7 +202,7 @@ onUnmounted(() => {
             :class="{ moving: isMovingType(seg.move_type) }"
             :style="{ backgroundColor: sceneColor(seg.scene_id) }"
           >
-            <div class="mobile-seg-title">{{ moveIcon(seg.move_type) }} {{ seg.scene_name }}</div>
+            <div class="mobile-seg-title"><SvgIcon :name="moveIcon(seg.move_type)" :size="12" /> {{ seg.scene_name }}</div>
             <div class="mobile-seg-time">{{ formatTime(seg.from_time) }} - {{ seg.to_time ? formatTime(seg.to_time) : '进行中' }}</div>
           </div>
           <div v-if="char.segments.length === 0" class="mobile-empty">暂无记录</div>
@@ -271,7 +273,7 @@ onUnmounted(() => {
     rgba(255, 255, 255, 0) 8px
   );
 }
-.chip-icon { font-size: 10px; }
+.chip-icon { display: inline-flex; align-items: center; justify-content: center; }
 .chip-text { font-size: 11px; }
 
 .mobile-columns { display: flex; gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-1); }

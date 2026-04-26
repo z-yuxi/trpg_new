@@ -86,7 +86,8 @@ async function createNpc() {
       <label class="form-label">名称 *</label>
       <input v-model="newNpc.name" class="field-input" placeholder="NPC内部名称" />
       <button class="advanced-toggle" @click="showNpcAdvanced = !showNpcAdvanced">
-        {{ showNpcAdvanced ? '▲ 收起高级选项' : '▼ 展开高级选项' }}
+        <SvgIcon :name="showNpcAdvanced ? 'icon-chevron-up' : 'icon-chevron-down'" :size="12" />
+        {{ showNpcAdvanced ? '收起高级选项' : '展开高级选项' }}
       </button>
       <template v-if="showNpcAdvanced">
         <label class="form-label" style="margin-top:10px">显示名称</label>

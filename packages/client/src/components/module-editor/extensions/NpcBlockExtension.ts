@@ -39,4 +39,3 @@ export const NpcBlockExtension = Node.create({
     return VueNodeViewRenderer(NpcBlockView as any);
   },
 });
-

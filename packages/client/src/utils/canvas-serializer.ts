@@ -33,7 +33,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '掷骰',
     description: '掷骰子并返回结果',
     category: 'compute',
-    icon: '🎲',
+    icon: 'icon-dice',
     inputs: [
       { key: 'expression', label: '骰子表达式', type: 'string', required: true },
     ],
@@ -47,7 +47,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '读取角色数据',
     description: '从角色卡读取属性/技能/资源值',
     category: 'data',
-    icon: '👤',
+    icon: 'icon-user',
     inputs: [
       { key: 'field_name', label: '字段名', type: 'string', required: true },
     ],
@@ -60,7 +60,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '公式计算',
     description: '对公式表达式求值',
     category: 'compute',
-    icon: '📐',
+    icon: 'icon-ruleset',
     inputs: [
       { key: 'formula', label: '公式', type: 'string', required: true },
       { key: 'variables', label: '变量', type: 'any' },
@@ -74,7 +74,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '条件分支',
     description: '根据条件返回不同值',
     category: 'logic',
-    icon: '🔀',
+    icon: 'icon-timeline',
     inputs: [
       { key: 'condition', label: '条件', type: 'boolean', required: true },
       { key: 'if_true', label: '为真时', type: 'any', required: true },
@@ -89,7 +89,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '阈值比较',
     description: '将值与阈值比较，返回是否通过',
     category: 'logic',
-    icon: '⚖️',
+    icon: 'icon-check',
     inputs: [
       { key: 'value', label: '输入值', type: 'number', required: true },
       { key: 'threshold', label: '阈值', type: 'number', required: true },
@@ -104,7 +104,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '乘法',
     description: '两数相乘',
     category: 'compute',
-    icon: '✖️',
+    icon: 'icon-close',
     inputs: [
       { key: 'a', label: '数值 A', type: 'number', required: true },
       { key: 'b', label: '数值 B', type: 'number', required: true },
@@ -118,7 +118,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '修改资源',
     description: '增减角色资源值（如 HP）',
     category: 'effect',
-    icon: '💊',
+    icon: 'icon-plus',
     inputs: [
       { key: 'resource_name', label: '资源名', type: 'string', required: true },
       { key: 'delta', label: '变化量', type: 'number', required: true },
@@ -132,7 +132,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '结果收集',
     description: '收集所有输入，生成最终结果',
     category: 'output',
-    icon: '📋',
+    icon: 'icon-scroll',
     inputs: [
       { key: 'entries', label: '条目', type: 'any', required: true },
     ],
@@ -147,7 +147,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '批量修改资源',
     description: '同时修改 HP、SAN 等多个资源值',
     category: 'effect',
-    icon: '⚡',
+    icon: 'icon-plus',
     inputs: [
       { key: 'modifications', label: '修改列表', type: 'any', required: true },
       { key: 'current_values', label: '当前值映射', type: 'any' },
@@ -163,7 +163,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '查表',
     description: '从二维表格按 key 查找对应行',
     category: 'table',
-    icon: '📊',
+    icon: 'icon-grid',
     inputs: [
       { key: 'table_data', label: '表格数据', type: 'any', required: true },
       { key: 'lookup_key', label: '查找键', type: 'any', required: true },
@@ -179,7 +179,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '随机表',
     description: '按权重从条目列表中随机选取',
     category: 'table',
-    icon: '🎰',
+    icon: 'icon-dice',
     inputs: [
       { key: 'table_entries', label: '条目列表', type: 'any', required: true },
       { key: 'roll_expression', label: '骰子表达式(可选)', type: 'string' },
@@ -194,7 +194,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '施加效果',
     description: '给角色施加临时状态效果',
     category: 'effect',
-    icon: '✨',
+    icon: 'icon-highlight',
     inputs: [
       { key: 'target_character_id', label: '目标角色ID', type: 'string', required: true },
       { key: 'effect_name', label: '效果名称', type: 'string', required: true },
@@ -212,7 +212,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '移除效果',
     description: '移除角色的临时状态效果',
     category: 'effect',
-    icon: '🚫',
+    icon: 'icon-trash',
     inputs: [
       { key: 'target_character_id', label: '目标角色ID', type: 'string', required: true },
       { key: 'effect_id', label: '效果ID(二选一)', type: 'string' },
@@ -227,7 +227,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '循环',
     description: '循环 N 次，每次对值做累加或累乘',
     category: 'logic',
-    icon: '🔁',
+    icon: 'icon-history',
     inputs: [
       { key: 'iterations', label: '循环次数', type: 'number', required: true },
       { key: 'initial_value', label: '初始值', type: 'number' },
@@ -245,7 +245,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '聚合',
     description: '对数组做 sum/min/max/avg/count/concat 聚合',
     category: 'compute',
-    icon: '∑',
+    icon: 'icon-list',
     inputs: [
       { key: 'values', label: '输入数组', type: 'any', required: true },
       { key: 'operation', label: '操作', type: 'string', required: true },
@@ -261,7 +261,7 @@ export const ATOM_DEFINITIONS: Record<string, AtomDef> = {
     label: '多分支条件',
     description: 'switch-case 风格分支选择',
     category: 'logic',
-    icon: '🌿',
+    icon: 'icon-broadcast',
     inputs: [
       { key: 'value', label: '输入值', type: 'any', required: true },
       { key: 'branches', label: '分支列表', type: 'any', required: true },

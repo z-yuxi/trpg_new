@@ -139,7 +139,7 @@ export function registerChatHandlers(
           const campaignRow2 = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first().catch(() => null);
           message.visible_to = campaignRow2 ? [campaignRow2.gm_user_id] : null;
         } else {
-          message.visible_to = await computeVisibleTo(sceneId, campaignId).catch(() => null);
+          message.visible_to = await computeVisibleTo(sceneId, campaignId, message.created_at).catch(() => null);
         }
       }
 

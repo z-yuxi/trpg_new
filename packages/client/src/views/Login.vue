@@ -60,6 +60,7 @@ async function submit() {
   <div class="login-page">
     <TCard padding="lg" shadow class="login-card">
       <h1 class="title">{{ isRegister ? '注册' : '登录' }}</h1>
+      <p class="tagline">让故事因同行而生动</p>
       <div class="form">
         <TInput v-model="phone" placeholder="手机号" />
         <TInput v-model="password" type="password" placeholder="密码" style="margin-top:12px" />
@@ -80,6 +81,7 @@ async function submit() {
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--color-page-bg); }
 .login-card { width: 360px; }
 .title { font-size: var(--text-2xl); font-weight: 700; text-align: center; margin-bottom: var(--space-6); }
+.tagline { margin: calc(var(--space-6) * -1 + 8px) 0 var(--space-5); text-align: center; font-size: var(--text-sm); color: var(--text-secondary); }
 .form { display: flex; flex-direction: column; }
 .error { color: var(--color-danger); font-size: var(--text-sm); margin-top: var(--space-2); text-align: center; }
 .switch-link { text-align: center; margin-top: var(--space-4); font-size: var(--text-sm); color: var(--color-accent); cursor: pointer; }

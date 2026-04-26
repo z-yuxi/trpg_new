@@ -24,7 +24,7 @@ const groups: NotifyGroup[] = [
     ],
   },
   {
-    label: '组团与招募',
+    label: '招募与组队',
     items: [
       { key: 'recruit', label: '招募通知', desc: '有人响应你的招募或邀请你加入战役', value: recruit },
     ],

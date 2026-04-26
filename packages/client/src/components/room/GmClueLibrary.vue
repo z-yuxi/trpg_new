@@ -152,7 +152,7 @@ onMounted(loadClues);
     </div>
 
     <div v-else-if="!loading" class="empty-state">
-      <p class="empty-icon">🔍</p>
+      <p class="empty-icon"><SvgIcon name="state-empty" :size="36" /></p>
       <p class="empty-title">暂无线索</p>
       <p class="empty-desc">在上方创建并发放线索给玩家</p>
     </div>
@@ -225,7 +225,7 @@ onMounted(loadClues);
 
 /* 空状态 */
 .empty-state { text-align: center; padding: var(--space-10) var(--space-4); }
-.empty-icon { font-size: 36px; margin: 0 0 var(--space-2); }
+.empty-icon { margin: 0 0 var(--space-2); color: var(--text-muted); display: flex; justify-content: center; }
 .empty-title { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin: 0 0 var(--space-1); }
 .empty-desc { font-size: var(--text-xs); color: var(--text-muted); margin: 0; }
 </style>

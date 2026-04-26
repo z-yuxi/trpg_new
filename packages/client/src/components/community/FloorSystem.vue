@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { ElInput, ElMessage, ElSkeleton } from 'element-plus';
 import TButton from '../base/TButton.vue';
+import SvgIcon from '../SvgIcon.vue';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -415,7 +416,7 @@ onUnmounted(() => {
               <span class="nested-content">{{ c.content }}</span>
             </div>
             <button class="expand-btn" @click="toggleFloorComments(floor)">
-              展开全部 {{ floor.reply_count }} 条回复 ▼
+              展开全部 {{ floor.reply_count }} 条回复 <SvgIcon name="icon-chevron-down" :size="12" />
             </button>
           </template>
 
@@ -470,7 +471,7 @@ onUnmounted(() => {
               </button>
 
               <button class="expand-btn" @click="expandedFloors.delete(floor.id)">
-                收起 ▲
+                收起 <SvgIcon name="icon-chevron-up" :size="12" />
               </button>
             </template>
           </template>

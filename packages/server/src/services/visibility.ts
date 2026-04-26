@@ -38,7 +38,8 @@ export function computeVisibility(
  */
 export async function computeVisibleTo(
   sceneId: string,
-  _campaignId: string
+  _campaignId: string,
+  messageCreatedAt?: Date
 ): Promise<string[] | null> {
   if (!sceneId) return null;
 
@@ -54,11 +55,23 @@ export async function computeVisibleTo(
       return ids.length > 0 ? ids : null;
     }
     case 'virtual': {
-      const rows = await db('scene_participations')
+      const participantRows = await db('scene_participations')
         .where({ scene_id: sceneId })
         .whereNull('left_at')
         .select('character_id');
-      const ids = (rows as { character_id: string }[]).map((r) => r.character_id);
+
+      const participantIds = (participantRows as { character_id: string }[]).map((r) => r.character_id);
+
+      const obQuery = db('scene_ob_permissions')
+        .where({ scene_id: sceneId })
+        .whereNull('revoked_at');
+      if (messageCreatedAt) {
+        obQuery.andWhere('granted_at', '<=', messageCreatedAt);
+      }
+      const obRows = await obQuery.select('user_id');
+      const obUserIds = (obRows as { user_id: string }[]).map((r) => r.user_id);
+
+      const ids = [...new Set([...participantIds, ...obUserIds])];
       return ids.length > 0 ? ids : null;
     }
     case 'lobby':
@@ -75,10 +88,20 @@ export async function characterIdsToUserIds(
   gmUserId: string
 ): Promise<string[]> {
   if (characterIds.length === 0) return [gmUserId];
-  const rows = await db('character_sheets')
+  const charRows = await db('character_sheets')
     .whereIn('id', characterIds)
     .select('user_id');
-  const userIds = new Set<string>((rows as { user_id: string }[]).map((r) => r.user_id));
+
+  // visible_to 兼容两种 ID：character_id 与 user_id
+  const userRows = await db('users')
+    .whereIn('id', characterIds)
+    .select('id')
+    .catch(() => [] as Array<{ id: string }>);
+
+  const userIds = new Set<string>((charRows as { user_id: string }[]).map((r) => r.user_id));
+  for (const row of userRows) {
+    userIds.add(row.id);
+  }
   userIds.add(gmUserId);
   return [...userIds];
 }

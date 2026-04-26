@@ -7,6 +7,7 @@ import { Controls } from '@vue-flow/controls';
 import type { Node, Edge, Connection, EdgeMouseEvent, NodeTypesObject } from '@vue-flow/core';
 import AtomLibrary from './AtomLibrary.vue';
 import AtomNode from './nodes/AtomNode.vue';
+import SvgIcon from '../SvgIcon.vue';
 import {
   ATOM_DEFINITIONS,
   serializeToGraph,
@@ -513,7 +514,7 @@ defineExpose({
           </select>
         </div>
         <button class="toolbar-btn toolbar-btn--primary" @click="showPreviewPanel = !showPreviewPanel">
-          ▶ 预览执行
+          <SvgIcon name="icon-chevron-right" :size="12" /> 预览执行
         </button>
         <button
           class="toolbar-btn"
@@ -525,7 +526,7 @@ defineExpose({
           <span v-if="validationIssues.length > 0" class="toolbar-badge">{{ validationIssues.length }}</span>
         </button>
         <button class="toolbar-btn toolbar-btn--danger" @click="deleteSelected" title="删除选中 (Delete)">
-          🗑 删除
+          <SvgIcon name="icon-trash" :size="12" /> 删除
         </button>
       </div>
     </div>
@@ -574,7 +575,7 @@ defineExpose({
 
           <!-- 错误提示 -->
           <Panel position="bottom-center" v-if="connectionError">
-            <div class="canvas-error">⚠ {{ connectionError }}</div>
+            <div class="canvas-error"><SvgIcon name="state-error" :size="14" /> {{ connectionError }}</div>
           </Panel>
 
           <!-- 拓扑校验结果面板 -->
@@ -582,11 +583,11 @@ defineExpose({
             <div class="validation-panel" :class="{ collapsed: !showValidationPanel }">
               <div class="validation-panel__header" @click="showValidationPanel = !showValidationPanel">
                 <span :class="validationIssues.some(i => i.type === 'error') ? 'val-error-icon' : 'val-warn-icon'">
-                  {{ validationIssues.some(i => i.type === 'error') ? '✕' : '⚠' }}
+                  <SvgIcon :name="validationIssues.some(i => i.type === 'error') ? 'icon-close' : 'state-error'" :size="12" />
                   {{ validationIssues.filter(i => i.type === 'error').length }} 错误
                   {{ validationIssues.filter(i => i.type === 'warning').length }} 警告
                 </span>
-                <span class="val-toggle">{{ showValidationPanel ? '▼' : '▲' }}</span>
+                <span class="val-toggle"><SvgIcon :name="showValidationPanel ? 'icon-chevron-down' : 'icon-chevron-up'" :size="12" /></span>
               </div>
               <ul v-if="showValidationPanel" class="validation-panel__list">
                 <li
@@ -661,7 +662,8 @@ defineExpose({
               :disabled="previewRunning"
               @click="runPreview"
             >
-              {{ previewRunning ? '执行中…' : '▶ 执行' }}
+              <template v-if="previewRunning">执行中…</template>
+              <template v-else><SvgIcon name="icon-chevron-right" :size="12" /> 执行</template>
             </button>
 
             <div v-if="previewError" class="preview-error">{{ previewError }}</div>

@@ -37,4 +37,3 @@ export const SceneBlockExtension = Node.create({
     return VueNodeViewRenderer(SceneBlockView as any);
   },
 });
-

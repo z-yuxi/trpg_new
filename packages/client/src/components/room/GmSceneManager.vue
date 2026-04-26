@@ -124,7 +124,7 @@ async function confirmDeleteScene() {
   <ElDialog v-model="showNewScene" title="新建场景" width="420px">
     <div class="form-body">
       <label class="form-label">场景名称 *</label>
-      <input v-model="newScene.name" class="field-input" placeholder="如：酒馆大厅" />
+      <input v-model="newScene.name" class="field-input" placeholder="如：银光酒馆" />
       <label class="form-label" style="margin-top:12px">场景类型</label>
       <div class="type-btns">
         <button v-for="t in (['spatial','virtual','lobby'] as const)" :key="t" class="type-btn" :class="{ active: newScene.type === t }" @click="newScene.type = t">{{ typeLabel[t] }}</button>

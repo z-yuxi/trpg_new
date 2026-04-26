@@ -34,4 +34,3 @@ export const DialogBlockExtension = Node.create({
   },
 });
 
-

@@ -10,6 +10,7 @@
 import { ref, computed, watch } from 'vue';
 import TButton from '../base/TButton.vue';
 import TInput from '../base/TInput.vue';
+import SvgIcon from '../SvgIcon.vue';
 import { api } from '../../utils/api';
 
 interface DerivedItem {
@@ -125,7 +126,7 @@ watch(() => props.visible, (v) => {
       <div class="modal-box">
         <div class="modal-header">
           <span class="modal-title">{{ characterName }} — 角色状态</span>
-          <button class="modal-close" @click="$emit('close')">✕</button>
+          <button class="modal-close" @click="$emit('close')"><SvgIcon name="icon-close" :size="14" /></button>
         </div>
 
         <div v-if="loading" class="modal-loading">加载中...</div>
@@ -187,7 +188,7 @@ watch(() => props.visible, (v) => {
             <div v-for="(eff, idx) in editEffects" :key="idx" class="effect-row">
               <TInput v-model="eff.name" placeholder="效果名称" :disabled="!canEdit" />
               <input v-model.number="eff.value" type="number" class="effect-val" :disabled="!canEdit" />
-              <button v-if="canEdit" class="remove-btn" @click="removeEffect(idx)">✕</button>
+              <button v-if="canEdit" class="remove-btn" @click="removeEffect(idx)"><SvgIcon name="icon-close" :size="12" /></button>
             </div>
           </div>
 
@@ -200,7 +201,7 @@ watch(() => props.visible, (v) => {
             <div v-if="editEquipment.length === 0" class="empty-hint">无装备记录</div>
             <div v-for="(item, idx) in editEquipment" :key="idx" class="equipment-row">
               <TInput v-model="editEquipment[idx]" placeholder="装备名称" :disabled="!canEdit" />
-              <button v-if="canEdit" class="remove-btn" @click="removeEquipment(idx)">✕</button>
+              <button v-if="canEdit" class="remove-btn" @click="removeEquipment(idx)"><SvgIcon name="icon-close" :size="12" /></button>
             </div>
           </div>
 

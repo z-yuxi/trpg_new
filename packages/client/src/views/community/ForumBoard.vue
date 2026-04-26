@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElDialog, ElForm, ElFormItem, ElInput, ElButton as ElBtn } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
@@ -179,9 +180,14 @@ onMounted(fetchThreads);
         </div>
       </div>
 
-      <div v-if="!loading && threads.length === 0" class="empty-state">
-        暂无帖子，来发布第一篇吧！
-      </div>
+      <EmptyState
+        v-if="!loading && threads.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        :illustration-size="170"
+        title="暂无帖子"
+        description="来发布第一篇吧。"
+      />
     </div>
 
     <!-- 分页 -->

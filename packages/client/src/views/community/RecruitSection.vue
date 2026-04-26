@@ -173,7 +173,7 @@ onMounted(loadRulesets);
 <template>
   <div class="recruit-section">
     <div class="section-header">
-      <h2 class="section-title">组团招募</h2>
+      <h2 class="section-title">招募板</h2>
       <TButton type="primary" @click="openPostDialog">+ 发布招募帖</TButton>
     </div>
 

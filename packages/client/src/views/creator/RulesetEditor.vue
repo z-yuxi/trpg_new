@@ -1,14 +1,40 @@
 ﻿<script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import RuleCanvas from '../../components/rule-canvas/RuleCanvas.vue';
 import VersionPanel from '../../components/VersionPanel.vue';
+import SvgIcon from '../../components/SvgIcon.vue';
+import CharacterCardSchemaEditor from '../../components/rule-canvas/CharacterCardSchemaEditor.vue';
+import RecruitmentFieldsEditor from '../../components/RecruitmentFieldsEditor.vue';
+import CommandOverridesEditor from '../../components/CommandOverridesEditor.vue';
+import { exportRulesetYaml, importRulesetYaml, pickYamlFile } from '../../utils/ruleset-yaml';
 import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
 import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
 import { deserializeFromGraph } from '../../utils/canvas-serializer';
 import { api, getToken } from '../../utils/api';
 import type { CommandGraph } from '@trpg/shared';
+
+interface SchemaField {
+  name: string;
+  [key: string]: unknown;
+}
+
+interface CharacterCardSchema {
+  attributes: SchemaField[];
+  skills: SchemaField[];
+  derived_values: SchemaField[];
+  resources: SchemaField[];
+  aliases: Array<Record<string, unknown>>;
+}
+
+interface RecruitmentField {
+  [key: string]: unknown;
+}
+
+interface CommandOverride {
+  [key: string]: unknown;
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -111,6 +137,23 @@ const attributes = ref<Attribute[]>([
   { name: '教育', roll_formula: '(2d6+6) * 5' },
 ]);
 
+// ── 角色卡模板 Schema ─────────────────────────────────────────────────
+const cardSchema = ref<CharacterCardSchema>({
+  attributes: [],
+  skills: [],
+  derived_values: [],
+  resources: [],
+  aliases: [],
+});
+
+const skills = computed(() => cardSchema.value.skills ?? []);
+
+// ── 招募帖字段配置 ────────────────────────────────────────────────────
+const recruitmentFields = ref<RecruitmentField[]>([]);
+
+// ── 指令覆盖配置 ──────────────────────────────────────────────────────
+const commandOverrides = ref<CommandOverride[]>([]);
+
 // ── 自定义命令 ────────────────────────────────────────────────────────
 type InputMappingSource = 'user_input' | 'character_attribute' | 'character_skill' | 'fixed_value';
 type CustomInputMapping = { param_name: string; source: InputMappingSource; fixed_value?: string; field_name?: string };
@@ -157,22 +200,36 @@ const previewRunning = ref(false);
 type PreviewLog = { node_id: string; atom_type: string; output: unknown };
 const previewResult = ref<{ success: boolean; result: string; dice_rolls: { expression: string; value: number; detail: string }[]; logs: PreviewLog[]; error?: string } | null>(null);
 
-// 模拟角色数据
-const mockAttrRaw = ref('{"力量": 60, "体质": 55, "意志": 65}');
-const mockSkillRaw = ref('{"侦查": 70, "图书馆使用": 40, "聆听": 45}');
-const mockResourceRaw = ref('{"理智值": {"current": 65, "max": 99}, "HP": {"current": 11, "max": 11}}');
+// 模拟角色数据 - 结构化输入
+interface MockAttr { name: string; value: number }
+interface MockResource { name: string; current: number; max: number }
+const mockAttrs = ref<MockAttr[]>([
+  { name: '力量', value: 60 }, { name: '体质', value: 55 }, { name: '意志', value: 65 },
+]);
+const mockSkills = ref<MockAttr[]>([
+  { name: '侦查', value: 70 }, { name: '图书馆使用', value: 40 }, { name: '聆听', value: 45 },
+]);
+const mockResources = ref<MockResource[]>([
+  { name: '理智值', current: 65, max: 99 }, { name: 'HP', current: 11, max: 11 },
+]);
+function addMockAttr() { mockAttrs.value.push({ name: '', value: 0 }); }
+function removeMockAttr(i: number) { mockAttrs.value.splice(i, 1); }
+function addMockSkill() { mockSkills.value.push({ name: '', value: 0 }); }
+function removeMockSkill(i: number) { mockSkills.value.splice(i, 1); }
+function addMockResource() { mockResources.value.push({ name: '', current: 0, max: 0 }); }
+function removeMockResource(i: number) { mockResources.value.splice(i, 1); }
 
 async function runPreview() {
   if (!rulesetId || isNew) { ElMessage.warning('请先保存规则集后再预览'); return; }
   previewRunning.value = true;
   previewResult.value = null;
   try {
-    let attributes: Record<string, number> = {};
-    let skills: Record<string, number> = {};
-    let resources: Record<string, { current: number; max: number }> = {};
-    try { attributes = JSON.parse(mockAttrRaw.value); } catch { /* use empty */ }
-    try { skills = JSON.parse(mockSkillRaw.value); } catch { /* use empty */ }
-    try { resources = JSON.parse(mockResourceRaw.value); } catch { /* use empty */ }
+    const attributes: Record<string, number> = {};
+    const skills: Record<string, number> = {};
+    const resources: Record<string, { current: number; max: number }> = {};
+    mockAttrs.value.forEach((a) => { if (a.name) attributes[a.name] = a.value; });
+    mockSkills.value.forEach((s) => { if (s.name) skills[s.name] = s.value; });
+    mockResources.value.forEach((r) => { if (r.name) resources[r.name] = { current: r.current, max: r.max }; });
 
     const data = await api.post<{ success?: boolean; result?: string; dice_rolls?: unknown[]; logs?: unknown[] }>(
       `/rulesets/${rulesetId}/execute`,
@@ -244,6 +301,23 @@ async function fetchRuleset() {
           output_node_id: atoms[atoms.length - 1]?.node_id ?? '',
         } as CommandGraph;
       }
+      // 恢复角色卡 Schema
+      const schema = (rs.character_card_schema as any)?._card_schema;
+      if (schema) {
+        cardSchema.value = {
+          attributes: schema.attributes ?? [],
+          skills: schema.skills ?? [],
+          derived_values: schema.derived_values ?? [],
+          resources: schema.resources ?? [],
+          aliases: schema.aliases ?? [],
+        };
+      }
+      // 恢复招募字段
+      const rf = (rs as any).recruitment_fields;
+      if (Array.isArray(rf)) recruitmentFields.value = rf;
+      // 恢复指令覆盖
+      const co = (rs as any).command_overrides;
+      if (Array.isArray(co)) commandOverrides.value = co;
       formData.value = rs;
   } catch { /* ignore */ }
 }
@@ -258,6 +332,38 @@ function onMerged(result: object) {
       output_node_id: (merged.merged_graph.atoms[merged.merged_graph.atoms.length - 1] as any)?.node_id ?? '',
     } as CommandGraph;
     ElMessage.success('已应用合并结果，请切换到画布查看并保存');
+  }
+}
+
+// ── YAML 导出/导入 ────────────────────────────────────────────────────
+const yamlExporting = ref(false);
+const yamlImporting = ref(false);
+
+async function handleExportYaml() {
+  if (!rulesetId || isNew) { ElMessage.warning('请先保存规则集后再导出'); return; }
+  yamlExporting.value = true;
+  try {
+    await exportRulesetYaml(rulesetId, `${formName.value || 'ruleset'}.yaml`);
+    ElMessage.success('导出成功');
+  } catch (e) {
+    ElMessage.error(`导出失败：${e}`);
+  } finally {
+    yamlExporting.value = false;
+  }
+}
+
+async function handleImportYaml() {
+  const file = await pickYamlFile();
+  if (!file) return;
+  yamlImporting.value = true;
+  try {
+    const result = await importRulesetYaml(file);
+    ElMessage.success(`导入成功：${result.name}`);
+    router.push(`/creator/workshop/${result.id}/edit`);
+  } catch (e) {
+    ElMessage.error(`导入失败：${e}`);
+  } finally {
+    yamlImporting.value = false;
   }
 }
 
@@ -312,7 +418,9 @@ async function save() {
     name: formName.value.trim(),
     version: formVersion.value,
     status: formStatus.value,
-    character_card_schema: { _l1_config: l1Config },
+    character_card_schema: { _l1_config: l1Config, _card_schema: cardSchema.value },
+    recruitment_fields: recruitmentFields.value,
+    command_overrides: commandOverrides.value,
     commands: {
       custom_commands: serializedCustomCommands,
       supported_commands: supportedCommands.value,
@@ -366,21 +474,29 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
   <div class="editor">
     <!-- 移动端只读提示 -->
     <div class="mobile-readonly-banner">
-      <span>📱 规则包编辑器在移动端为只读模式，请在 PC 端进行编辑</span>
+      <span><SvgIcon name="icon-user" :size="14" /> 规则包编辑器在移动端为只读模式，请在 PC 端进行编辑</span>
     </div>
     <!-- Header -->
     <div class="editor-header">
       <button class="back-btn" @click="router.back()">← 返回工坊</button>
       <!-- L1/L3 模式切换标签 -->
       <div class="mode-tabs">
-        <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')">📝 表单 (L1)</button>
-        <button class="mode-tab" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')">🎨 画布 (L3)</button>
-        <button class="mode-tab" :class="{ active: editorMode === 'versions' }" @click="editorMode = 'versions'">🕑 版本</button>
+        <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')"><SvgIcon name="icon-list" :size="12" /> 表单 (L1)</button>
+        <button class="mode-tab" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')"><SvgIcon name="icon-grid" :size="12" /> 画布 (L3)</button>
+        <button class="mode-tab" :class="{ active: editorMode === 'versions' }" @click="editorMode = 'versions'"><SvgIcon name="icon-history" :size="12" /> 版本</button>
       </div>
       <div class="header-right">
         <span class="status-badge" :data-status="formStatus">{{ { draft: '草稿', reviewing: '审核中', published: '已发布', deprecated: '已弃用' }[formStatus] ?? formStatus }}</span>
         <button v-if="formStatus === 'draft'" class="action-btn action-btn--submit" @click="submitForReview">提交发布</button>
         <button v-if="formStatus === 'published'" class="action-btn action-btn--deprecate" @click="deprecate">弃用</button>
+        <button class="action-btn action-btn--export" :disabled="yamlExporting || isNew" @click="handleExportYaml" title="导出 YAML">
+          <template v-if="yamlExporting">导出…</template>
+          <template v-else><SvgIcon name="icon-download" :size="12" /> YAML</template>
+        </button>
+        <button class="action-btn action-btn--import" :disabled="yamlImporting" @click="handleImportYaml" title="从 YAML 导入（新建规则集）">
+          <template v-if="yamlImporting">导入…</template>
+          <template v-else><SvgIcon name="icon-upload" :size="12" /> 导入</template>
+        </button>
         <button class="save-btn" @click="save" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button>
       </div>
     </div>
@@ -501,6 +617,15 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
         </div>
       </section>
 
+      <!-- 角色卡模板 Schema -->
+      <section class="form-section ccs-section">
+        <div class="section-header">
+          <h3 class="section-title">角色卡模板</h3>
+          <span class="hint-text" style="font-size: 11px; color: var(--text-tertiary);">定义角色卡字段结构，供玩家创建角色卡时使用</span>
+        </div>
+        <CharacterCardSchemaEditor v-model="cardSchema" />
+      </section>
+
       <!-- 支持的指令 -->
       <section class="form-section">
         <h3 class="section-title">支持的指令</h3>
@@ -511,6 +636,24 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
             <span class="cmd-label">{{ cmd.label }}</span>
           </label>
         </div>
+      </section>
+
+      <!-- 招募帖字段配置 -->
+      <section class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">招募帖字段</h3>
+          <span class="hint-text" style="font-size: 11px;">定义玩家报名时填写的字段</span>
+        </div>
+        <RecruitmentFieldsEditor v-model="recruitmentFields" />
+      </section>
+
+      <!-- 指令覆盖配置 -->
+      <section class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">指令覆盖</h3>
+          <span class="hint-text" style="font-size: 11px;">覆盖内置指令的骰子表达式或难度系数</span>
+        </div>
+        <CommandOverridesEditor v-model="commandOverrides" :supported-commands="supportedCommands" />
       </section>
 
       <!-- 自定义命令 -->
@@ -559,18 +702,49 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
                 <button class="add-btn" @click="addInputMapping(cmd)">+ 添加参数</button>
               </div>
               <p v-if="cmd.input_mapping.length === 0" class="hint-text" style="margin: 0;">此命令无自定义参数。</p>
-              <div v-for="(mp, mi) in cmd.input_mapping" :key="mi" class="dyn-row">
-                <input v-model="mp.param_name" class="field-input" placeholder="参数名" />
-                <select v-model="mp.source" class="status-select">
-                  <option value="user_input">用户输入</option>
-                  <option value="character_attribute">角色属性</option>
-                  <option value="character_skill">角色技能</option>
-                  <option value="fixed_value">固定值</option>
-                </select>
-                <input v-if="mp.source === 'fixed_value'" v-model="mp.fixed_value" class="field-input" placeholder="固定值" />
-                <input v-if="mp.source === 'character_attribute' || mp.source === 'character_skill'" v-model="mp.field_name" class="field-input" placeholder="属性/技能名" />
-                <button class="rm-btn" @click="removeInputMapping(cmd, mi)">×</button>
-              </div>
+              <table v-else class="mapping-table">
+                <thead>
+                  <tr>
+                    <th>参数名</th>
+                    <th>来源类型</th>
+                    <th>字段 / 固定值</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(mp, mi) in cmd.input_mapping" :key="mi">
+                    <td><input v-model="mp.param_name" class="field-input mapping-input" placeholder="如 skill" /></td>
+                    <td>
+                      <select v-model="mp.source" class="status-select mapping-select">
+                        <option value="user_input">用户输入</option>
+                        <option value="character_attribute">角色属性</option>
+                        <option value="character_skill">角色技能</option>
+                        <option value="fixed_value">固定值</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        v-if="mp.source === 'fixed_value'"
+                        v-model="mp.fixed_value"
+                        class="field-input mapping-input"
+                        placeholder="固定值内容"
+                      />
+                      <input
+                        v-else-if="mp.source === 'character_attribute' || mp.source === 'character_skill'"
+                        v-model="mp.field_name"
+                        class="field-input mapping-input"
+                        :list="'attr-list-' + i"
+                        :placeholder="mp.source === 'character_attribute' ? '属性名' : '技能名'"
+                      />
+                      <datalist :id="'attr-list-' + i">
+                        <option v-for="a in (mp.source === 'character_attribute' ? attributes : skills).map(x => x.name)" :key="a" :value="a" />
+                      </datalist>
+                      <span v-if="mp.source === 'user_input'" class="hint-text" style="font-size: 11px;">由用户在指令中输入</span>
+                    </td>
+                    <td><button class="rm-btn" @click="removeInputMapping(cmd, mi)">×</button></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <!-- 执行图 JSON 编辑器（L3 画布后续批次实现） -->
             <div class="subsection">
@@ -588,17 +762,43 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 
         <!-- 模拟角色数据 -->
         <div class="mock-ctx-grid">
+          <!-- 模拟属性 -->
           <div class="form-field">
-            <label class="form-label">模拟属性（JSON）</label>
-            <textarea v-model="mockAttrRaw" class="json-editor" rows="3" spellcheck="false" />
+            <div class="mock-field-header">
+              <label class="form-label">模拟属性</label>
+              <button class="mock-add-btn" @click="addMockAttr">+ 添加</button>
+            </div>
+            <div v-for="(attr, i) in mockAttrs" :key="i" class="mock-row">
+              <input v-model="attr.name" class="mock-row-name" placeholder="属性名" />
+              <input v-model.number="attr.value" type="number" class="mock-row-val" />
+              <button class="mock-rm-btn" @click="removeMockAttr(i)">×</button>
+            </div>
           </div>
+          <!-- 模拟技能 -->
           <div class="form-field">
-            <label class="form-label">模拟技能（JSON）</label>
-            <textarea v-model="mockSkillRaw" class="json-editor" rows="3" spellcheck="false" />
+            <div class="mock-field-header">
+              <label class="form-label">模拟技能</label>
+              <button class="mock-add-btn" @click="addMockSkill">+ 添加</button>
+            </div>
+            <div v-for="(sk, i) in mockSkills" :key="i" class="mock-row">
+              <input v-model="sk.name" class="mock-row-name" placeholder="技能名" />
+              <input v-model.number="sk.value" type="number" class="mock-row-val" />
+              <button class="mock-rm-btn" @click="removeMockSkill(i)">×</button>
+            </div>
           </div>
+          <!-- 模拟资源 -->
           <div class="form-field">
-            <label class="form-label">模拟资源（JSON）</label>
-            <textarea v-model="mockResourceRaw" class="json-editor" rows="3" spellcheck="false" />
+            <div class="mock-field-header">
+              <label class="form-label">模拟资源</label>
+              <button class="mock-add-btn" @click="addMockResource">+ 添加</button>
+            </div>
+            <div v-for="(res, i) in mockResources" :key="i" class="mock-row">
+              <input v-model="res.name" class="mock-row-name" placeholder="资源名" />
+              <input v-model.number="res.current" type="number" class="mock-row-val" placeholder="当前" />
+              <span class="mock-row-sep">/</span>
+              <input v-model.number="res.max" type="number" class="mock-row-val" placeholder="最大" />
+              <button class="mock-rm-btn" @click="removeMockResource(i)">×</button>
+            </div>
           </div>
         </div>
 
@@ -664,6 +864,12 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .status-badge[data-status="deprecated"] { background: color-mix(in srgb, #e74c3c 20%, transparent); color: #e74c3c; }
 .action-btn--submit { background: #7b68ee; color: #fff; border: none; padding: 5px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 .action-btn--submit:hover { opacity: 0.85; }
+.action-btn--export { background: none; border: 1px solid var(--border-default); color: var(--text-secondary); padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.action-btn--export:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+.action-btn--export:disabled { opacity: 0.4; cursor: not-allowed; }
+.action-btn--import { background: none; border: 1px solid var(--border-default); color: var(--text-secondary); padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+.action-btn--import:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
+.action-btn--import:disabled { opacity: 0.4; cursor: not-allowed; }
 .action-btn--deprecate { background: none; border: 1px solid #e74c3c; color: #e74c3c; padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; }
 .action-btn--deprecate:hover { background: color-mix(in srgb, #e74c3c 10%, transparent); }
 .editor-body-wrap { max-width: 880px; }
@@ -683,6 +889,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .editor-body { display: flex; flex-direction: column; gap: var(--space-5); }
 
 .form-section { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-5); }
+.ccs-section { padding-bottom: var(--space-3); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
 .section-title { font-size: var(--text-base); font-weight: 600; color: var(--text-primary); margin-bottom: var(--space-3); }
 .section-header .section-title { margin-bottom: 0; }
@@ -699,6 +906,14 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .radio-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: var(--text-sm); color: var(--text-primary); }
 
 .dyn-row { display: flex; gap: var(--space-2); align-items: center; margin-bottom: var(--space-2); flex-wrap: wrap; }
+
+/* 参数映射表格 */
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mapping-table th { padding: 4px 6px; text-align: left; font-weight: 500; color: var(--text-secondary); border-bottom: 1px solid var(--border-default); white-space: nowrap; }
+.mapping-table td { padding: 3px 4px; vertical-align: middle; }
+.mapping-table tr:hover td { background: var(--surface-hover, #f9fafb); }
+.mapping-input { font-size: 12px; padding: 3px 7px; }
+.mapping-select { font-size: 12px; padding: 3px 7px; min-width: 100px; }
 .dyn-row .field-input { flex: 1; min-width: 100px; }
 .dyn-row .field-input.flex-2 { flex: 2; }
 
@@ -728,6 +943,17 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 /* 预览测试面板 */
 .preview-section { display: flex; flex-direction: column; gap: var(--space-3); }
 .mock-ctx-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+
+/* 结构化模拟数据 */
+.mock-field-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.mock-add-btn { font-size: 11px; padding: 1px 6px; background: none; border: 1px solid var(--color-border, #d1d5db); border-radius: 3px; color: var(--color-text-tertiary); cursor: pointer; }
+.mock-add-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.mock-row { display: flex; align-items: center; gap: 3px; margin-bottom: 3px; }
+.mock-row-name { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--color-border, #d1d5db); border-radius: 3px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary); }
+.mock-row-val { width: 52px; flex-shrink: 0; padding: 3px 6px; border: 1px solid var(--color-border, #d1d5db); border-radius: 3px; font-size: 12px; background: var(--color-surface); color: var(--color-text-primary); }
+.mock-row-sep { color: var(--color-text-tertiary); font-size: 12px; }
+.mock-rm-btn { background: none; border: none; color: var(--color-text-tertiary); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+.mock-rm-btn:hover { color: #e74c3c; }
 .preview-cmd-row { display: flex; gap: var(--space-2); align-items: center; }
 .preview-cmd-input { flex: 1; font-family: var(--font-mono); }
 .run-btn { padding: var(--space-2) var(--space-5); background: var(--color-accent); color: #fff; border: none; border-radius: var(--radius-md); cursor: pointer; font-size: var(--text-sm); white-space: nowrap; transition: opacity var(--transition-fast); }

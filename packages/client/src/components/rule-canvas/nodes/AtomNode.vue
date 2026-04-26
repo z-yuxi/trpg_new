@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { ATOM_DEFINITIONS } from '../../../utils/canvas-serializer';
+import SvgIcon from '../../SvgIcon.vue';
 import type { AtomNodeData, PortType } from '../../../utils/canvas-serializer';
 
 // Vue Flow 自定义节点的 props 约定
@@ -76,9 +77,9 @@ const categoryColors: Record<string, string> = {
   >
     <!-- 标题栏 -->
     <div class="atom-node__header" @dblclick="toggleCollapse">
-      <span class="atom-node__icon">{{ def?.icon ?? '⚙️' }}</span>
+      <span class="atom-node__icon"><SvgIcon :name="def?.icon ?? 'icon-settings'" :size="14" /></span>
       <span class="atom-node__label">{{ def?.label ?? data.atom_type }}</span>
-      <span class="atom-node__collapse-btn">{{ collapsed ? '▶' : '▼' }}</span>
+      <span class="atom-node__collapse-btn"><SvgIcon :name="collapsed ? 'icon-chevron-right' : 'icon-chevron-down'" :size="10" /></span>
     </div>
 
     <!-- 端口区域（折叠时仍显示端口以便连线） -->

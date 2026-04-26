@@ -24,17 +24,17 @@ onMounted(scrollToHash);
       <p class="eyebrow">Getting Started</p>
       <h1>新手指南</h1>
       <p class="hero-text">
-        这里不是入口跳板，而是一页真正的入门说明。你可以按下面三步，从第一次浏览到加入一场完整跑团。
+        这是一页面向新玩家的入门说明。你可以按下面三步，从第一次浏览到加入一场完整跑团。
       </p>
     </section>
 
     <section id="join" class="guide-card">
       <div class="step-index">01</div>
       <div class="step-body">
-        <h2>创建或加入战役</h2>
-        <p>先进入战役大厅查看现有房间。你可以自己创建战役，也可以通过房间码或招募帖加入现有团。</p>
+        <h2>创建或加入团</h2>
+        <p>先前往“我的团”创建自己的团，或通过社区招募帖加入正在招募的团。成团后，房间会出现在你的“我的团”中。</p>
         <div class="action-row">
-          <button class="primary-btn" @click="router.push('/campaigns')">前往我的战役</button>
+          <button class="primary-btn" @click="router.push('/campaigns')">前往我的团</button>
           <button class="ghost-btn" @click="router.push('/login')">先登录账号</button>
         </div>
       </div>
@@ -58,7 +58,7 @@ onMounted(scrollToHash);
         <h2>去社区发起或加入招募</h2>
         <p>如果你还没有固定队伍，就去社区的招募区。看人数、规则体系、开团时间，再决定加入哪一团。</p>
         <div class="action-row">
-          <button class="primary-btn" @click="router.push('/community/recruit')">前往组团招募</button>
+          <button class="primary-btn" @click="router.push('/community/recruit')">前往招募板</button>
           <button class="ghost-btn" @click="router.push('/community/activity')">查看我的动态</button>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { ElDialog, ElInput, ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
 
 interface RulesetItem {
@@ -190,7 +191,13 @@ onMounted(loadRulesets);
     </div>
 
     <div v-if="loading" class="empty-state">加载规则集列表中…</div>
-    <div v-else-if="filteredRulesets.length === 0" class="empty-state">当前筛选下还没有规则集。</div>
+    <EmptyState
+      v-else-if="filteredRulesets.length === 0"
+      icon-name=""
+      illustration-name="illust-empty"
+      title="当前筛选下还没有规则集"
+      description="调整筛选条件，或新建一个规则集开始创作。"
+    />
     <div v-else class="ruleset-grid">
       <article v-for="rs in filteredRulesets" :key="rs.id" class="rs-card">
         <div class="rs-card-top">
@@ -236,7 +243,14 @@ onMounted(loadRulesets);
       </div>
 
       <div v-if="versionLoading" class="empty-state">加载版本中…</div>
-      <div v-else-if="versions.length === 0" class="empty-state">还没有版本快照，可先创建一份。</div>
+      <EmptyState
+        v-else-if="versions.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        :illustration-size="180"
+        title="还没有版本快照"
+        description="先创建一份快照，方便后续回滚与审阅。"
+      />
       <div v-else class="version-list">
         <div v-for="item in versions" :key="item.id" class="version-item">
           <div>

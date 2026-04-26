@@ -15,7 +15,7 @@ const canGoBack = computed(() => route.path !== '/');
 const desktopNavItems = [
   { label: '首页', path: '/' },
   { label: '广场', path: '/assets' },
-  { label: '战役大厅', path: '/campaigns' },
+  { label: '我的团', path: '/campaigns' },
   { label: '社区', path: '/community' },
 ];
 

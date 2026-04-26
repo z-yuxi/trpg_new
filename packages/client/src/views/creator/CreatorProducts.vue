@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
 
 interface Ruleset {
@@ -187,7 +188,7 @@ onMounted(loadProducts);
         <div class="meta-row">
           <template v-if="item.kind === 'module'">
             <span>下载 {{ (item as Module).download_count ?? 0 }}</span>
-            <span v-if="(item as Module).rating">· ⭐ {{ (item as Module).rating.toFixed(1) }}</span>
+            <span v-if="(item as Module).rating" class="rating-chip">· <SvgIcon name="icon-star" :size="12" /> {{ (item as Module).rating.toFixed(1) }}</span>
           </template>
           <template v-else>
             <span>派生 {{ (item as Ruleset).fork_count ?? 0 }}</span>
@@ -204,11 +205,13 @@ onMounted(loadProducts);
       </article>
     </div>
 
-    <div v-else-if="!loading" class="empty-state">
-      <p class="empty-icon">📦</p>
-      <p class="empty-title">暂无作品</p>
-      <p class="empty-desc">创建你的第一个规则包或模组，并发布给更多玩家</p>
-    </div>
+    <EmptyState
+      v-else-if="!loading"
+      icon-name=""
+      illustration-name="illust-empty"
+      title="暂无作品"
+      description="创建你的第一个规则包或模组，并发布给更多玩家"
+    />
   </div>
 </template>
 
@@ -288,13 +291,14 @@ onMounted(loadProducts);
 .product-version { font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono); }
 
 .meta-row { font-size: var(--text-xs); color: var(--text-muted); display: flex; gap: 4px; flex-wrap: wrap; }
+.rating-chip { display: inline-flex; align-items: center; gap: 2px; }
 .card-actions { display: flex; gap: var(--space-2); }
 
 .empty-state {
   text-align: center; padding: var(--space-16) var(--space-10);
   border: 2px dashed var(--border-default); border-radius: var(--radius-xl);
 }
-.empty-icon { font-size: 48px; margin: 0 0 var(--space-3); }
+.empty-icon { margin: 0 0 var(--space-3); color: var(--text-muted); }
 .empty-title { font-size: var(--text-lg); font-weight: 600; color: var(--text-primary); margin: 0 0 var(--space-2); }
 .empty-desc { font-size: var(--text-sm); color: var(--text-muted); margin: 0; }
 

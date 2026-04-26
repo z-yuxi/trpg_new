@@ -7,7 +7,7 @@ const routes = [
     children: [
       { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页' } },
       { path: 'assets', name: 'AssetLibrary', component: () => import('../views/AssetLibrary.vue'), meta: { title: '广场' } },
-      { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的战役' } },
+      { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的团' } },
       {
         path: 'community',
         name: 'Community',
@@ -15,7 +15,7 @@ const routes = [
         meta: { title: '社区' },
         children: [
           { path: '', redirect: { path: '/community/recruit' } },
-          { path: 'recruit', name: 'CommunityRecruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '组团招募' } },
+          { path: 'recruit', name: 'CommunityRecruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募板' } },
           { path: 'forum/:board', name: 'ForumBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
           { path: 'activity', name: 'CommunityActivity', component: () => import('../views/community/MyActivity.vue'), meta: { title: '我的动态' } },
         ],
@@ -32,6 +32,12 @@ const routes = [
       { path: 'getting-started', name: 'GettingStarted', component: () => import('../views/GettingStarted.vue'), meta: { title: '新手指南' } },
       { path: 'u/:uid', name: 'UserProfile', component: () => import('../views/UserProfile.vue'), meta: { title: '个人主页' } },
     ],
+  },
+  {
+    path: '/ruleset/:id',
+    name: 'RulesetDetail',
+    component: () => import('../views/RulesetDetail.vue'),
+    meta: { title: '规则集详情' },
   },
   {
     path: '/room/:id',
@@ -60,7 +66,7 @@ const routes = [
   {
     path: '/creator',
     component: () => import('../views/CreatorDashboard.vue'),
-    meta: { requiresAuth: true, title: '创作台' },
+    meta: { requiresAuth: true, title: '创作者专区' },
     children: [
       { path: '', redirect: '/creator/dashboard' },
       { path: 'workshop', name: 'RulesetWorkshop', component: () => import('../views/creator/RulesetWorkshop.vue') },

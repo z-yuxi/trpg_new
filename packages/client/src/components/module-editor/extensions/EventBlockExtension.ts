@@ -37,4 +37,3 @@ export const EventBlockExtension = Node.create({
     return VueNodeViewRenderer(EventBlockView as any);
   },
 });
-

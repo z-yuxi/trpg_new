@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TTag from '../../components/base/TTag.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
@@ -61,7 +62,14 @@ onMounted(fetchActivity);
     <div v-if="loading" class="empty-state">加载中...</div>
 
     <template v-else-if="activeTab === 'threads'">
-      <div v-if="threads.length === 0" class="empty-state">暂无发帖记录</div>
+      <EmptyState
+        v-if="threads.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        :illustration-size="170"
+        title="暂无发帖记录"
+        description="发布第一篇帖子后，这里会显示你的创作轨迹。"
+      />
       <div v-else class="timeline">
         <div v-for="(thread, index) in threads" :key="thread.id" class="timeline-item">
           <div class="timeline-axis">
@@ -81,7 +89,14 @@ onMounted(fetchActivity);
     </template>
 
     <template v-else>
-      <div v-if="posts.length === 0" class="empty-state">暂无回复记录</div>
+      <EmptyState
+        v-if="posts.length === 0"
+        icon-name=""
+        illustration-name="illust-empty"
+        :illustration-size="170"
+        title="暂无回复记录"
+        description="参与一次讨论后，这里会记录你的互动内容。"
+      />
       <div v-else class="timeline">
         <div v-for="(post, index) in posts" :key="post.id" class="timeline-item">
           <div class="timeline-axis">

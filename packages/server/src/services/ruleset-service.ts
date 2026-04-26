@@ -352,7 +352,28 @@ export class RulesetService {
       return JSON.stringify(a) !== JSON.stringify(b);
     });
 
-    return { added_nodes: added, removed_nodes: removed, modified_nodes: modified, added_connections: [], removed_connections: [] };
+    return {
+      nodes: {
+        added: added.map((nodeId) => ({ node_id: nodeId, atom_type: 'unknown' })),
+        removed: removed.map((nodeId) => ({ node_id: nodeId, atom_type: 'unknown' })),
+        modified: modified.map((nodeId) => ({ node_id: nodeId, atom_type: 'unknown', changed_fields: [] })),
+      },
+      connections: {
+        added: [],
+        removed: [],
+      },
+      commands: {
+        added: [],
+        removed: [],
+        modified: [],
+      },
+      // 兼容旧字段
+      added_nodes: added,
+      removed_nodes: removed,
+      modified_nodes: modified,
+      added_connections: [],
+      removed_connections: [],
+    };
   }
 
   _rowToVersion(row: Record<string, unknown>): RulesetVersion {
@@ -481,6 +502,7 @@ export class RulesetService {
     }
 
     return {
+      status: conflicts.length > 0 ? 'conflicts' : 'clean',
       merged_graph: { atoms: merged, connections: (parent.connections as any[]) ?? [] },
       conflicts,
     };
