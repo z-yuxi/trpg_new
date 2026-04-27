@@ -65,8 +65,8 @@ const canFormGroup = computed(() => {
   return approvedApplications.value.length >= Number(detail.value.player_count_max || 0);
 });
 
-const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'danger' | 'default' }> = {
-  open: { label: '招募中', color: 'success' },
+const statusMap: Record<string, { label: string; color: 'info' | 'warning' | 'danger' | 'default' }> = {
+  open: { label: '招募中', color: 'info' },
   full: { label: '已满员', color: 'warning' },
   grouped: { label: '已成团', color: 'danger' },
   closed: { label: '已关闭', color: 'default' },
@@ -167,80 +167,102 @@ onMounted(async () => {
 
 <template>
   <div class="detail-page" v-loading="loading">
-    <TButton type="secondary" @click="router.push('/community')">返回社区</TButton>
+    <div class="detail-shell">
+      <TButton type="secondary" class="back-btn" @click="router.push('/community')">返回社区</TButton>
 
-    <TCard v-if="detail" padding="lg" class="main-card">
-      <div class="head-row">
-        <h1 class="title">{{ detail.title }}</h1>
-        <TTag :color="statusMap[detail.status_view]?.color" size="sm">{{ statusMap[detail.status_view]?.label }}</TTag>
-      </div>
-
-      <div class="meta-grid">
-        <div>发帖人：{{ detail.poster_nickname }}</div>
-        <div>规则包：{{ detail.ruleset_name || detail.ruleset_id }}</div>
-        <div>模组：{{ detail.module_name || '待定' }}</div>
-        <div>人数：{{ detail.player_count_joined }}/{{ detail.player_count_max }}</div>
-        <div>时间安排：{{ detail.schedule_text || '未填写' }}</div>
-        <div>发布时间：{{ formatDate(detail.created_at) }}</div>
-      </div>
-
-      <div class="tag-row">
-        <TTag v-for="tag in detail.tags || []" :key="tag" color="default" size="sm">{{ tag }}</TTag>
-      </div>
-
-      <div v-if="detailMetadataEntries.length" class="extra-grid">
-        <div v-for="item in detailMetadataEntries" :key="item.label" class="extra-item">
-          <span class="extra-label">{{ item.label }}</span>
-          <strong>{{ formatRecruitmentValue(item.value) }}</strong>
+      <TCard v-if="detail" padding="lg" class="main-card">
+        <div class="head-row">
+          <h1 class="title">{{ detail.title }}</h1>
+          <TTag :color="statusMap[detail.status_view]?.color" size="sm">{{ statusMap[detail.status_view]?.label }}</TTag>
         </div>
-      </div>
 
-      <ElDivider />
-      <h3>描述</h3>
-      <pre class="markdown-text">{{ detail.description || '暂无描述' }}</pre>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="info-label">发帖人</span>
+            <span class="info-value">{{ detail.poster_nickname }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="info-label">规则包</span>
+            <span class="info-value">{{ detail.ruleset_name || detail.ruleset_id }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="info-label">模组</span>
+            <span class="info-value">{{ detail.module_name || '待定' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="info-label">人数</span>
+            <span class="info-value">{{ detail.player_count_joined }}/{{ detail.player_count_max }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="info-label">时间安排</span>
+            <span class="info-value">{{ detail.schedule_text || '未填写' }}</span>
+          </div>
+          <div class="meta-item">
+            <span class="info-label">发布时间</span>
+            <span class="info-value">{{ formatDate(detail.created_at) }}</span>
+          </div>
+        </div>
 
-      <div class="actions" v-if="!isOwner">
-        <TButton type="primary" @click="showApplyDialog = true">申请加入</TButton>
-        <TTag v-if="detail.my_application?.status" color="warning" size="sm">当前申请：{{ detail.my_application.status }}</TTag>
-      </div>
-    </TCard>
+        <div class="tag-row">
+          <TTag v-for="tag in detail.tags || []" :key="tag" color="default" size="sm">{{ tag }}</TTag>
+        </div>
 
-    <TCard v-if="detail && isOwner" padding="md" class="section-card">
-      <div class="section-head">
-        <h2>申请列表（仅发帖者可见）</h2>
-        <TButton v-if="canFormGroup" type="primary" @click="openGroupDialog">成团</TButton>
-      </div>
+        <div v-if="detailMetadataEntries.length" class="extra-grid">
+          <div v-for="item in detailMetadataEntries" :key="item.label" class="extra-item">
+            <span class="extra-label">{{ item.label }}</span>
+            <strong class="extra-value">{{ formatRecruitmentValue(item.value) }}</strong>
+          </div>
+        </div>
 
-      <div v-if="!detail.applications || detail.applications.length === 0" class="empty">暂无申请</div>
-      <div v-else class="application-list">
-        <div v-for="app in detail.applications" :key="app.id" class="application-item">
-          <div class="app-row">
-            <div class="applicant-head">
-              <span class="mini-avatar">{{ (app.applicant_nickname || app.applicant_user_id || '?').slice(0, 1) }}</span>
-              <strong>{{ app.applicant_nickname || app.applicant_user_id }}</strong>
+        <div class="actions" v-if="!isOwner">
+          <TButton type="primary" @click="showApplyDialog = true">申请加入</TButton>
+          <TTag v-if="detail.my_application?.status" color="warning" size="sm">当前申请：{{ detail.my_application.status }}</TTag>
+        </div>
+      </TCard>
+
+      <TCard v-if="detail" padding="md" class="section-card">
+        <h2 class="section-title">描述</h2>
+        <pre class="markdown-text">{{ detail.description || '暂无描述' }}</pre>
+      </TCard>
+
+      <TCard v-if="detail && isOwner" padding="md" class="section-card">
+        <div class="section-head">
+          <h2 class="section-title">申请列表（仅发帖者可见）</h2>
+          <TButton v-if="canFormGroup" type="primary" @click="openGroupDialog">成团</TButton>
+        </div>
+
+        <div v-if="!detail.applications || detail.applications.length === 0" class="empty">暂无申请</div>
+        <div v-else class="application-list">
+          <div v-for="app in detail.applications" :key="app.id" class="application-item">
+            <div class="app-row">
+              <div class="applicant-head">
+                <span class="mini-avatar">{{ (app.applicant_nickname || app.applicant_user_id || '?').slice(0, 1) }}</span>
+                <strong>{{ app.applicant_nickname || app.applicant_user_id }}</strong>
+              </div>
+              <span class="status" :class="app.status">{{ app.status }}</span>
             </div>
-            <span class="status" :class="app.status">{{ app.status }}</span>
-          </div>
-          <div class="app-row">角色卡：{{ app.character_name || '未选择' }}</div>
-          <div class="app-row">摘要：{{ app.character_background || '暂无' }}</div>
-          <div class="app-row">留言：{{ app.message }}</div>
-          <div class="app-actions" v-if="app.status === 'pending'">
-            <TButton type="primary" size="sm" @click="reviewApplication(app.id, 'approve')">通过</TButton>
-            <TButton type="secondary" size="sm" @click="reviewApplication(app.id, 'reject')">拒绝</TButton>
+            <div class="app-row">角色卡：{{ app.character_name || '未选择' }}</div>
+            <div class="app-row">摘要：{{ app.character_background || '暂无' }}</div>
+            <div class="app-row">留言：{{ app.message }}</div>
+            <div class="app-actions" v-if="app.status === 'pending'">
+              <TButton type="primary" size="sm" @click="reviewApplication(app.id, 'approve')">通过</TButton>
+              <TButton type="secondary" size="sm" @click="reviewApplication(app.id, 'reject')">拒绝</TButton>
+            </div>
           </div>
         </div>
-      </div>
-    </TCard>
+      </TCard>
 
-    <TCard v-if="detail" padding="md" class="section-card">
-      <h2>讨论区</h2>
-      <FloorSystem
-        :postId="postId"
-        :postContent="detail.description || '（帖子描述）'"
-        :postAuthorNickname="detail.poster_nickname"
-        :postCreatedAt="detail.created_at"
-      />
-    </TCard>
+      <TCard v-if="detail" padding="md" class="section-card discussion-card">
+        <h2 class="section-title">讨论区</h2>
+        <FloorSystem
+          :postId="postId"
+          :postContent="detail.description || '（帖子描述）'"
+          :postAuthorNickname="detail.poster_nickname"
+          :postCreatedAt="detail.created_at"
+        />
+      </div>
+      </TCard>
+    </div>
 
     <ElDialog v-model="showApplyDialog" title="申请加入" width="520px">
       <div class="apply-hint">仅显示与当前招募规则集一致的角色卡。</div>
@@ -271,16 +293,50 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.detail-page { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.detail-page {
+  min-height: 100%;
+  background: var(--surface-page);
+  padding: var(--space-6) var(--space-4);
+}
+.detail-shell {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.back-btn { align-self: flex-start; }
 .main-card, .section-card { width: 100%; }
 .head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.title { margin: 0; font-size: var(--text-2xl); }
+.title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
 .meta-grid {
   margin-top: var(--space-3);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2) var(--space-4);
-  color: var(--color-text-secondary);
+  gap: var(--space-3);
+}
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-hover);
+}
+.info-label {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.info-value {
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
 }
 .tag-row { margin-top: var(--space-3); display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .extra-grid {
@@ -292,29 +348,47 @@ onMounted(async () => {
 .extra-item {
   padding: var(--space-3);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 7%, var(--color-bg-secondary));
+  border: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 8%, var(--surface-card));
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.extra-label { color: var(--color-text-muted); font-size: var(--text-xs); }
+.extra-label { color: var(--text-muted); font-size: var(--text-xs); }
+.extra-value { color: var(--text-body); font-weight: var(--font-semibold); }
 .markdown-text {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.7;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-secondary);
+  color: var(--text-body);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: var(--space-3);
 }
-.actions { margin-top: var(--space-4); }
+.actions {
+  margin-top: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  border: 1px solid var(--border-default);
+}
 .section-head { display: flex; align-items: center; justify-content: space-between; }
+.section-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
 .application-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .application-item {
   padding: var(--space-3);
-  border: 1px solid var(--color-card-border);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: var(--color-bg-secondary);
+  background: var(--surface-hover);
 }
 .applicant-head { display: flex; align-items: center; gap: var(--space-2); }
 .mini-avatar {
@@ -324,20 +398,21 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 12%, transparent);
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 14%, transparent);
+  color: var(--text-primary);
   font-size: var(--text-xs);
   font-weight: 700;
 }
-.app-row { margin-bottom: 4px; color: var(--color-text-secondary); }
-.status.open, .status.pending { color: #2563eb; }
-.status.approved { color: #059669; }
-.status.rejected { color: #dc2626; }
+.app-row { margin-bottom: 4px; color: var(--text-body); }
+.status.open, .status.pending { color: var(--color-info); }
+.status.approved { color: var(--color-success); }
+.status.rejected { color: var(--color-danger); }
 .app-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
-.empty { color: var(--color-text-muted); padding: var(--space-3) 0; }
+.empty { color: var(--text-muted); padding: var(--space-3) 0; }
 .group-checks { display: flex; flex-direction: column; gap: var(--space-2); }
-.apply-hint { margin-bottom: var(--space-2); color: var(--color-text-muted); font-size: var(--text-sm); }
+.apply-hint { margin-bottom: var(--space-2); color: var(--text-muted); font-size: var(--text-sm); }
 @media (max-width: 768px) {
+  .detail-page { padding: var(--space-4) var(--space-3); }
   .meta-grid,
   .extra-grid { grid-template-columns: 1fr; }
 }

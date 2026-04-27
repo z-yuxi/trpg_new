@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import PageLayout from '../../components/layout/PageLayout.vue';
 import TCard from '../../components/base/TCard.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
@@ -100,15 +101,16 @@ onMounted(loadDashboard);
 </script>
 
 <template>
-  <div class="dashboard-page">
+  <PageLayout>
+    <div class="dashboard-page">
     <section class="hero">
       <div>
         <h1>创作者仪表盘</h1>
         <p>集中查看规则集、模组与最近编辑动作，快速回到工作流。</p>
       </div>
       <div class="hero-actions">
-        <TButton type="primary" @click="router.push('/creator/workshop')">进入规则工坊</TButton>
         <TButton type="secondary" @click="router.push('/creator/modules')">管理模组</TButton>
+        <TButton type="primary" @click="router.push('/creator/workshop')">进入规则工坊</TButton>
       </div>
     </section>
 
@@ -163,7 +165,8 @@ onMounted(loadDashboard);
         </button>
       </TCard>
     </section>
-  </div>
+    </div>
+  </PageLayout>
 </template>
 
 <style scoped>

@@ -3,7 +3,8 @@
    与 tokens.css 中 :root 默认值相同，确保显式切换日间时生效
    ============================================================ */
 
-:root[data-theme='day'] {
+:root[data-theme='day'],
+:root[data-theme='light'] {
   /* 主色 */
   --color-primary:        #5B8DB8;   /* 品牌雾霾蓝 */
   --color-primary-hover:  #4A7A9F;

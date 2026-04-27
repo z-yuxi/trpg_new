@@ -90,7 +90,12 @@ function isActive(path: string) {
 }
 
 .nav-item:hover { background: var(--surface-hover); color: var(--text-primary); }
-.nav-item.active { background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-accent); font-weight: 500; }
+.nav-item.active {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
 
 .creator-main {
   flex: 1;

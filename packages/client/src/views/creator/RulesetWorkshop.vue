@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElDialog, ElInput, ElMessage } from 'element-plus';
+import PageLayout from '../../components/layout/PageLayout.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
@@ -173,7 +174,8 @@ onMounted(loadRulesets);
 </script>
 
 <template>
-  <div class="workshop">
+  <PageLayout>
+    <div class="workshop">
     <div class="workshop-header">
       <div>
         <h1 class="page-title">规则工坊</h1>
@@ -262,7 +264,8 @@ onMounted(loadRulesets);
         </div>
       </div>
     </ElDialog>
-  </div>
+    </div>
+  </PageLayout>
 </template>
 
 <style scoped>

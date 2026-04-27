@@ -3,7 +3,8 @@
    按附录 B 2.3 反色策略：Slate 200 主色 + Gray 950 背景
    ============================================================ */
 
-:root[data-theme='night'] {
+:root[data-theme='night'],
+:root[data-theme='dark'] {
   /* 主色提亮（品牌提亮蓝） */
   --color-primary:        #6B9DC8;
   --color-primary-hover:  #7AACE0;

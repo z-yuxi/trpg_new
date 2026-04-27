@@ -100,9 +100,14 @@ export function validateRuleset(
   return { valid: errors.length === 0, errors };
 }
 
+const YAML_MAX_BYTES = 512 * 1024; // 512 KB
+
 /**
  * 从 YAML 字符串解析 Ruleset
  */
 export function parseRulesetYAML(yamlString: string): unknown {
+  if (Buffer.byteLength(yamlString, 'utf8') > YAML_MAX_BYTES) {
+    throw new Error('YAML content too large (max 512 KB)');
+  }
   return yaml.parse(yamlString);
 }

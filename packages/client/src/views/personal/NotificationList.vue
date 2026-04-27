@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { ElMessage, ElTabs, ElTabPane, ElBadge, ElButton, ElEmpty, ElSkeleton } from 'element-plus';
+import { ElMessage, ElBadge, ElButton, ElEmpty, ElSkeleton } from 'element-plus';
+import SvgIcon from '../../components/SvgIcon.vue';
 import { socketClient } from '../../socket/socket-client';
 import { api } from '../../utils/api';
 import type { NotificationType, UserNotification } from '@trpg/shared';
@@ -103,7 +104,10 @@ onMounted(async () => {
 <template>
   <div class="notification-list">
     <div class="list-header">
-      <h2 class="page-title">消息通知</h2>
+      <h2 class="page-title">
+        <SvgIcon name="icon-bell" :size="18" />
+        <span>消息通知</span>
+      </h2>
       <ElButton v-if="hasUnread" size="small" @click="markAllAsRead">全部标为已读</ElButton>
     </div>
 
@@ -157,6 +161,9 @@ onMounted(async () => {
   margin-bottom: var(--space-4);
 }
 .page-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-lg);
   font-weight: var(--font-semibold);
   color: var(--text-heading);

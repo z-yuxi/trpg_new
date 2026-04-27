@@ -1,7 +1,8 @@
-import { Router, type IRouter } from 'express';
-import { authMiddleware } from '../middleware/auth';
+﻿import { Router, type IRouter } from 'express';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { rulesetService } from '../services/ruleset-service';
 import type { ExecuteRequest, RulesetStatus } from '@trpg/shared';
+import yaml from 'js-yaml';
 
 const router: IRouter = Router();
 
@@ -32,12 +33,19 @@ router.get('/', async (req, res): Promise<void> => {
 });
 
 // GET /api/rulesets/:id — 规则集详情（含 atoms/connections/commands）
-router.get('/:id', async (req, res): Promise<void> => {
+router.get('/:id', optionalAuthMiddleware, async (req, res): Promise<void> => {
   try {
     const ruleset = await rulesetService.findById(req.params['id']!);
     if (!ruleset) {
       res.status(404).json({ error: 'Ruleset not found' });
       return;
+    }
+    // 非 published 状态需认证且为作者
+    if (ruleset.status !== 'published') {
+      if (!req.user || req.user.id !== ruleset.author_id) {
+        res.status(404).json({ error: 'Ruleset not found' });
+        return;
+      }
     }
     res.json(ruleset);
   } catch (err) {
@@ -233,6 +241,64 @@ router.post('/:id/merge-from-parent', authMiddleware, async (req, res): Promise<
     const e = err as { code?: string; message?: string };
     if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
     if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/rulesets/:id/export?format=yaml — 导出规则集为 YAML
+router.get('/:id/export', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.findById(req.params['id']!);
+    const format = (req.query['format'] as string) ?? 'json';
+    if (format === 'yaml') {
+      const yamlStr = yaml.dump(ruleset, { indent: 2, lineWidth: 120, noRefs: true });
+      res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="ruleset-${req.params['id']}.yaml"`);
+      res.send(yamlStr);
+    } else {
+      res.json(ruleset);
+    }
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/import — 从 YAML 导入规则集（创建新规则集）
+router.post('/import', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const { yaml: yamlStr } = req.body as { yaml?: string };
+    if (!yamlStr || typeof yamlStr !== 'string') {
+      res.status(400).json({ error: 'yaml field is required' });
+      return;
+    }
+    if (Buffer.byteLength(yamlStr, 'utf8') > 512 * 1024) {
+      res.status(413).json({ error: 'YAML content too large (max 512 KB)' });
+      return;
+    }
+    const parsed = yaml.load(yamlStr) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') {
+      res.status(400).json({ error: 'Invalid YAML: expected an object' });
+      return;
+    }
+    // 创建新规则集，清除 ID 和 author_id（由服务端重新分配）
+    delete parsed['id'];
+    delete parsed['author_id'];
+    delete parsed['created_at'];
+    delete parsed['updated_at'];
+    if (typeof parsed['name'] === 'string') {
+      parsed['name'] = `[导入] ${parsed['name']}`;
+    }
+    const ruleset = await rulesetService.create({
+      ...(parsed as any),
+      author_id: req.userId!,
+      status: 'draft',
+    });
+    res.status(201).json({ id: ruleset.id, name: ruleset.name });
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string };
     if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
     res.status(500).json({ error: 'Internal server error' });
   }

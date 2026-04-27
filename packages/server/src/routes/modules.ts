@@ -1,7 +1,7 @@
 import { Router, type IRouter } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { moduleService } from '../services/module-service';
 import { createModulePdfBuffer, importModuleFile } from '../services/module-transfer-service';
 import { db } from '../db';
@@ -49,10 +49,17 @@ router.get('/mine', authMiddleware, async (req, res) => {
 });
 
 // 获取单个模组（含 content）
-router.get('/:id', async (req, res) => {
+router.get('/:id', optionalAuthMiddleware, async (req, res) => {
   try {
     const data = await moduleService.getById(req.params['id']!);
     if (!data) return res.status(404).json({ error: 'Not found' });
+    // 非公开状态的模组需要认证且为作者
+    const publicStatuses: string[] = ['public', 'public_notice'];
+    if (!publicStatuses.includes(data.status)) {
+      if (!req.user || req.user.id !== data.author_id) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+    }
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });

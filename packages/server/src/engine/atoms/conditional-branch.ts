@@ -32,7 +32,7 @@ export class ConditionalBranchAtom implements AtomNode {
       let matches = false;
 
       if (typeof cond === 'string' && typeof value === 'number') {
-        const rangeMatch = cond.match(/^([<>=!]+)\s*(-?\d+\.?\d*)$/);
+        const rangeMatch = cond.match(/^([<>=!]{1,2})\s*(-?\d+(?:\.\d+)?)$/);
         if (rangeMatch) {
           const op = rangeMatch[1];
           const threshold = parseFloat(rangeMatch[2]);

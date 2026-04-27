@@ -67,7 +67,12 @@ router.put('/:id', async (req, res) => {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
     if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
-    const updated = await characterSheetService.update(req.params.id, req.body);
+    const allowed = ['name', 'avatar_url', 'background', 'attributes', 'skills', 'occupation_id', 'derived_max', 'equipment', 'avatar_custom_data'];
+    const safeBody: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if ((req.body as Record<string, unknown>)[key] !== undefined) safeBody[key] = (req.body as Record<string, unknown>)[key];
+    }
+    const updated = await characterSheetService.update(req.params.id, safeBody);
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });

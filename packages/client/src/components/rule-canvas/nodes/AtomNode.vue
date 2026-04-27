@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { ATOM_DEFINITIONS } from '../../../utils/canvas-serializer';
-import SvgIcon from '../../SvgIcon.vue';
 import type { AtomNodeData, PortType } from '../../../utils/canvas-serializer';
 
 // Vue Flow 自定义节点的 props 约定
@@ -25,10 +24,10 @@ function toggleCollapse() {
 
 /** 端口颜色：按类型区分 */
 const PORT_COLORS: Record<PortType, string> = {
-  number: 'var(--color-port-number, #4a90e2)',
-  boolean: 'var(--color-port-boolean, #7ed321)',
-  string: 'var(--color-port-string, #f5a623)',
-  any: 'var(--color-port-any, #9b59b6)',
+  number: 'var(--color-port-number)',
+  boolean: 'var(--color-port-boolean)',
+  string: 'var(--color-port-string)',
+  any: 'var(--color-port-any)',
 };
 
 function portColor(type: PortType) {
@@ -56,11 +55,11 @@ function isRefInput(key: string): boolean {
 }
 
 const categoryColors: Record<string, string> = {
-  data: '#4a90e2',
-  compute: '#7b68ee',
-  logic: '#f39c12',
-  effect: '#e74c3c',
-  output: '#27ae60',
+  data: 'var(--canvas-node-data)',
+  compute: 'var(--canvas-node-compute)',
+  logic: 'var(--canvas-node-logic)',
+  effect: 'var(--canvas-node-effect)',
+  output: 'var(--canvas-node-output)',
 };
 </script>
 
@@ -77,9 +76,9 @@ const categoryColors: Record<string, string> = {
   >
     <!-- 标题栏 -->
     <div class="atom-node__header" @dblclick="toggleCollapse">
-      <span class="atom-node__icon"><SvgIcon :name="def?.icon ?? 'icon-settings'" :size="14" /></span>
+      <span class="atom-node__icon">{{ def?.icon ?? '⚙️' }}</span>
       <span class="atom-node__label">{{ def?.label ?? data.atom_type }}</span>
-      <span class="atom-node__collapse-btn"><SvgIcon :name="collapsed ? 'icon-chevron-right' : 'icon-chevron-down'" :size="10" /></span>
+      <span class="atom-node__collapse-btn">{{ collapsed ? '▶' : '▼' }}</span>
     </div>
 
     <!-- 端口区域（折叠时仍显示端口以便连线） -->
@@ -175,19 +174,19 @@ const categoryColors: Record<string, string> = {
 <style scoped>
 .atom-node {
   min-width: 200px;
-  background: var(--color-bg-card, #1e1e2e);
-  border: 2px solid var(--node-accent, #4a90e2);
+  background: var(--color-bg-card);
+  border: 2px solid var(--node-accent, var(--canvas-node-data));
   border-radius: 8px;
   font-size: 12px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transition: box-shadow 0.15s, border-color 0.15s;
   user-select: none;
 }
 
 .atom-node--selected {
-  border-color: var(--color-primary, #5B8DB8);
-  box-shadow: 0 0 0 2px var(--color-primary, #5B8DB8), 0 4px 16px rgba(0, 0, 0, 0.5);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary), 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .atom-node__header {
@@ -250,23 +249,23 @@ const categoryColors: Record<string, string> = {
 .atom-node__handle {
   width: 10px !important;
   height: 10px !important;
-  border: 2px solid var(--color-bg-card, #1e1e2e) !important;
+  border: 2px solid var(--color-bg-card) !important;
 }
 
 .atom-node__static-input {
   font-size: 11px;
   padding: 2px 5px;
-  background: var(--color-bg-input, #2a2a3e);
-  border: 1px solid var(--color-border, #444);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
   border-radius: 3px;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   width: 80px;
   margin-left: auto;
 }
 
 .atom-node__ref-badge {
   font-size: 10px;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   margin-left: auto;
   font-style: italic;
 }
@@ -274,7 +273,7 @@ const categoryColors: Record<string, string> = {
 .atom-node__preview {
   margin: 4px 10px;
   padding: 4px 6px;
-  background: var(--color-bg-input, #2a2a3e);
+  background: var(--color-bg-input);
   border-radius: 4px;
   border-left: 2px solid var(--node-accent);
 }

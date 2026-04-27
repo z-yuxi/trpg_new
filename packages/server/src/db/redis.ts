@@ -14,12 +14,15 @@ const redisConfig = {
 
 /** 主 Redis 客户端（用于常规操作） */
 export const redis = new Redis(redisConfig);
+redis.on('error', (err) => console.error('[Redis] 主客户端错误:', err));
 
 /** 发布用客户端 */
 export const redisPub = new Redis(redisConfig);
+redisPub.on('error', (err) => console.error('[Redis] 发布客户端错误:', err));
 
 /** 订阅用客户端 */
 export const redisSub = new Redis(redisConfig);
+redisSub.on('error', (err) => console.error('[Redis] 订阅客户端错误:', err));
 
 /** Redis key 前缀生成 */
 export const RedisKeys = {

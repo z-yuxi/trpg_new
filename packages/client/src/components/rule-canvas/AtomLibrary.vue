@@ -40,12 +40,12 @@ function onDragStart(event: DragEvent, atomType: string) {
 }
 
 const categoryColors: Record<string, string> = {
-  data: '#4a90e2',
-  compute: '#7b68ee',
-  logic: '#f39c12',
-  effect: '#e74c3c',
-  table: '#8e44ad',
-  output: '#27ae60',
+  data: 'var(--canvas-node-data)',
+  compute: 'var(--canvas-node-compute)',
+  logic: 'var(--canvas-node-logic)',
+  effect: 'var(--canvas-node-effect)',
+  table: 'var(--canvas-node-table)',
+  output: 'var(--canvas-node-output)',
 };
 </script>
 
@@ -157,7 +157,7 @@ const categoryColors: Record<string, string> = {
   padding: 8px;
   margin-bottom: 4px;
   border: 1px solid transparent;
-  border-left: 3px solid var(--cat-color, #888);
+  border-left: 3px solid var(--cat-color);
   border-radius: 4px;
   background: var(--surface-hover);
   cursor: grab;
@@ -166,7 +166,7 @@ const categoryColors: Record<string, string> = {
 
 .atom-card:hover {
   background: color-mix(in srgb, var(--cat-color) 12%, var(--surface-hover));
-  border-color: var(--cat-color, #888);
+  border-color: var(--cat-color);
 }
 
 .atom-card:active { cursor: grabbing; }
@@ -208,9 +208,9 @@ const categoryColors: Record<string, string> = {
 
 .atom-library__tips {
   padding: 8px 12px;
-  border-top: 1px solid var(--color-border, #2a2a3e);
+  border-top: 1px solid var(--color-border);
   font-size: 11px;
-  color: var(--color-text-secondary, #666);
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 

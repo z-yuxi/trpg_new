@@ -64,7 +64,10 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request).then((response) => {
         if (response.ok) {
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', response.clone()));
+          const responseClone = response.clone();
+          event.waitUntil(
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', responseClone))
+          );
         }
         return response;
       }).catch(() =>

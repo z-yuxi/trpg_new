@@ -77,8 +77,8 @@ onMounted(() => {
   z-index: 2600;
   padding: 10px 16px;
   text-align: center;
-  background: #f59e0b;
-  color: #111827;
+  background: var(--color-warning);
+  color: var(--color-warning-text);
   font-size: var(--text-sm);
   font-weight: 600;
 }
@@ -96,13 +96,13 @@ onMounted(() => {
   border: none;
   border-radius: 18px;
   background: rgba(15, 23, 42, 0.92);
-  color: #f8fafc;
+  color: var(--text-inverse);
   text-align: left;
   box-shadow: 0 18px 40px rgba(15, 23, 42, 0.24);
 }
 
 .install-banner strong {
-  color: #fbbf24;
+  color: var(--amber-400);
   font-size: var(--text-sm);
 }
 

@@ -10,7 +10,6 @@ const routes = [
       { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的团' } },
       {
         path: 'community',
-        name: 'Community',
         component: () => import('../views/Community.vue'),
         meta: { title: '社区' },
         children: [

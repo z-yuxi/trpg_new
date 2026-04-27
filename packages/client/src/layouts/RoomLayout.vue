@@ -215,17 +215,17 @@ function playAsNpc(npcId: string) {
   font-size: var(--text-sm); transition: background var(--transition-fast);
 }
 .icon-btn:hover { background: var(--color-page-bg); color: var(--color-text-primary); }
-.gm-btn { background: #fef3c7; color: #92400e; }
+.gm-btn { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .director-btn {
-  background: linear-gradient(135deg, var(--color-accent, #3b82f6), #6366f1);
-  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--indigo-500));
+  color: var(--text-inverse);
   font-weight: 600;
   position: relative;
 }
-.director-btn:hover { filter: brightness(1.1); color: #fff; }
+.director-btn:hover { filter: brightness(1.1); color: var(--text-inverse); }
 .director-badge {
-  background: var(--color-error, #ef4444);
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--text-inverse);
   font-size: 10px; font-weight: 700;
   min-width: 16px; height: 16px; border-radius: 8px;
   line-height: 16px; text-align: center; padding: 0 3px;
@@ -236,9 +236,10 @@ function playAsNpc(npcId: string) {
 .badge {
   position: absolute; top: 2px; right: 2px;
   min-width: 16px; height: 16px; border-radius: 8px;
-  background: var(--color-error, #ef4444); color: #fff;
-  font-size: 10px; font-weight: 700; line-height: 16px;
-  text-align: center; padding: 0 3px;
+  background: var(--color-danger);
+  color: var(--text-inverse);
+  font-size: 10px; font-weight: 700;
+  line-height: 16px; text-align: center; padding: 0 3px;
 }
 .dropdown-wrap { position: relative; }
 .dropdown-menu {

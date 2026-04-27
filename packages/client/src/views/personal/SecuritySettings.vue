@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 
 const router = useRouter();
@@ -56,7 +57,10 @@ async function changePassword() {
 
 <template>
   <div class="settings-page">
-    <button class="back-btn" @click="router.back()">&#8592; 返回</button>
+    <button class="back-btn" @click="router.back()">
+      <SvgIcon name="icon-arrow-left" :size="16" />
+      <span>返回</span>
+    </button>
     <div class="settings-card">
       <h2 class="title">账号安全</h2>
 

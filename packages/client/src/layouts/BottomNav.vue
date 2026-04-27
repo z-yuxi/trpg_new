@@ -78,8 +78,8 @@ function isActive(tab: { name: string; path: string }) {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: #ef4444;
-  color: #fff;
+  background: var(--color-danger);
+  color: var(--text-inverse);
   font-size: 10px;
   line-height: 18px;
   font-weight: 700;

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import TTag from '../../components/base/TTag.vue';
-import EmptyState from '../../components/base/EmptyState.vue';
+import ActivityTimelineList from '../../components/community/ActivityTimelineList.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
@@ -16,6 +15,27 @@ const activeTab = ref<'threads' | 'posts'>('threads');
 const threads = ref<ForumThread[]>([]);
 const posts = ref<ForumPost[]>([]);
 const loading = ref(false);
+
+const threadTimelineItems = computed(() =>
+  threads.value.map((thread) => ({
+    id: thread.id,
+    title: thread.title,
+    createdAtText: formatTime(thread.created_at),
+    tagText: '发布了帖子',
+    targetId: thread.id,
+  }))
+);
+
+const postTimelineItems = computed(() =>
+  posts.value.map((post) => ({
+    id: post.id,
+    title: post.thread_title,
+    createdAtText: formatTime(post.created_at),
+    tagText: '回复了帖子',
+    targetId: post.thread_id,
+    preview: `${post.content.slice(0, 80)}${post.content.length > 80 ? '...' : ''}`,
+  }))
+);
 
 async function fetchActivity() {
   if (!authStore.isLoggedIn) return;
@@ -62,58 +82,21 @@ onMounted(fetchActivity);
     <div v-if="loading" class="empty-state">加载中...</div>
 
     <template v-else-if="activeTab === 'threads'">
-      <EmptyState
-        v-if="threads.length === 0"
-        icon-name=""
-        illustration-name="illust-empty"
-        :illustration-size="170"
-        title="暂无发帖记录"
-        description="发布第一篇帖子后，这里会显示你的创作轨迹。"
+      <ActivityTimelineList
+        :items="threadTimelineItems"
+        empty-title="暂无发帖记录"
+        empty-description="发布第一篇帖子后，这里会显示你的创作轨迹。"
+        @open="(targetId) => router.push(`/community/thread/${targetId}`)"
       />
-      <div v-else class="timeline">
-        <div v-for="(thread, index) in threads" :key="thread.id" class="timeline-item">
-          <div class="timeline-axis">
-            <div class="axis-dot"></div>
-            <div v-if="index < threads.length - 1" class="axis-line"></div>
-          </div>
-
-          <div class="timeline-content">
-            <div class="item-header">
-              <TTag color="default" size="sm">发布了帖子</TTag>
-              <span class="item-time">{{ formatTime(thread.created_at) }}</span>
-            </div>
-            <div class="item-title clickable" @click="router.push(`/community/thread/${thread.id}`)">{{ thread.title }}</div>
-          </div>
-        </div>
-      </div>
     </template>
 
     <template v-else>
-      <EmptyState
-        v-if="posts.length === 0"
-        icon-name=""
-        illustration-name="illust-empty"
-        :illustration-size="170"
-        title="暂无回复记录"
-        description="参与一次讨论后，这里会记录你的互动内容。"
+      <ActivityTimelineList
+        :items="postTimelineItems"
+        empty-title="暂无回复记录"
+        empty-description="参与一次讨论后，这里会记录你的互动内容。"
+        @open="(targetId) => router.push(`/community/thread/${targetId}`)"
       />
-      <div v-else class="timeline">
-        <div v-for="(post, index) in posts" :key="post.id" class="timeline-item">
-          <div class="timeline-axis">
-            <div class="axis-dot"></div>
-            <div v-if="index < posts.length - 1" class="axis-line"></div>
-          </div>
-
-          <div class="timeline-content">
-            <div class="item-header">
-              <TTag color="default" size="sm">回复了帖子</TTag>
-              <span class="item-time">{{ formatTime(post.created_at) }}</span>
-            </div>
-            <div class="item-title clickable" @click="router.push(`/community/thread/${post.thread_id}`)">{{ post.thread_title }}</div>
-            <div class="reply-preview">{{ post.content.slice(0, 80) }}{{ post.content.length > 80 ? '...' : '' }}</div>
-          </div>
-        </div>
-      </div>
     </template>
   </div>
 </template>
@@ -147,75 +130,5 @@ onMounted(fetchActivity);
   padding: var(--space-8);
   color: var(--text-muted);
   font-size: var(--text-sm);
-}
-
-/* 时间线 */
-.timeline { display: flex; flex-direction: column; }
-
-.timeline-item {
-  display: flex;
-  gap: var(--space-4);
-}
-
-.timeline-axis {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-  width: 16px;
-}
-
-.axis-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
-  border: 2px solid var(--surface-page);
-  box-shadow: 0 0 0 2px var(--color-primary);
-  flex-shrink: 0;
-  margin-top: 4px;
-}
-
-.axis-line {
-  width: 2px;
-  flex: 1;
-  background: var(--border-default);
-  min-height: 24px;
-  margin: var(--space-1) 0;
-}
-
-.timeline-content {
-  flex: 1;
-  padding-bottom: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.item-time { font-size: var(--text-xs); color: var(--text-muted); }
-
-.item-title {
-  font-size: var(--text-sm);
-  color: var(--text-body);
-  line-height: var(--leading-normal);
-}
-
-.item-title.clickable {
-  cursor: pointer;
-}
-
-.item-title.clickable:hover {
-  color: var(--color-primary);
-}
-
-.reply-preview {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  line-height: var(--leading-normal);
 }
 </style>

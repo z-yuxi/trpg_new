@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 
 const router = useRouter();
@@ -38,7 +39,10 @@ watch([profilePublic, onlineVisible, campaignHistoryPublic], debouncedSave);
 
 <template>
   <div class="settings-page">
-    <button class="back-btn" @click="router.back()">&#8592; 返回</button>
+    <button class="back-btn" @click="router.back()">
+      <SvgIcon name="icon-arrow-left" :size="16" />
+      <span>返回</span>
+    </button>
     <div class="settings-card">
       <h2 class="title">隐私设置</h2>
       <p class="desc">控制其他用户查看你的信息范围。更改后自动保存。</p>

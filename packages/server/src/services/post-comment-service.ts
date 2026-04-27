@@ -185,27 +185,31 @@ class PostCommentService {
   async createFloor(postId: string, userId: string, content: string): Promise<FloorReply> {
     const id = randomUUID();
     const now = new Date();
+    let floorNumber = 2;
 
-    // 计算下一楼层号（至少为 2，1 楼预留给帖子正文）
-    const maxResult = await db('post_replies')
-      .where({ post_id: postId })
-      .max('floor_number as max')
-      .first();
-    const maxFloor = Number((maxResult as Record<string, unknown>)?.['max'] ?? 1);
-    const floorNumber = Math.max(maxFloor + 1, 2);
+    // 使用事务 + forUpdate 锁防止并发楼层产生相同楼层号
+    await db.transaction(async (trx) => {
+      const maxResult = await trx('post_replies')
+        .where({ post_id: postId })
+        .max('floor_number as max')
+        .forUpdate()
+        .first();
+      const maxFloor = Number((maxResult as Record<string, unknown>)?.['max'] ?? 1);
+      floorNumber = Math.max(maxFloor + 1, 2);
 
-    await db('post_replies').insert({
-      id,
-      post_id: postId,
-      user_id: userId,
-      floor_number: floorNumber,
-      content,
-      like_count: 0,
-      reply_count: 0,
-      is_original_post: false,
-      deleted: false,
-      created_at: now,
-      updated_at: now,
+      await trx('post_replies').insert({
+        id,
+        post_id: postId,
+        user_id: userId,
+        floor_number: floorNumber,
+        content,
+        like_count: 0,
+        reply_count: 0,
+        is_original_post: false,
+        deleted: false,
+        created_at: now,
+        updated_at: now,
+      });
     });
 
     const user = await db('users').where({ id: userId }).select('nickname', 'avatar_url').first();
@@ -336,10 +340,9 @@ class PostCommentService {
     const floor = await db('post_replies').where({ id: replyId }).first();
     if (!floor) throw new Error('楼层不存在');
 
-    const existing = await db('floor_likes').where({ reply_id: replyId, user_id: userId }).first();
-    if (existing) return; // 已点赞，幂等处理
-
     await db.transaction(async (trx) => {
+      const existing = await trx('floor_likes').where({ reply_id: replyId, user_id: userId }).first();
+      if (existing) return; // 已点赞，幂等
       await trx('floor_likes').insert({
         id: randomUUID(),
         reply_id: replyId,

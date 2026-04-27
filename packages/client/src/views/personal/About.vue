@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { useRouter } from 'vue-router';
+import SvgIcon from '../../components/SvgIcon.vue';
 
 const router = useRouter();
 const version = __APP_VERSION__;
@@ -18,7 +19,10 @@ function openFeedback() {
 
 <template>
   <div class="settings-page">
-    <button class="back-btn" @click="router.back()">&#8592; 返回</button>
+    <button class="back-btn" @click="router.back()">
+      <SvgIcon name="icon-arrow-left" :size="16" />
+      <span>返回</span>
+    </button>
     <div class="settings-card">
       <h2 class="title">关于我们</h2>
       <p class="brand-line">共叙，专注人与人之间的共同叙事</p>

@@ -8,7 +8,7 @@ const config: Knex.Config = {
     host: process.env.DB_HOST ?? '127.0.0.1',
     port: parseInt(process.env.DB_PORT ?? '3306'),
     user: process.env.DB_USER ?? 'trpg',
-    password: process.env.DB_PASSWORD ?? 'trpg_password',
+    password: process.env.DB_PASSWORD ?? '',
     database: process.env.DB_NAME ?? 'trpg_platform',
     charset: 'utf8mb4',
   },

@@ -11,6 +11,8 @@ const math = create(all);
 const BLOCKED_FUNCTIONS = [
   'import', 'createUnit', 'simplify',
   'derivative', 'resolve', 'chain',
+  'parse', 'compile', 'help', 'typed', 'config',
+  'rationalize',
 ];
 
 for (const fn of BLOCKED_FUNCTIONS) {
@@ -103,15 +105,28 @@ export function validateFormula(
   }
 
   try {
-    // Build a dummy scope with zeros for all available vars
-    const dummyScope: Record<string, number> = {};
-    for (const v of availableVars) {
-      dummyScope[v] = 0;
-    }
-
-    // Try to parse (not evaluate) by evaluating with zeros
-    // Using a simple substitute: evaluate with dummyScope
-    math.evaluate(formula, dummyScope);
+    // 使用 math.parse 做 AST 静态分析，不执行公式，避免副作用
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const node = (math as any).parse(formula);
+    // 遍历 AST，检查是否引用了被屏蔽函数或不允许的全局对象
+    const availableSet = new Set(availableVars);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    node.traverse((n: any) => {
+      if (n.type === 'SymbolNode' || n.type === 'FunctionNode') {
+        const name: string = n.name ?? n.fn?.name ?? '';
+        if (BLOCKED_FUNCTIONS.includes(name)) {
+          throw new Error(`Blocked function referenced: ${name}`);
+        }
+        // 不允许引用 availableVars 之外的全局对象（SymbolNode 且不是已知变量/函数）
+        if (n.type === 'SymbolNode' && name && !availableSet.has(name)) {
+          // 允许 mathjs 内置常数和函数名（非大写开头的全局变量视为潜在危险，但此处宽松处理）
+          // 仅拒绝明显的全局对象访问
+          if (['process', 'global', 'window', 'require', 'eval', 'Function'].includes(name)) {
+            throw new Error(`Forbidden symbol referenced: ${name}`);
+          }
+        }
+      }
+    });
     return { valid: true };
   } catch (err) {
     return { valid: false, error: err instanceof Error ? err.message : String(err) };

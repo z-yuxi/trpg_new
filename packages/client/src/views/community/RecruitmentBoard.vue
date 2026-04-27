@@ -51,8 +51,8 @@ const filterTag = ref('all');
 const sort = ref<'latest' | 'oldest' | 'hottest'>('latest');
 const keyword = ref('');
 
-const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'danger' | 'default' }> = {
-  open: { label: '招募中', color: 'success' },
+const statusMap: Record<string, { label: string; color: 'info' | 'warning' | 'danger' | 'default' }> = {
+  open: { label: '招募中', color: 'info' },
   full: { label: '已满员', color: 'warning' },
   grouped: { label: '已成团', color: 'danger' },
   closed: { label: '已关闭', color: 'default' },

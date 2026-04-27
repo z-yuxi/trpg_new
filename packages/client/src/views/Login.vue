@@ -5,6 +5,7 @@ import TCard from '../components/base/TCard.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { setRefreshToken } from '../utils/api';
 
 const router = useRouter();
 const route = useRoute();
@@ -32,6 +33,7 @@ async function submit() {
       if (!res.ok) throw new Error(data.error || '注册失败');
       const accessToken = data?.tokens?.access_token;
       if (!accessToken) throw new Error('注册成功但未获取到令牌');
+      if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
       authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
     } else {
       // 登录
@@ -44,6 +46,7 @@ async function submit() {
       if (!res.ok) throw new Error(data.error || '登录失败');
       const accessToken = data?.tokens?.access_token;
       if (!accessToken) throw new Error('登录成功但未获取到令牌');
+      if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
       authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
     }
     const redirect = (route.query.redirect as string) || '/';

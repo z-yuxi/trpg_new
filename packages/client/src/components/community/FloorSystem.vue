@@ -2,7 +2,6 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { ElInput, ElMessage, ElSkeleton } from 'element-plus';
 import TButton from '../base/TButton.vue';
-import SvgIcon from '../SvgIcon.vue';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -416,7 +415,7 @@ onUnmounted(() => {
               <span class="nested-content">{{ c.content }}</span>
             </div>
             <button class="expand-btn" @click="toggleFloorComments(floor)">
-              展开全部 {{ floor.reply_count }} 条回复 <SvgIcon name="icon-chevron-down" :size="12" />
+              展开全部 {{ floor.reply_count }} 条回复 ▼
             </button>
           </template>
 
@@ -471,7 +470,7 @@ onUnmounted(() => {
               </button>
 
               <button class="expand-btn" @click="expandedFloors.delete(floor.id)">
-                收起 <SvgIcon name="icon-chevron-up" :size="12" />
+                收起 ▲
               </button>
             </template>
           </template>
@@ -611,12 +610,12 @@ onUnmounted(() => {
 }
 
 .action-btn--liked {
-  color: #e53e3e;
+  color: var(--color-danger);
 }
 
 .action-btn--danger:hover {
-  color: #e53e3e;
-  background: color-mix(in srgb, #e53e3e 10%, transparent);
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
 
 .floor-content {

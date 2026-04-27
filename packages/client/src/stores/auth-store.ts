@@ -29,6 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
     nickname.value = '';
     avatarUrl.value = '';
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
   }
 
   return { token, userId, nickname, avatarUrl, isLoggedIn, setAuth, logout };

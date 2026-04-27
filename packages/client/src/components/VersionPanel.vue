@@ -5,7 +5,6 @@
  */
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
-import SvgIcon from './SvgIcon.vue';
 import { api } from '../utils/api';
 
 const props = defineProps<{
@@ -152,8 +151,7 @@ function formatDate(dateStr: string): string {
           @keydown.enter="saveVersion"
         />
         <button class="action-btn action-btn--primary" :disabled="saving" @click="saveVersion">
-          <template v-if="saving">保存中…</template>
-          <template v-else><SvgIcon name="icon-copy" :size="12" /> 保存版本</template>
+          {{ saving ? '保存中…' : '💾 保存版本' }}
         </button>
       </div>
     </section>
@@ -162,8 +160,7 @@ function formatDate(dateStr: string): string {
     <section v-if="parentId" class="version-panel__section">
       <h5 class="section-title">从上游同步</h5>
       <button class="action-btn" :disabled="merging" @click="mergeFromParent">
-        <template v-if="merging">合并中…</template>
-        <template v-else><SvgIcon name="icon-download" :size="12" /> 从上游合并变更</template>
+        {{ merging ? '合并中…' : '⬇ 从上游合并变更' }}
       </button>
     </section>
 
@@ -205,7 +202,7 @@ function formatDate(dateStr: string): string {
     <section class="version-panel__section">
       <h5 class="section-title">
         版本历史
-        <button class="refresh-btn" @click="fetchVersions" title="刷新"><SvgIcon name="icon-history" :size="12" /></button>
+        <button class="refresh-btn" @click="fetchVersions" title="刷新">↻</button>
       </h5>
       <div v-if="loading" class="loading-text">加载中…</div>
       <div v-else-if="versions.length === 0" class="empty-text">暂无版本快照</div>
@@ -252,7 +249,7 @@ function formatDate(dateStr: string): string {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
@@ -262,7 +259,7 @@ function formatDate(dateStr: string): string {
 .refresh-btn {
   background: none;
   border: none;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
   padding: 2px 6px;
@@ -296,7 +293,7 @@ function formatDate(dateStr: string): string {
   flex: 1;
 }
 
-.compare-vs { font-size: 12px; color: var(--color-text-secondary, #888); }
+.compare-vs { font-size: 12px; color: var(--text-secondary); }
 
 .action-btn {
   padding: 5px 10px;
@@ -311,19 +308,19 @@ function formatDate(dateStr: string): string {
 }
 .action-btn:hover { background: var(--surface-hover); }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.action-btn--primary { background: var(--color-primary, #5B8DB8); border-color: var(--color-primary, #5B8DB8); color: #fff; }
+.action-btn--primary { background: var(--color-primary); border-color: var(--color-primary); color: var(--text-inverse); }
 .action-btn--primary:hover { opacity: 0.85; }
-.action-btn--danger { border-color: var(--color-error, #e74c3c); color: var(--color-error, #e74c3c); font-size: 11px; padding: 3px 8px; }
+.action-btn--danger { border-color: var(--color-danger); color: var(--color-danger); font-size: 11px; padding: 3px 8px; }
 .action-btn--sm { font-size: 11px; padding: 3px 8px; }
 
 /* diff */
 .diff-result { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
 .diff-group { border-radius: 4px; padding: 6px 10px; font-size: 12px; }
-.diff-added { background: color-mix(in srgb, #27ae60 15%, transparent); border-left: 3px solid #27ae60; }
-.diff-removed { background: color-mix(in srgb, #e74c3c 15%, transparent); border-left: 3px solid #e74c3c; }
-.diff-modified { background: color-mix(in srgb, #f5a623 15%, transparent); border-left: 3px solid #f5a623; }
+.diff-added { background: color-mix(in srgb, var(--color-success) 15%, transparent); border-left: 3px solid var(--color-success); }
+.diff-removed { background: color-mix(in srgb, var(--color-danger) 15%, transparent); border-left: 3px solid var(--color-danger); }
+.diff-modified { background: color-mix(in srgb, var(--color-warning) 15%, transparent); border-left: 3px solid var(--color-warning); }
 .diff-label { font-weight: 600; display: block; margin-bottom: 4px; }
-.diff-same { font-size: 12px; color: var(--color-text-secondary, #888); text-align: center; padding: 8px; }
+.diff-same { font-size: 12px; color: var(--text-secondary); text-align: center; padding: 8px; }
 .diff-group ul { margin: 0; padding-left: 16px; }
 .diff-group li { margin: 2px 0; font-family: monospace; }
 
@@ -349,21 +346,21 @@ function formatDate(dateStr: string): string {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-primary, #5B8DB8);
+  background: var(--color-primary);
   flex-shrink: 0;
   margin-top: 2px;
 }
 .version-item__content { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .version-item__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.version-num { font-size: 12px; font-weight: 600; color: var(--color-primary, #5B8DB8); }
-.version-date { font-size: 11px; color: var(--color-text-secondary, #888); }
-.version-author { font-size: 11px; color: var(--color-text-secondary, #888); font-style: italic; }
-.version-hash { font-size: 10px; color: var(--color-text-secondary, #666); font-family: monospace; margin-top: 2px; }
-.version-changelog { font-size: 12px; color: var(--color-text-secondary, #aaa); }
+.version-num { font-size: 12px; font-weight: 600; color: var(--color-primary); }
+.version-date { font-size: 11px; color: var(--text-secondary); }
+.version-author { font-size: 11px; color: var(--text-secondary); font-style: italic; }
+.version-hash { font-size: 10px; color: var(--text-muted); font-family: monospace; margin-top: 2px; }
+.version-changelog { font-size: 12px; color: var(--text-muted); }
 
 .loading-text, .empty-text {
   font-size: 12px;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   text-align: center;
   padding: 16px;
 }

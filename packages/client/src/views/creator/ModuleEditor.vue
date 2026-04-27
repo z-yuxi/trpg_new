@@ -404,7 +404,7 @@ function goBack() {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--color-background, #f5f5f5);
+  background: var(--surface-page);
 }
 
 .visually-hidden {
@@ -426,8 +426,8 @@ function goBack() {
   justify-content: space-between;
   padding: 0 16px;
   height: 52px;
-  background: var(--color-surface, #fff);
-  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  background: var(--surface-card);
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
   gap: 16px;
 }
@@ -447,7 +447,7 @@ function goBack() {
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--color-primary, #1976d2);
+  color: var(--color-primary);
   font-size: 14px;
   padding: 4px 8px;
 }
@@ -458,13 +458,13 @@ function goBack() {
   border: none;
   outline: none;
   background: transparent;
-  color: var(--color-text, #333);
+  color: var(--text-body);
   min-width: 200px;
   max-width: 400px;
 }
 
 .title-input:focus {
-  border-bottom: 2px solid var(--color-primary, #1976d2);
+  border-bottom: 2px solid var(--color-primary);
 }
 
 .status-badge {
@@ -473,27 +473,27 @@ function goBack() {
   border-radius: 10px;
 }
 
-.status-badge--draft { background: #fff3e0; color: #e65100; }
-.status-badge--public { background: #e8f5e9; color: #2e7d32; }
-.status-badge--archived { background: #f3e5f5; color: #6a1b9a; }
-.status-badge--reviewing { background: #e1f5fe; color: #0277bd; }
-.status-badge--public_notice { background: #fff9c4; color: #f57f17; }
-.status-badge--suspended { background: #ffebee; color: #c62828; }
+.status-badge--draft { background: var(--color-warning-bg); color: var(--color-warning-text); }
+.status-badge--public { background: var(--color-success-bg); color: var(--color-success); }
+.status-badge--archived { background: var(--purple-50); color: var(--purple-700); }
+.status-badge--reviewing { background: var(--color-info-bg); color: var(--color-info); }
+.status-badge--public_notice { background: var(--color-warning-bg); color: var(--color-warning); }
+.status-badge--suspended { background: var(--color-danger-bg); color: var(--color-danger); }
 
 .public-notice-info {
   font-size: 13px;
-  color: var(--color-warning, #ff9800);
+  color: var(--color-warning);
   padding: 4px 8px;
-  background: rgba(255, 152, 0, 0.1);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
   border-radius: 4px;
   white-space: nowrap;
 }
 
 .suspended-info {
   font-size: 13px;
-  color: var(--color-danger, #f44336);
+  color: var(--color-danger);
   padding: 4px 8px;
-  background: rgba(244, 67, 54, 0.1);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   border-radius: 4px;
   white-space: nowrap;
   max-width: 200px;
@@ -502,9 +502,9 @@ function goBack() {
 }
 
 .save-indicator { font-size: 12px; }
-.indicator--saved { color: var(--color-success, #4caf50); }
-.indicator--saving { color: var(--color-text-secondary, #888); }
-.indicator--unsaved { color: var(--color-warning, #ff9800); }
+.indicator--saved { color: var(--color-success); }
+.indicator--saving { color: var(--text-secondary); }
+.indicator--unsaved { color: var(--color-warning); }
 
 .btn {
   padding: 6px 16px;

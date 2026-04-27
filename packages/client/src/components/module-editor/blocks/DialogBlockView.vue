@@ -1,13 +1,11 @@
 <template>
   <node-view-wrapper class="block-view block-view--dialog">
     <div class="block-header" @click.prevent="toggleCollapse">
-      <span class="block-icon"><SvgIcon name="icon-broadcast" :size="14" /></span>
+      <span class="block-icon">💬</span>
       <span class="block-title">{{ attrs.dialog_title || '未命名对话' }}</span>
       <span class="block-tag">对话·{{ participants.length }}人</span>
-      <button class="block-del" title="删除块" @click.stop="deleteNode">
-        <SvgIcon name="icon-close" :size="12" />
-      </button>
-      <span class="block-chevron"><SvgIcon :name="isCollapsed ? 'icon-chevron-right' : 'icon-chevron-down'" :size="12" /></span>
+      <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
+      <span class="block-chevron">{{ isCollapsed ? '▶' : '▼' }}</span>
     </div>
     <Transition name="blk">
       <div v-if="!isCollapsed" class="block-body">
@@ -28,9 +26,7 @@
               <option value="pc">玩家</option>
               <option value="narrator">旁白</option>
             </select>
-            <button class="branch-del" @click.stop="removeParticipant(i)">
-              <SvgIcon name="icon-close" :size="12" />
-            </button>
+            <button class="branch-del" @click.stop="removeParticipant(i)">✕</button>
           </div>
           <button class="add-btn" @click.stop="addParticipant">+ 添加参与者</button>
         </div>
@@ -50,9 +46,7 @@
               @input="updateLine(i, 'content', tv($event))" />
             <input class="form-inp-sm" :value="line.emotion" placeholder="情绪"
               @input="updateLine(i, 'emotion', iv($event))" />
-            <button class="branch-del" @click.stop="removeLine(i)">
-              <SvgIcon name="icon-close" :size="12" />
-            </button>
+            <button class="branch-del" @click.stop="removeLine(i)">✕</button>
           </div>
           <button class="add-btn" @click.stop="addLine">+ 添加对话行</button>
         </div>
@@ -72,7 +66,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
-import SvgIcon from '../../SvgIcon.vue';
 
 const props = defineProps<{
   node: any;
@@ -118,12 +111,10 @@ function updateLine(i: number, key: string, val: string | null) {
 </script>
 
 <style scoped>
-.block-view--dialog { border-left: 4px solid var(--color-info, #2196f3); }
+.block-view--dialog { border-left: 4px solid var(--color-info); }
 .block-header { display:flex; align-items:center; gap:6px; padding:6px 10px;
   cursor:pointer; user-select:none; background:var(--surface-hover); }
-.block-icon,
-.block-del,
-.block-chevron { display:inline-flex; align-items:center; justify-content:center; }
+.block-icon { font-size:14px; }
 .block-title { flex:1; font-weight:600; font-size:13px;
   color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .block-tag { font-size:11px; padding:1px 6px; border-radius:10px;

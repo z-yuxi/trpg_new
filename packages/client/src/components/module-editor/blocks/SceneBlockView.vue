@@ -1,13 +1,11 @@
 <template>
   <node-view-wrapper class="block-view block-view--scene">
     <div class="block-header" @click.prevent="toggleCollapse">
-      <span class="block-icon"><SvgIcon name="icon-scene" :size="14" /></span>
+      <span class="block-icon">📍</span>
       <span class="block-title">{{ attrs.scene_name || '未命名场景' }}</span>
       <span class="block-tag">{{ sceneTypeLabel }}</span>
-      <button class="block-del" title="删除块" @click.stop="deleteNode">
-        <SvgIcon name="icon-close" :size="12" />
-      </button>
-      <span class="block-chevron"><SvgIcon :name="isCollapsed ? 'icon-chevron-right' : 'icon-chevron-down'" :size="12" /></span>
+      <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
+      <span class="block-chevron">{{ isCollapsed ? '▶' : '▼' }}</span>
     </div>
     <Transition name="blk">
       <div v-if="!isCollapsed" class="block-body">
@@ -22,7 +20,7 @@
             @change="ua({ scene_type: sv($event) })">
             <option value="spatial">实体场所</option>
             <option value="virtual">虚拟场景</option>
-            <option value="lobby">公共场</option>
+            <option value="lobby">枢纽/大厅</option>
           </select>
         </div>
         <div class="form-row">
@@ -53,7 +51,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
-import SvgIcon from '../../SvgIcon.vue';
 
 const props = defineProps<{
   node: any;
@@ -77,16 +74,14 @@ const sceneTypeLabel = computed(() => {
 </script>
 
 <style scoped>
-.block-view--scene { border-left: 4px solid var(--color-success, #4caf50); }
+.block-view--scene { border-left: 4px solid var(--color-success); }
 .block-header { display:flex; align-items:center; gap:6px; padding:6px 10px;
   cursor:pointer; user-select:none; background:var(--surface-hover); }
-.block-icon,
-.block-del,
-.block-chevron { display:inline-flex; align-items:center; justify-content:center; }
+.block-icon { font-size:14px; }
 .block-title { flex:1; font-weight:600; font-size:13px;
   color:var(--text-primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .block-tag { font-size:11px; padding:1px 6px; border-radius:10px;
-  background:var(--color-success-light,#c8e6c9); color:var(--color-success-dark,#2e7d32); }
+  background:var(--color-success-bg); color:var(--color-success); }
 .block-del { border:none; background:none; cursor:pointer; color:var(--text-muted);
   font-size:12px; padding:2px 4px; border-radius:3px; }
 .block-del:hover { background:var(--color-danger-light); color:var(--color-danger); }
@@ -97,7 +92,7 @@ const sceneTypeLabel = computed(() => {
 .form-lbl { font-size:11px; color:var(--text-body); font-weight:500;
   display:flex; align-items:center; gap:4px; }
 .gm-badge { font-size:10px; padding:0 4px; border-radius:8px;
-  background:var(--color-warning-light,#fff3e0); color:var(--color-warning,#e65100); }
+  background:var(--color-warning-bg); color:var(--color-warning-text); }
 .form-inp,.form-sel,.form-ta { width:100%; padding:5px 8px; border:1px solid var(--border-default);
   border-radius:4px; font-size:13px; font-family:inherit;
   background:var(--surface-card); color:var(--text-primary); box-sizing:border-box; }

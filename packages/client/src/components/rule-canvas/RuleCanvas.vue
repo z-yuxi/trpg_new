@@ -7,7 +7,6 @@ import { Controls } from '@vue-flow/controls';
 import type { Node, Edge, Connection, EdgeMouseEvent, NodeTypesObject } from '@vue-flow/core';
 import AtomLibrary from './AtomLibrary.vue';
 import AtomNode from './nodes/AtomNode.vue';
-import SvgIcon from '../SvgIcon.vue';
 import {
   ATOM_DEFINITIONS,
   serializeToGraph,
@@ -447,10 +446,10 @@ async function runPreview() {
       const tgtExecuted = executedNodeIds.has(e.target);
       if (srcExecuted && tgtExecuted) {
         (e as any).animated = true;
-        (e as any).style = { stroke: '#27ae60', strokeWidth: 2 };
+        (e as any).style = { stroke: 'var(--canvas-edge-active)', strokeWidth: 2 };
       } else {
         (e as any).animated = false;
-        (e as any).style = { stroke: '#555', strokeWidth: 1, opacity: 0.4 };
+        (e as any).style = { stroke: 'var(--canvas-edge-inactive)', strokeWidth: 1, opacity: 0.4 };
       }
     });
   } catch (e) {
@@ -514,7 +513,7 @@ defineExpose({
           </select>
         </div>
         <button class="toolbar-btn toolbar-btn--primary" @click="showPreviewPanel = !showPreviewPanel">
-          <SvgIcon name="icon-chevron-right" :size="12" /> 预览执行
+          ▶ 预览执行
         </button>
         <button
           class="toolbar-btn"
@@ -526,7 +525,7 @@ defineExpose({
           <span v-if="validationIssues.length > 0" class="toolbar-badge">{{ validationIssues.length }}</span>
         </button>
         <button class="toolbar-btn toolbar-btn--danger" @click="deleteSelected" title="删除选中 (Delete)">
-          <SvgIcon name="icon-trash" :size="12" /> 删除
+          🗑 删除
         </button>
       </div>
     </div>
@@ -562,7 +561,7 @@ defineExpose({
           <Background pattern-color="var(--border-default)" />
           <MiniMap
             class="rule-canvas__minimap"
-            node-color="var(--color-primary, #5B8DB8)"
+            node-color="var(--color-primary)"
           />
           <Controls class="rule-canvas__controls" />
 
@@ -575,7 +574,7 @@ defineExpose({
 
           <!-- 错误提示 -->
           <Panel position="bottom-center" v-if="connectionError">
-            <div class="canvas-error"><SvgIcon name="state-error" :size="14" /> {{ connectionError }}</div>
+            <div class="canvas-error">⚠ {{ connectionError }}</div>
           </Panel>
 
           <!-- 拓扑校验结果面板 -->
@@ -583,11 +582,11 @@ defineExpose({
             <div class="validation-panel" :class="{ collapsed: !showValidationPanel }">
               <div class="validation-panel__header" @click="showValidationPanel = !showValidationPanel">
                 <span :class="validationIssues.some(i => i.type === 'error') ? 'val-error-icon' : 'val-warn-icon'">
-                  <SvgIcon :name="validationIssues.some(i => i.type === 'error') ? 'icon-close' : 'state-error'" :size="12" />
+                  {{ validationIssues.some(i => i.type === 'error') ? '✕' : '⚠' }}
                   {{ validationIssues.filter(i => i.type === 'error').length }} 错误
                   {{ validationIssues.filter(i => i.type === 'warning').length }} 警告
                 </span>
-                <span class="val-toggle"><SvgIcon :name="showValidationPanel ? 'icon-chevron-down' : 'icon-chevron-up'" :size="12" /></span>
+                <span class="val-toggle">{{ showValidationPanel ? '▼' : '▲' }}</span>
               </div>
               <ul v-if="showValidationPanel" class="validation-panel__list">
                 <li
@@ -662,8 +661,7 @@ defineExpose({
               :disabled="previewRunning"
               @click="runPreview"
             >
-              <template v-if="previewRunning">执行中…</template>
-              <template v-else><SvgIcon name="icon-chevron-right" :size="12" /> 执行</template>
+              {{ previewRunning ? '执行中…' : '▶ 执行' }}
             </button>
 
             <div v-if="previewError" class="preview-error">{{ previewError }}</div>
@@ -747,28 +745,28 @@ defineExpose({
 .toolbar-btn:hover { background: var(--surface-hover); }
 
 .toolbar-btn--primary {
-  background: var(--color-primary, #5B8DB8);
-  border-color: var(--color-primary, #5B8DB8);
-  color: #fff;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-inverse);
 }
 
 .toolbar-btn--primary:hover { opacity: 0.85; }
 
 .toolbar-btn--danger {
-  border-color: var(--color-error, #e74c3c);
-  color: var(--color-error, #e74c3c);
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
-.toolbar-btn--danger:hover { background: color-mix(in srgb, var(--color-error, #e74c3c) 15%, transparent); }
+.toolbar-btn--danger:hover { background: color-mix(in srgb, var(--color-error) 15%, transparent); }
 
-.toolbar-zoom { font-size: 12px; color: var(--color-text-secondary, #888); min-width: 38px; text-align: right; }
+.toolbar-zoom { font-size: 12px; color: var(--text-secondary); min-width: 38px; text-align: right; }
 
 .toolbar-zoom-slider {
   width: 80px;
-  accent-color: var(--color-primary, #5B8DB8);
+  accent-color: var(--color-primary);
 }
 
-.toolbar-label { font-size: 12px; color: var(--color-text-secondary, #888); }
+.toolbar-label { font-size: 12px; color: var(--text-secondary); }
 
 .toolbar-select {
   font-size: 12px;
@@ -825,7 +823,7 @@ defineExpose({
   padding: 10px 16px;
   background: rgba(0, 0, 0, 0.5);
   border-radius: 6px;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   font-size: 13px;
   pointer-events: none;
   text-align: center;
@@ -833,8 +831,8 @@ defineExpose({
 
 .canvas-error {
   padding: 8px 16px;
-  background: var(--color-error, #e74c3c);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--text-inverse);
   border-radius: 6px;
   font-size: 13px;
 }
@@ -856,7 +854,7 @@ defineExpose({
 .preview-panel__header h4 {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -868,7 +866,7 @@ defineExpose({
 
 .preview-label {
   font-size: 11px;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   display: block;
 }
 
@@ -899,8 +897,8 @@ defineExpose({
 .preview-run-btn {
   width: 100%;
   padding: 7px;
-  background: var(--color-primary, #5B8DB8);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--text-inverse);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -914,22 +912,22 @@ defineExpose({
 
 .preview-error {
   padding: 6px 8px;
-  background: color-mix(in srgb, var(--color-error, #e74c3c) 20%, transparent);
+  background: color-mix(in srgb, var(--color-error) 20%, transparent);
   border-radius: 4px;
   font-size: 12px;
-  color: var(--color-error, #e74c3c);
+  color: var(--color-error);
 }
 
 .rm-btn {
   background: none;
   border: none;
-  color: var(--color-text-secondary, #888);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 16px;
   padding: 2px 6px;
 }
 
-.rm-btn:hover { color: var(--color-error, #e74c3c); }
+.rm-btn:hover { color: var(--color-error); }
 
 /* ── 预览面板 - 结构化输入 ── */
 .preview-section { display: flex; flex-direction: column; gap: 4px; }
@@ -939,33 +937,33 @@ defineExpose({
   background: none; border: 1px solid var(--border-default);
   border-radius: 3px; color: var(--text-secondary); cursor: pointer;
 }
-.preview-add-btn:hover { color: var(--color-primary, #5B8DB8); border-color: var(--color-primary, #5B8DB8); }
+.preview-add-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
 
 .preview-row { display: flex; align-items: center; gap: 4px; }
 .preview-row-name { flex: 1; min-width: 0; padding: 3px 6px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 3px; color: var(--text-primary); font-size: 12px; }
 .preview-row-val { width: 56px; flex-shrink: 0; padding: 3px 6px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 3px; color: var(--text-primary); font-size: 12px; }
-.preview-row-sep { color: var(--color-text-secondary, #888); font-size: 12px; }
-.preview-rm-btn { background: none; border: none; color: var(--color-text-secondary, #888); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
-.preview-rm-btn:hover { color: var(--color-error, #e74c3c); }
+.preview-row-sep { color: var(--text-secondary); font-size: 12px; }
+.preview-rm-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 0 2px; flex-shrink: 0; }
+.preview-rm-btn:hover { color: var(--color-error); }
 
 /* ── 预览结果展示 ── */
 .preview-label--mt { margin-top: 8px; }
 .preview-result-block {
   padding: 8px 10px; border-radius: 6px; border-left: 3px solid;
 }
-.preview-result-block--ok { background: rgba(39, 174, 96, 0.12); border-color: #27ae60; }
-.preview-result-block--fail { background: rgba(231, 76, 60, 0.12); border-color: #e74c3c; }
-.preview-result-label { font-size: 10px; color: var(--color-text-secondary, #888); margin-bottom: 2px; }
-.preview-result-text { font-size: 13px; font-weight: 600; color: var(--color-text-primary, #e0e0e0); }
+.preview-result-block--ok { background: color-mix(in srgb, var(--color-success) 12%, transparent); border-color: var(--color-success); }
+.preview-result-block--fail { background: color-mix(in srgb, var(--color-error) 12%, transparent); border-color: var(--color-error); }
+.preview-result-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 2px; }
+.preview-result-text { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 
 .preview-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .preview-table th { color: var(--text-secondary); font-weight: 500; padding: 2px 4px; border-bottom: 1px solid var(--border-default); text-align: left; }
-.preview-table td { padding: 2px 4px; color: var(--color-text-primary, #e0e0e0); }
-.preview-dice-val { font-weight: 600; color: var(--node-accent, #7b68ee); }
+.preview-table td { padding: 2px 4px; color: var(--text-primary); }
+.preview-dice-val { font-weight: 600; color: var(--node-accent, var(--canvas-node-compute)); }
 
 .preview-log-row { display: flex; gap: 6px; font-size: 11px; padding: 2px 0; border-bottom: 1px solid var(--border-default); }
-.preview-log-node { color: var(--color-text-secondary, #888); flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.preview-log-output { color: var(--color-text-primary, #e0e0e0); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-log-node { color: var(--text-secondary); flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-log-output { color: var(--text-primary); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 拓扑校验面板 ── */
 .validation-panel {
@@ -983,16 +981,16 @@ defineExpose({
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px;
-  background: var(--color-bg-card, #1e1e2e);
+  background: var(--color-bg-card);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
   user-select: none;
 }
 
-.val-error-icon { color: var(--color-error, #e74c3c); }
-.val-warn-icon { color: #f5a623; }
-.val-toggle { color: var(--color-text-secondary, #888); font-size: 10px; }
+.val-error-icon { color: var(--color-error); }
+.val-warn-icon { color: var(--color-warning); }
+.val-toggle { color: var(--text-secondary); font-size: 10px; }
 
 .validation-panel__list {
   list-style: none;
@@ -1006,17 +1004,17 @@ defineExpose({
   padding: 4px 10px;
   font-size: 11px;
   border-left: 3px solid transparent;
-  color: var(--color-text-primary, #e0e0e0);
+  color: var(--text-primary);
 }
 
 .validation-item--error {
-  border-color: var(--color-error, #e74c3c);
-  background: color-mix(in srgb, var(--color-error, #e74c3c) 10%, transparent);
+  border-color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .validation-item--warning {
-  border-color: #f5a623;
-  background: color-mix(in srgb, #f5a623 10%, transparent);
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
 /* 工具栏徽章 */
@@ -1026,8 +1024,8 @@ defineExpose({
   height: 16px;
   line-height: 16px;
   border-radius: 8px;
-  background: var(--color-error, #e74c3c);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--text-inverse);
   font-size: 10px;
   text-align: center;
   padding: 0 4px;

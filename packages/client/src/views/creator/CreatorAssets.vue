@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import PageLayout from '../../components/layout/PageLayout.vue';
 import TButton from '../../components/base/TButton.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api, getToken } from '../../utils/api';
@@ -121,7 +122,8 @@ onMounted(loadAssets);
 </script>
 
 <template>
-  <div class="assets-page" v-loading="loading">
+  <PageLayout>
+    <div class="assets-page" v-loading="loading">
     <!-- 页头 -->
     <div class="page-header">
       <div>
@@ -178,15 +180,16 @@ onMounted(loadAssets);
 
     <!-- 空状态 -->
     <div v-else-if="!loading" class="empty-state">
-      <p class="empty-icon">🖼️</p>
+      <p class="empty-icon" aria-hidden="true"><SvgIcon name="icon-grid" :size="40" /></p>
       <p class="empty-title">暂无素材</p>
       <p class="empty-desc">点击「上传素材」添加图片或音频文件（≤5MB）</p>
     </div>
-  </div>
+    </div>
+  </PageLayout>
 </template>
 
 <style scoped>
-.assets-page { padding: var(--space-4); max-width: 960px; }
+.assets-page { width: 100%; }
 
 .page-header {
   display: flex; align-items: flex-start; gap: var(--space-4);
@@ -256,7 +259,7 @@ onMounted(loadAssets);
   color: var(--text-muted); padding: 6px; border-radius: var(--radius-md);
   display: flex; align-items: center;
 }
-.danger-btn:hover { background: #fee2e2; color: #dc2626; }
+.danger-btn:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 
 .empty-state {
   text-align: center; padding: var(--space-16) var(--space-10);

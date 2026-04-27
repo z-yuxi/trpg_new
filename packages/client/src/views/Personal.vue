@@ -291,7 +291,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <span>我的角色卡</span>
       </div>
       <div class="menu-item" @click="router.push('/campaigns')">
-        <SvgIcon name="icon-list" :size="20" />
+        <SvgIcon name="icon-menu" :size="20" />
         <span>我的团</span>
       </div>
     </div>
@@ -311,7 +311,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <span>账号安全</span>
       </div>
       <div class="menu-item" @click="router.push('/personal/notifications')">
-        <SvgIcon name="icon-broadcast" :size="20" />
+        <SvgIcon name="icon-bell" :size="20" />
         <span>消息通知设置</span>
       </div>
       <div class="menu-item" @click="router.push('/personal/privacy')">

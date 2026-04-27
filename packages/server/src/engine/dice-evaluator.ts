@@ -50,7 +50,8 @@ function applyModifiers(results: number[], sides: number, modifiers: DiceModifie
   return kept;
 }
 
-function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll[]): number {
+function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll[], depth = 0): number {
+  if (depth > 50) throw new Error('Expression too deeply nested');
   switch (node.type) {
     case 'number':
       return node.value;
@@ -59,6 +60,8 @@ function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll
       const { count, sides, modifiers } = node;
       if (sides <= 0) throw new Error(`Invalid die sides: ${sides}`);
       if (count <= 0) throw new Error(`Invalid dice count: ${count}`);
+      if (count > 100) throw new Error(`Dice count too large: ${count} (max 100)`);
+      if (sides > 10000) throw new Error(`Die sides too large: ${sides} (max 10000)`);
 
       const results: number[] = [];
       for (let i = 0; i < count; i++) {
@@ -73,8 +76,8 @@ function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll
     }
 
     case 'binary_op': {
-      const left = evaluateNode(node.left, rng, allRolls);
-      const right = evaluateNode(node.right, rng, allRolls);
+      const left = evaluateNode(node.left, rng, allRolls, depth + 1);
+      const right = evaluateNode(node.right, rng, allRolls, depth + 1);
       switch (node.op) {
         case '+': return left + right;
         case '-': return left - right;
@@ -83,13 +86,14 @@ function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll
           if (right === 0) throw new Error('Division by zero');
           return Math.floor(left / right);
       }
+      throw new Error(`Unknown operator: ${node.op}`);
     }
 
     case 'unary_minus':
-      return -evaluateNode(node.operand, rng, allRolls);
+      return -evaluateNode(node.operand, rng, allRolls, depth + 1);
 
     case 'group':
-      return evaluateNode(node.expression, rng, allRolls);
+      return evaluateNode(node.expression, rng, allRolls, depth + 1);
   }
 }
 

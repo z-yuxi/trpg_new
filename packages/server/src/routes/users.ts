@@ -1,8 +1,9 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { userService } from '../services/user-service';
 import { forumService } from '../services/forum-service';
+import { db } from '../db';
 
 const router: IRouter = Router();
 
@@ -18,7 +19,7 @@ router.get('/me/stats', authMiddleware, async (req, res) => {
 
 // GET /api/users/me
 router.get('/me', authMiddleware, (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: userService.toSafeUser(req.user!) });
 });
 
 // PUT /api/users/me
@@ -60,8 +61,17 @@ router.get('/:uid/profile', async (req, res) => {
   }
 });
 
-router.get('/:uid/campaigns', async (req, res) => {
+router.get('/:uid/campaigns', optionalAuthMiddleware, async (req, res) => {
   try {
+    const targetUser = await db('users').where({ uid: Number(req.params.uid) }).select('id', 'campaign_history_public').first();
+    if (!targetUser) { res.json([]); return; }
+    // 隐私设置检查：若 campaign_history_public 为 false，仅本人可见
+    if (targetUser.campaign_history_public === false || targetUser.campaign_history_public === 0) {
+      if (!req.user || req.user.id !== targetUser.id) {
+        res.json([]);
+        return;
+      }
+    }
     const data = await userService.getUserCampaigns(req.params.uid);
     res.json(data);
   } catch (err: any) {
@@ -69,8 +79,17 @@ router.get('/:uid/campaigns', async (req, res) => {
   }
 });
 
-router.get('/:uid/hosted-campaigns', async (req, res) => {
+router.get('/:uid/hosted-campaigns', optionalAuthMiddleware, async (req, res) => {
   try {
+    const targetUser = await db('users').where({ uid: Number(req.params.uid) }).select('id', 'campaign_history_public').first();
+    if (!targetUser) { res.json([]); return; }
+    // 隐私设置检查
+    if (targetUser.campaign_history_public === false || targetUser.campaign_history_public === 0) {
+      if (!req.user || req.user.id !== targetUser.id) {
+        res.json([]);
+        return;
+      }
+    }
     const data = await userService.getHostedCampaigns(req.params.uid);
     res.json(data);
   } catch (err: any) {

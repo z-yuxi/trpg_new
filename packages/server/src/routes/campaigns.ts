@@ -22,6 +22,29 @@ const router: IRouter = Router();
 // 所有战役路由都需要认证
 router.use(authMiddleware);
 
+/**
+ * 检查用户是否为战役成员（GM 或有角色的团员）。
+ * 可复用于步骤七（读取授权）和步骤八（写入安全）。
+ */
+async function ensureCampaignMember(
+  campaignId: string,
+  userId: string,
+): Promise<{ ok: boolean; isGm: boolean; campaign?: Record<string, unknown> }> {
+  const campaign = await db('campaigns').where({ id: campaignId }).first();
+  if (!campaign) return { ok: false, isGm: false };
+  if ((campaign as Record<string, unknown>)['gm_user_id'] === userId) {
+    return { ok: true, isGm: true, campaign: campaign as Record<string, unknown> };
+  }
+  // 检查用户是否有角色在该战役中
+  const member = await db('character_scene_states as css')
+    .join('character_sheets as cs', 'cs.id', 'css.character_id')
+    .where('css.campaign_id', campaignId)
+    .where('cs.user_id', userId)
+    .first();
+  if (member) return { ok: true, isGm: false, campaign: campaign as Record<string, unknown> };
+  return { ok: false, isGm: false };
+}
+
 const createSchema = z.object({
   name: z.string().min(1),
   ruleset_id: z.string().min(1),
@@ -98,6 +121,8 @@ router.post('/join', async (req, res) => {
 
 // GET /api/campaigns/:id
 router.get('/:id', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   const campaign = await campaignService.findById(req.params.id);
   if (!campaign) {
     res.status(404).json({ error: 'Not found' });
@@ -112,7 +137,12 @@ router.put('/:id', async (req, res) => {
     const campaign = await campaignService.findById(req.params.id);
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update campaign' }); return; }
-    const updated = await campaignService.update(req.params.id, req.body);
+    const allowed = ['name', 'description', 'status', 'global_story_time', 'ruleset_id'];
+    const safeBody: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if ((req.body as Record<string, unknown>)[key] !== undefined) safeBody[key] = (req.body as Record<string, unknown>)[key];
+    }
+    const updated = await campaignService.update(req.params.id, safeBody);
     res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });
@@ -121,6 +151,8 @@ router.put('/:id', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes
 router.get('/:id/scenes', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const scenes = await campaignService.listScenes(req.params.id);
     res.json(scenes);
@@ -131,6 +163,8 @@ router.get('/:id/scenes', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes/:sceneId/grid-map
 router.get('/:id/scenes/:sceneId/grid-map', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const map = await campaignService.getGridMap(req.params.id, req.params.sceneId);
     res.json(map);
@@ -209,16 +243,19 @@ router.delete('/:id/scenes/:sceneId', async (req, res) => {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
-    // 检查是否有角色当前在此场景
-    const occupants = await db('character_scene_states')
-      .where({ current_spatial_scene_id: req.params.sceneId }).count('id as cnt').first();
-    if (Number(occupants?.cnt ?? 0) > 0) {
-      res.status(409).json({ error: '场景中仍有角色，无法删除' }); return;
-    }
-    await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).delete();
+    // 检查和删除放入事务，防止检查后有角色进入
+    await db.transaction(async (trx) => {
+      const occupants = await trx('character_scene_states')
+        .where({ current_spatial_scene_id: req.params.sceneId }).count('id as cnt').first();
+      if (Number(occupants?.cnt ?? 0) > 0) {
+        throw Object.assign(new Error('场景中仍有角色，无法删除'), { status: 409 });
+      }
+      await trx('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).delete();
+    });
     res.status(204).end();
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+    const status = err?.status ?? 500;
+    res.status(status).json({ error: err?.message ?? 'Delete failed' });
   }
 });
 
@@ -287,6 +324,8 @@ router.post('/:id/scenes/:sceneId/leave', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes/:sceneId/participants — 场景参与者列表
 router.get('/:id/scenes/:sceneId/participants', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const { getParticipants } = await import('../services/scene-participation.js');
     const participants = await getParticipants(req.params.sceneId!);
@@ -501,6 +540,8 @@ router.delete('/:id/connections/:connId', async (req, res) => {
 
 // GET /api/campaigns/:id/connections
 router.get('/:id/connections', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const connections = await listSceneConnections(req.params.id);
     res.json(connections);
@@ -534,7 +575,24 @@ router.post('/:id/npcs', async (req, res) => {
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create NPCs' }); return; }
     const id = generateId();
-    await db('campaign_npcs').insert({ id, campaign_id: req.params.id, created_by: req.user!.id, ...req.body });
+    const { name, display_name, description, avatar_url, voice_tips, attributes, skills, resources, is_temporary, is_playable, is_active, source_module_npc_id } = req.body as Record<string, unknown>;
+    await db('campaign_npcs').insert({
+      id,
+      campaign_id: req.params.id,
+      created_by: req.user!.id,
+      name,
+      display_name: display_name ?? name,
+      description,
+      avatar_url: avatar_url ?? '',
+      voice_tips,
+      attributes,
+      skills,
+      resources,
+      is_temporary: is_temporary ?? false,
+      is_playable: is_playable ?? true,
+      is_active: is_active ?? true,
+      source_module_npc_id,
+    });
     const npc = await db('campaign_npcs').where({ id }).first();
     res.status(201).json(npc);
   } catch (err: any) {
@@ -544,6 +602,8 @@ router.post('/:id/npcs', async (req, res) => {
 
 // GET /api/campaigns/:id/npcs
 router.get('/:id/npcs', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const npcs = await db('campaign_npcs').where({ campaign_id: req.params.id });
     res.json(npcs);
@@ -558,7 +618,12 @@ router.put('/:id/npcs/:npcId', async (req, res) => {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update NPCs' }); return; }
-    await db('campaign_npcs').where({ id: req.params.npcId, campaign_id: req.params.id }).update(req.body);
+    const allowed = ['name', 'display_name', 'description', 'avatar_url', 'voice_tips', 'attributes', 'skills', 'resources', 'is_temporary', 'is_playable', 'is_active'];
+    const updates: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if ((req.body as Record<string, unknown>)[key] !== undefined) updates[key] = (req.body as Record<string, unknown>)[key];
+    }
+    await db('campaign_npcs').where({ id: req.params.npcId, campaign_id: req.params.id }).update(updates);
     const npc = await db('campaign_npcs').where({ id: req.params.npcId }).first();
     res.json(npc ?? { error: 'Not found' });
   } catch (err: any) {
@@ -571,6 +636,10 @@ router.get('/:id/messages', async (req, res) => {
   try {
     const campaignId = req.params.id!;
     const userId = req.user!.id;
+
+    // 先验证用户是否为战役成员
+    const memberAuth = await ensureCampaignMember(campaignId, userId);
+    if (!memberAuth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
 
     // 查询团信息（判断 GM 身份）
     const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
@@ -696,6 +765,8 @@ router.get('/:id/messages', async (req, res) => {
 
 // GET /api/campaigns/:id/round-state
 router.get('/:id/round-state', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const state = await db('campaign_round_state').where({ campaign_id: req.params.id }).first() ?? null;
     res.json(state);
@@ -706,6 +777,8 @@ router.get('/:id/round-state', async (req, res) => {
 
 // GET /api/campaigns/:id/position-history
 router.get('/:id/position-history', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const history = await db('position_history')
       .where({ campaign_id: req.params.id })
@@ -718,6 +791,8 @@ router.get('/:id/position-history', async (req, res) => {
 
 // GET /api/campaigns/:id/trajectory-matrix
 router.get('/:id/trajectory-matrix', async (req, res) => {
+  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const campaignId = req.params.id;
 

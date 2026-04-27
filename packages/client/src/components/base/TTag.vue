@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{
-  color?: 'default' | 'primary' | 'success' | 'warning' | 'danger';
+  color?: 'default' | 'primary' | 'info' | 'success' | 'warning' | 'danger';
   size?: 'sm' | 'md';
   closable?: boolean;
 }>();
@@ -39,6 +39,11 @@ defineEmits<{ close: [] }>();
   color: var(--text-primary);
 }
 .t-tag--primary:hover { opacity: 0.8; }
+
+.t-tag--info {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
 
 .t-tag--success {
   background: var(--color-success-bg);

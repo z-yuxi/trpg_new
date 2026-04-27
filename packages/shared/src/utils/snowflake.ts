@@ -33,10 +33,8 @@ export class SnowflakeGenerator {
     if (timestamp === this.lastTimestamp) {
       this.sequence = (this.sequence + 1n) & MAX_SEQUENCE;
       if (this.sequence === 0n) {
-        // 序列号溢出，等待下一毫秒
-        while (timestamp <= this.lastTimestamp) {
-          timestamp = BigInt(Date.now()) - EPOCH;
-        }
+        // 序列号溢出，抛出错误而非忙等待（避免 CPU 占满 + 单毫秒内最多 4096 个 ID）
+        throw new Error('Snowflake sequence overflow: too many IDs generated in 1ms');
       }
     } else {
       this.sequence = 0n;

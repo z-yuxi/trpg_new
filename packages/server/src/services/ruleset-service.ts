@@ -73,7 +73,8 @@ export class RulesetService {
       query = query.where('author_id', params.author_id);
     }
     if (params.keyword) {
-      const kw = `%${params.keyword}%`;
+      const escaped = params.keyword.replace(/[%_\\]/g, '\\$&');
+      const kw = `%${escaped}%`;
       query = query.where((q) => {
         q.where('name', 'like', kw).orWhere('description', 'like', kw);
       });

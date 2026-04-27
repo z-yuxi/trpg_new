@@ -9,8 +9,9 @@ const { currentTheme, toggleTheme } = useTheme();
 const router = useRouter();
 const route = useRoute();
 
-const pageTitle = computed(() => (route.meta.title as string) ?? '');
-const canGoBack = computed(() => route.path !== '/');
+const currentPath = computed(() => route?.path ?? '/');
+const pageTitle = computed(() => (route?.meta?.title as string) ?? '');
+const canGoBack = computed(() => currentPath.value !== '/');
 
 const desktopNavItems = [
   { label: '首页', path: '/' },
@@ -20,13 +21,16 @@ const desktopNavItems = [
 ];
 
 function isNavActive(path: string) {
-  if (path === '/') return route.path === '/';
-  return route.path.startsWith(path);
+  if (path === '/') return currentPath.value === '/';
+  return currentPath.value.startsWith(path);
 }
 
 function handleBack() {
-  if (window.history.length > 1) { router.back(); return; }
-  router.push('/');
+  if (window.history.length > 1) {
+    router?.back();
+    return;
+  }
+  router?.push('/');
 }
 </script>
 

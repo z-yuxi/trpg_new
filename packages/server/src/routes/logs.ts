@@ -2,6 +2,7 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { exportCampaignLog } from '../services/log-export-service';
+import { db } from '../db';
 
 const router: IRouter = Router();
 
@@ -50,6 +51,15 @@ router.get('/:campaignId/export', authMiddleware, async (req, res) => {
   }
 
   try {
+    // simulate_user_id 仅允许 GM 使用
+    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== req.user!.id) {
+      const campaign = await db('campaigns').where({ id: req.params['campaignId']! }).select('gm_user_id').first();
+      if (!campaign || campaign.gm_user_id !== req.user!.id) {
+        res.status(403).json({ error: 'Only GM can simulate other user views' });
+        return;
+      }
+    }
+
     const result = await exportCampaignLog({
       campaignId: req.params['campaignId']!,
       perspective: parsed.data.perspective,
@@ -88,7 +98,14 @@ router.post('/export', authMiddleware, async (req, res) => {
     return;
   }
 
-  try {
+  try {    // simulate_user_id 仅允许 GM 使用
+    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== req.user!.id) {
+      const campaign = await db('campaigns').where({ id: parsed.data.campaign_id }).select('gm_user_id').first();
+      if (!campaign || campaign.gm_user_id !== req.user!.id) {
+        res.status(403).json({ error: 'Only GM can simulate other user views' });
+        return;
+      }
+    }
     const result = await exportCampaignLog({
       campaignId: parsed.data.campaign_id,
       perspective: parsed.data.mode === 'player' ? 'my' : parsed.data.mode,

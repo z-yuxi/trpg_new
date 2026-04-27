@@ -63,10 +63,11 @@ export class ModuleService {
       .where('m.status', 'public');
 
     if (filters.keyword) {
+      const kw = `%${filters.keyword.replace(/[%_\\]/g, '\\$&')}%`;
       query = query.andWhere((builder) => {
         builder
-          .whereILike('m.name', `%${filters.keyword}%`)
-          .orWhereILike('m.description', `%${filters.keyword}%`);
+          .whereILike('m.name', kw)
+          .orWhereILike('m.description', kw);
       });
     }
     if (filters.ruleset_id) query = query.andWhere('m.ruleset_id', filters.ruleset_id);

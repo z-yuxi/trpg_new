@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 
 const router = useRouter();
@@ -62,9 +63,15 @@ watch([system, recruit, dm, mention], debouncedSave);
 
 <template>
   <div class="settings-page">
-    <button class="back-btn" @click="router.back()">&#8592; 返回</button>
+    <button class="back-btn" @click="router.back()">
+      <SvgIcon name="icon-arrow-left" :size="16" />
+      <span>返回</span>
+    </button>
     <div class="settings-card">
-      <h2 class="title">消息通知设置</h2>
+      <h2 class="title">
+        <SvgIcon name="icon-bell" :size="18" />
+        <span>消息通知设置</span>
+      </h2>
       <p class="desc">选择你希望接收哪些通知。更改后自动保存。</p>
 
       <div v-for="group in groups" :key="group.label" class="group">
@@ -91,7 +98,7 @@ watch([system, recruit, dm, mention], debouncedSave);
 .back-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: var(--text-sm); padding: 0 0 var(--space-3); transition: color var(--transition-fast); }
 .back-btn:hover { color: var(--color-accent); }
 .settings-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-6); }
-.title { margin: 0 0 var(--space-2); font-size: var(--text-xl); font-weight: 700; color: var(--text-primary); }
+.title { margin: 0 0 var(--space-2); font-size: var(--text-xl); font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--space-2); }
 .desc { margin: 0 0 var(--space-5); font-size: var(--text-sm); color: var(--text-muted); }
 .group { margin-bottom: var(--space-5); }
 .group-title { font-size: var(--text-xs); font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: var(--space-2); }

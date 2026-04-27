@@ -54,7 +54,8 @@ class ForumService {
 
     let q = base();
     if (params.keyword) {
-      const kw = `%${params.keyword}%`;
+      const escaped = params.keyword.replace(/[%_\\]/g, '\\$&');
+      const kw = `%${escaped}%`;
       q = q.where((builder) => {
         builder.where('t.title', 'like', kw).orWhere('t.content', 'like', kw);
       });
@@ -69,7 +70,8 @@ class ForumService {
 
     let countQuery = db('forum_threads').where({ board });
     if (params.keyword) {
-      const kw = `%${params.keyword}%`;
+      const escapedKw = params.keyword.replace(/[%_\\]/g, '\\$&');
+      const kw = `%${escapedKw}%`;
       countQuery = countQuery.where((builder) => {
         builder.where('title', 'like', kw).orWhere('content', 'like', kw);
       });
@@ -205,29 +207,33 @@ class ForumService {
     content: string;
     reply_to_post_id?: string;
   }): Promise<ForumPost> {
-    const thread = await db('forum_threads').where({ id: params.thread_id }).first();
-    if (!thread) throw new Error('帖子不存在');
-    if (thread['is_locked']) throw new Error('帖子已锁定');
-
     const id = randomUUID();
-    const floor = Number(thread['reply_count']) + 2; // 楼主是1楼
     const now = new Date();
+    let floor = 2;
 
-    await db('forum_posts').insert({
-      id,
-      thread_id: params.thread_id,
-      author_id: params.author_id,
-      content: params.content,
-      floor_number: floor,
-      reply_to_post_id: params.reply_to_post_id ?? null,
-      created_at: now,
-      updated_at: now,
-    });
+    // 使用事务 + forUpdate 锁防止并发回复产生相同楼层号
+    await db.transaction(async (trx) => {
+      const threadRow = await trx('forum_threads').where({ id: params.thread_id }).forUpdate().first();
+      if (!threadRow) throw new Error('帖子不存在');
+      if (threadRow['is_locked']) throw new Error('帖子已锁定');
+      floor = Number(threadRow['reply_count']) + 2; // 楼主是1楼
 
-    await db('forum_threads').where({ id: params.thread_id }).update({
-      reply_count: db.raw('reply_count + 1'),
-      last_reply_at: now,
-      updated_at: now,
+      await trx('forum_posts').insert({
+        id,
+        thread_id: params.thread_id,
+        author_id: params.author_id,
+        content: params.content,
+        floor_number: floor,
+        reply_to_post_id: params.reply_to_post_id ?? null,
+        created_at: now,
+        updated_at: now,
+      });
+
+      await trx('forum_threads').where({ id: params.thread_id }).update({
+        reply_count: db.raw('reply_count + 1'),
+        last_reply_at: now,
+        updated_at: now,
+      });
     });
 
     const authorRow = await db('users').where({ id: params.author_id }).select('nickname').first();
