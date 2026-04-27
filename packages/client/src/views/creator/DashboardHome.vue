@@ -129,7 +129,13 @@ onMounted(loadDashboard);
           <TTag color="default" size="sm">规则集 + 模组</TTag>
         </div>
         <div v-if="loading" class="empty-state">正在汇总创作数据…</div>
-        <div v-else-if="recentEdits.length === 0" class="empty-state">暂无最近编辑记录</div>
+        <div v-else-if="recentEdits.length === 0" class="empty-state">
+          <p style="margin:0 0 var(--space-3)">暂无编辑记录，从这里开始你的创作之旅</p>
+          <div style="display:flex;gap:var(--space-2);justify-content:center;flex-wrap:wrap">
+            <TButton type="primary" size="sm" @click="router.push('/creator/workshop')">新建规则集</TButton>
+            <TButton type="secondary" size="sm" @click="router.push('/creator/modules')">新建模组</TButton>
+          </div>
+        </div>
         <div v-else class="recent-list">
           <button v-for="item in recentEdits" :key="item.id" class="recent-item" @click="item.action()">
             <div class="recent-main">
@@ -162,6 +168,14 @@ onMounted(loadDashboard);
         <button class="quick-link" @click="router.push('/creator/workshop')">
           <strong>进入规则工坊</strong>
           <span>管理版本、发布状态和 Fork 来源</span>
+        </button>
+        <button class="quick-link quick-link-wip" @click="router.push('/creator/assets')">
+          <strong>素材库 <span class="wip-tag">建设中</span></strong>
+          <span>图片、音频等素材管理（敬请期待）</span>
+        </button>
+        <button class="quick-link quick-link-wip" @click="router.push('/creator/products')">
+          <strong>我的作品 <span class="wip-tag">建设中</span></strong>
+          <span>已发布作品与收益统计（敬请期待）</span>
         </button>
       </TCard>
     </section>
@@ -257,6 +271,19 @@ onMounted(loadDashboard);
 }
 .quick-link strong { color: var(--text-primary); font-size: var(--text-base); }
 .quick-link span { color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.6; }
+.quick-link-wip { opacity: 0.6; cursor: default; }
+.quick-link-wip:hover { border-color: var(--border-default); background: linear-gradient(180deg, color-mix(in srgb, var(--surface-hover) 80%, transparent), transparent); }
+.wip-tag {
+  display: inline-block;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning);
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+}
 .empty-state { padding: var(--space-8); text-align: center; color: var(--text-muted); }
 
 @media (max-width: 768px) {

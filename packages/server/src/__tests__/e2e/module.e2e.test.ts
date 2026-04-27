@@ -1,15 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { request } from './setup';
+import { request, registerAndLoginAsCreator } from './setup';
 
 const password = 'Test1234!';
-const makePhone = () => '138' + Date.now().toString().slice(-8) + Math.floor(Math.random() * 10);
-
-async function registerAndLogin() {
-  const phone = makePhone();
-  await request.post('/api/auth/register').send({ phone, password, nickname: '模组测试用户' });
-  const loginRes = await request.post('/api/auth/login').send({ phone, password });
-  return (loginRes.body.tokens?.access_token ?? '') as string;
-}
+const makePhone = () => '138' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 10000).toString().padStart(4, '0');
 
 async function getPublishedRulesetId(token: string): Promise<string | null> {
   // 尝试从公开规则集列表中取一个 ID
@@ -24,7 +17,7 @@ describe('E2E - 模组 CRUD', () => {
   let rulesetId: string;
 
   beforeAll(async () => {
-    token = await registerAndLogin();
+    token = await registerAndLoginAsCreator(makePhone(), password);
 
     // 先创建一个规则集，用于关联模组
     const rulesetRes = await request
@@ -182,7 +175,7 @@ describe('E2E - 模组导入与导出（Batch 5）', () => {
   let moduleId: string;
 
   beforeAll(async () => {
-    token = await registerAndLogin();
+    token = await registerAndLoginAsCreator(makePhone(), password);
 
     // 先创建一个规则集（允许失败，使用 fallback）
     const rsRes = await request

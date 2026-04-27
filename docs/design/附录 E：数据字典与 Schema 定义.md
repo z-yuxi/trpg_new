@@ -2,9 +2,9 @@
 # 附录 E：数据字典与 Schema 定义
 
 ## 文档信息
-- 版本：v1.5
-- 日期：2026-04-25
-- 变更：统一 design 目录版本；补充与根目录 6 份准则文档的优先级说明；保持既有 Schema 向后兼容
+- 版本：v1.6（2026-04-27 创作者权限字段补充）
+- 上一版本：v1.5（2026-04-25）
+- 变更：新增"创作者权限字段约定"节，明确 `subscription_type`/`user_type` 的创作者判定逻辑与前端缓存键名
 
 ## 0.1 2026-04-25 对齐声明
 
@@ -19,6 +19,21 @@
 
 1. `scene_participations`：**实时状态表**，记录角色的进出，用于消息可见性的动态计算。
 2. `narrative_fragments.participants`：**历史快照字段**，在生成日志片段时固化，确保导出内容的准确性和性能。两者分工不同，不冲突。
+
+## 0.3 创作者权限字段约定（2026-04-27 新增）
+
+用户表 `users` 中以下两个字段共同决定创作者身份：
+
+| 字段 | 类型 | 创作者判定条件 |
+|------|------|--------------|
+| `subscription_type` | `'free' \| 'pro' \| 'creator'` | `=== 'creator'` |
+| `user_type` | `string[]` | 包含 `'creator'` 或 `'admin'` |
+
+两个条件**任意一个**满足即视为创作者（OR 语义）。
+
+**前端缓存键**：`localStorage.is_creator`（`'1'` = 是，`'0'` = 否），由 `useAuthStore` 维护，每次 `/users/me` 成功返回后同步刷新。
+
+**后端中间件**：`requireCreator`（`packages/server/src/middleware/auth.ts`），必须接在 `authMiddleware` 之后使用，非创作者返回 `{ error: 'Creator permission required' }` (HTTP 403)。
 
 ---
 

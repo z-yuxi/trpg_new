@@ -145,6 +145,14 @@ AI 调用统一经 Redis 异步队列分发，避免阻塞主流程。
 
 用户表预留 `user_type` 字段，支持玩家/GM/创作者/管理员多角色权限控制。
 
+### 9.1 创作者权限闭环（`requireCreator`）
+
+> • 条件：`subscription_type === 'creator'` 或 `user_type` 包含 `'creator'` 或 `'admin'`
+> • 后端实现：`packages/server/src/middleware/auth.ts` 中的 `requireCreator` 中间件，接在 `authMiddleware` 之后
+> • 受保护接口：rulesets `POST/PUT/publish/versions`； modules `POST/PUT/DELETE/auto-save/submit/withdraw`
+> • 前端实现：路由 meta 增加 `requiresCreator: true`；`authStore.isCreator` 存储创作者标识；全局守卫删除非创作者迟转 403 页
+> • 非创作者访问 `/creator/**` 路由均被拦截并跳转 `Forbidden`
+
 ---
 
 ## 10. 安全基线

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
 import { moduleService } from '../services/module-service';
 import { createModulePdfBuffer, importModuleFile } from '../services/module-transfer-service';
 import { db } from '../db';
@@ -141,8 +141,8 @@ router.post('/:id/export/pdf', authMiddleware, async (req, res) => {
   }
 });
 
-// 创建模组
-router.post('/', authMiddleware, async (req, res) => {
+// 创建模组（需创作者权限）
+router.post('/', authMiddleware, requireCreator, async (req, res) => {
   try {
     const body = req.body as CreateModuleRequest;
     if (!body.name || !body.ruleset_id) {
@@ -155,8 +155,8 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 更新模组
-router.put('/:id', authMiddleware, async (req, res) => {
+// 更新模组（需创作者权限）
+router.put('/:id', authMiddleware, requireCreator, async (req, res) => {
   try {
     const body = req.body as UpdateModuleRequest;
     const result = await moduleService.update(req.params['id']!, req.user!.id, body);
@@ -167,8 +167,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// 自动保存端点（仅更新 content + auto_saved_at）
-router.put('/:id/auto-save', authMiddleware, async (req, res) => {
+// 自动保存端点（需创作者权限）
+router.put('/:id/auto-save', authMiddleware, requireCreator, async (req, res) => {
   try {
     const body = req.body as AutoSaveModuleRequest;
     if (!body.content) return res.status(400).json({ error: 'content is required' });
@@ -180,8 +180,8 @@ router.put('/:id/auto-save', authMiddleware, async (req, res) => {
   }
 });
 
-// 删除模组（仅 draft 状态）
-router.delete('/:id', authMiddleware, async (req, res) => {
+// 删除模组（仅 draft 状态，需创作者权限）
+router.delete('/:id', authMiddleware, requireCreator, async (req, res) => {
   try {
     const ok = await moduleService.delete(req.params['id']!, req.user!.id);
     if (!ok) return res.status(404).json({ error: 'Not found, no permission, or not in draft status' });
@@ -191,8 +191,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// 提交发布审核
-router.post('/:id/submit', authMiddleware, async (req, res) => {
+// 提交发布审核（需创作者权限）
+router.post('/:id/submit', authMiddleware, requireCreator, async (req, res) => {
   try {
     const module = await moduleService.submitForReview(req.params['id']!, req.user!.id);
     if (!module) return res.status(404).json({ error: 'Not found or not in draft status' });
@@ -202,8 +202,8 @@ router.post('/:id/submit', authMiddleware, async (req, res) => {
   }
 });
 
-// 撤回模组
-router.post('/:id/withdraw', authMiddleware, async (req, res) => {
+// 撤回模组（需创作者权限）
+router.post('/:id/withdraw', authMiddleware, requireCreator, async (req, res) => {
   try {
     const module = await moduleService.withdraw(req.params['id']!, req.user!.id);
     if (!module) return res.status(404).json({ error: 'Not found or invalid state' });

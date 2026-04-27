@@ -11,6 +11,12 @@ process.env.DB_USER = 'trpg';
 process.env.DB_PASSWORD = 'trpg_password';
 process.env.DB_NAME = 'trpg_platform';
 
+// Mock express-rate-limit — disable all rate limiting in tests
+vi.mock('express-rate-limit', () => ({
+  default: () => (_req: any, _res: any, next: any) => next(),
+  rateLimit: () => (_req: any, _res: any, next: any) => next(),
+}));
+
 // Mock Redis（必须在 app 导入之前）
 vi.mock('../../db/redis', () => ({
   redis: {
@@ -79,6 +85,7 @@ function makeBuilder(tableName: string): any {
   builder.clone = () => { const c = makeBuilder(table); Object.assign(c._where, builder._where); return c; };
   builder.union = (_other: any) => builder;
   builder.andWhereNot = (_key: string, _val: any) => builder;
+  builder.forUpdate = () => builder;
 
   builder.insert = async (data: any) => {
     if (!rows[table]) rows[table] = [];
@@ -156,6 +163,13 @@ vi.mock('../../db', () => {
   const db = (table: string) => makeBuilder(table);
   (db as any).fn = { now: () => new Date().toISOString() };
   (db as any).raw = (sql: string) => sql;
+  // Mock transaction：直接将 trx 作为普通 db builder 传入回调（不真正开启事务）
+  (db as any).transaction = async (callback: (trx: any) => Promise<any>) => {
+    const trx = (table: string) => makeBuilder(table);
+    (trx as any).fn = { now: () => new Date().toISOString() };
+    (trx as any).raw = (sql: string) => sql;
+    return callback(trx);
+  };
   return { db };
 });
 
@@ -168,4 +182,44 @@ export async function registerAndLogin(phone: string, password = 'Test1234!') {
   await request.post('/api/auth/register').send({ phone, password, nickname });
   const res = await request.post('/api/auth/login').send({ phone, password });
   return (res.body.tokens?.access_token ?? '') as string;
+}
+
+/**
+ * 注册一个创作者身份的用户并返回 access_token。
+ * 注册后直接修改内存 DB 将用户升级为 creator，再登录取 token。
+ */
+export async function registerAndLoginAsCreator(phone: string, password = 'Test1234!'): Promise<string> {
+  const nickname = 'c' + phone.slice(-4);
+  await request.post('/api/auth/register').send({ phone, password, nickname });
+  // 注册成功后，直接通过手机号找到用户并升级为创作者
+  const userRow = (rows['users'] ?? []).find((u) => u.phone === phone);
+  if (userRow) {
+    userRow.subscription_type = 'creator';
+    userRow.user_type = JSON.stringify(['player', 'creator']);
+  }
+  const res = await request.post('/api/auth/login').send({ phone, password });
+  return (res.body.tokens?.access_token ?? '') as string;
+}
+
+/**
+ * 将指定 token 对应的用户升级为创作者（测试用）。
+ * 直接操作内存数据库的 users 表，将 subscription_type 改为 'creator'。
+ */
+export function upgradeToCreator(token: string): void {
+  if (!token || !token.includes('.')) return;
+  try {
+    // 从 JWT 解析 userId（不验证签名，仅读取 payload）
+    const segment = token.split('.')[1];
+    if (!segment) return;
+    const payload = JSON.parse(Buffer.from(segment, 'base64').toString());
+    const userId: string = payload.userId ?? payload.sub ?? '';
+    if (!userId) return;
+    const userRow = (rows['users'] ?? []).find((u) => u.id === userId);
+    if (userRow) {
+      userRow.subscription_type = 'creator';
+      userRow.user_type = JSON.stringify(['player', 'creator']);
+    }
+  } catch {
+    // 解析失败时静默忽略（测试环境可能返回 mock token 格式）
+  }
 }

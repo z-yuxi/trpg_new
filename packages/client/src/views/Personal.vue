@@ -23,6 +23,9 @@ const userDetail = ref<any>(null);
 const avatarPreview = ref('');
 const avatarInput = ref<HTMLInputElement | null>(null);
 const stats = ref({ joinedCampaigns: 0, createdCampaigns: 0, totalHours: 0 });
+const userLoading = ref(false);
+const userLoadError = ref(false);
+const activatingCreator = ref(false);
 
 const roleOptions = [
   { key: 'player', label: '玩家' },
@@ -48,20 +51,51 @@ const uidText = computed(() => {
 
 const avatarDisplay = computed(() => avatarPreview.value || displayUser.value.avatar_url || '');
 
-onMounted(async () => {
-  if (!authStore.isLoggedIn) return;
+const isCreator = computed(() =>
+  displayUser.value.subscription_type === 'creator' ||
+  (Array.isArray(displayUser.value.user_type) &&
+    (displayUser.value.user_type.includes('creator') || displayUser.value.user_type.includes('admin'))),
+);
+
+async function loadUserDetail() {
+  userLoading.value = true;
+  userLoadError.value = false;
   try {
     const payload = await api.get<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me');
     userDetail.value = (payload as { user?: Record<string, unknown> }).user ?? payload;
-      if (!Array.isArray(userDetail.value.tags)) userDetail.value.tags = [];
-      if (typeof userDetail.value.intro !== 'string') userDetail.value.intro = '';
-      authStore.setAuth({
-        token: authStore.token,
-        userId: userDetail.value.id,
-        nickname: userDetail.value.nickname,
-        avatarUrl: userDetail.value.avatar_url,
-      });
-  } catch { /* 静默失败，显示缓存数据 */ }
+    if (!Array.isArray(userDetail.value.tags)) userDetail.value.tags = [];
+    if (typeof userDetail.value.intro !== 'string') userDetail.value.intro = '';
+    authStore.setAuth({
+      token: authStore.token,
+      userId: userDetail.value.id,
+      nickname: userDetail.value.nickname,
+      avatarUrl: userDetail.value.avatar_url,
+      isCreator: isCreator.value,
+    });
+  } catch {
+    userLoadError.value = true;
+    ElMessage.error('用户信息加载失败，请点击重试');
+  } finally {
+    userLoading.value = false;
+  }
+}
+
+async function activateCreator() {
+  activatingCreator.value = true;
+  try {
+    await api.post('/users/me/activate-creator');
+    ElMessage.success('创作者模式已开通！');
+    await loadUserDetail();
+  } catch {
+    ElMessage.error('开通失败，请确认是否在开发环境');
+  } finally {
+    activatingCreator.value = false;
+  }
+}
+
+onMounted(async () => {
+  if (!authStore.isLoggedIn) return;
+  await loadUserDetail();
 
   try {
     const data = await api.get<Record<string, unknown>>('/users/me/stats');
@@ -213,8 +247,27 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
 
 <template>
   <div class="personal">
+    <!-- 用户信息加载骨架 -->
+    <TCard v-if="userLoading" padding="lg" shadow class="user-card user-card-skeleton">
+      <div class="skeleton-avatar"></div>
+      <div class="skeleton-info">
+        <div class="skeleton-line w-40"></div>
+        <div class="skeleton-line w-24"></div>
+        <div class="skeleton-line w-56"></div>
+      </div>
+    </TCard>
+
+    <!-- 用户信息加载失败 -->
+    <TCard v-else-if="userLoadError" padding="lg" shadow class="user-card error-card">
+      <div class="error-info">
+        <SvgIcon name="icon-settings" :size="32" style="color: var(--color-warning)" />
+        <p>用户信息加载失败</p>
+        <TButton type="primary" size="sm" @click="loadUserDetail">重试</TButton>
+      </div>
+    </TCard>
+
     <!-- 用户信息卡片 -->
-    <TCard padding="lg" shadow class="user-card">
+    <TCard v-else padding="lg" shadow class="user-card">
       <div class="avatar-wrap" @click="openAvatarPicker" title="点击更换头像">
         <img v-if="avatarDisplay" :src="avatarDisplay" class="avatar" />
         <div v-else class="avatar-placeholder">{{ (displayUser.nickname || '?')[0] }}</div>
@@ -270,6 +323,30 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
       </div>
     </TCard>
 
+    <!-- 首屏创作台入口卡片（仅创作者可见） -->
+    <TCard v-if="isCreator && !userLoading" padding="md" class="creator-entry-card" @click="router.push('/creator')">
+      <div class="creator-entry-inner">
+        <span class="creator-entry-icon"><SvgIcon name="icon-workshop" :size="24" /></span>
+        <div class="creator-entry-text">
+          <div class="creator-entry-title">创作台</div>
+          <div class="creator-entry-desc">管理规则集、模组与素材</div>
+        </div>
+        <SvgIcon name="icon-menu" :size="16" style="color: var(--color-text-muted); margin-left: auto" />
+      </div>
+    </TCard>
+
+    <!-- 开通创作者模式（仅测试用，非创作者可见） -->
+    <TCard v-if="!isCreator && !userLoading && authStore.isLoggedIn" padding="md" class="activate-creator-card">
+      <div class="activate-creator-inner">
+        <SvgIcon name="icon-workshop" :size="20" style="color: var(--color-text-muted); flex-shrink:0" />
+        <div class="activate-creator-text">
+          <div class="activate-creator-title">开通创作者模式 <span class="dev-badge">测试</span></div>
+          <div class="activate-creator-desc">跳过审核，立即体验创作台功能</div>
+        </div>
+        <TButton type="secondary" size="sm" :loading="activatingCreator" @click.stop="activateCreator">开通</TButton>
+      </div>
+    </TCard>
+
     <TCard padding="md" class="stats-card">
       <div class="stats-item">
         <span class="stats-label">参与团数</span>
@@ -301,10 +378,6 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
       <div class="menu-item" @click="toggleTheme">
         <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         <span>{{ currentTheme === 'day' ? '切换深色模式' : '切换浅色模式' }}</span>
-      </div>
-      <div class="menu-item" @click="router.push('/creator')" v-if="displayUser.subscription_type === 'creator'">
-        <SvgIcon name="icon-workshop" :size="20" />
-        <span>创作者后台</span>
       </div>
       <div class="menu-item" @click="router.push('/personal/security')">
         <SvgIcon name="icon-lock" :size="20" />
@@ -392,6 +465,63 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
 }
 .menu-item:hover { background: var(--color-page-bg); }
 .menu-item.danger { color: var(--color-danger); }
+
+/* 骨架屏 */
+.user-card-skeleton { min-height: 96px; }
+.skeleton-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--color-card-border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.skeleton-info { flex: 1; display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-1); }
+.skeleton-line {
+  height: 14px; border-radius: var(--radius-sm);
+  background: var(--color-card-border);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+.w-40 { width: 40%; }
+.w-24 { width: 24%; }
+.w-56 { width: 56%; }
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* 错误卡片 */
+.error-card { min-height: 96px; }
+.error-info { width: 100%; display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-4) 0; }
+.error-info p { color: var(--color-text-muted); font-size: var(--text-sm); margin: 0; }
+
+/* 创作台入口卡片 */
+.creator-entry-card {
+  cursor: pointer;
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-card-bg));
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.creator-entry-card:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-card-bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+.creator-entry-inner { display: flex; align-items: center; gap: var(--space-3); }
+.creator-entry-icon { color: var(--color-accent); flex-shrink: 0; }
+.creator-entry-title { font-size: var(--text-base); font-weight: 700; color: var(--color-accent); }
+.creator-entry-desc { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+
+/* 开通创作者（测试用） */
+.activate-creator-card { border: 1px dashed var(--color-card-border); }
+.activate-creator-inner { display: flex; align-items: center; gap: var(--space-3); }
+.activate-creator-text { flex: 1; min-width: 0; }
+.activate-creator-title { font-size: var(--text-sm); font-weight: 600; color: var(--color-text-primary); display: flex; align-items: center; gap: var(--space-2); }
+.activate-creator-desc { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 2px; }
+.dev-badge {
+  font-size: 10px; font-weight: 500; padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
 
 @media (max-width: 640px) {
   .stats-card { grid-template-columns: 1fr; }

@@ -75,12 +75,6 @@ async function loadRulesets() {
   } catch {
     // ignore
   }
-  if (rulesets.value.length === 0) {
-    rulesets.value = [
-      { id: 'coc', name: '克苏鲁神话' },
-      { id: 'dnd5e', name: 'D&D 5e' },
-    ];
-  }
 }
 
 function resetPostForm() {
@@ -173,7 +167,7 @@ onMounted(loadRulesets);
 <template>
   <div class="recruit-section">
     <div class="section-header">
-      <h2 class="section-title">招募板</h2>
+      <h2 class="section-title">组团招募</h2>
       <TButton type="primary" @click="openPostDialog">+ 发布招募帖</TButton>
     </div>
 

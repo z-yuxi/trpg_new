@@ -4,14 +4,18 @@ import { useRouter, useRoute } from 'vue-router';
 import BottomNav from './BottomNav.vue';
 import { useTheme } from '../composables/useTheme';
 import SvgIcon from '../components/SvgIcon.vue';
+import { useAuthStore } from '../stores/auth-store';
 
 const { currentTheme, toggleTheme } = useTheme();
 const router = useRouter();
 const route = useRoute();
+const authStore = useAuthStore();
 
 const currentPath = computed(() => route?.path ?? '/');
 const pageTitle = computed(() => (route?.meta?.title as string) ?? '');
 const canGoBack = computed(() => currentPath.value !== '/');
+const showCreatorEntry = computed(() => authStore.isLoggedIn && authStore.isCreator);
+const isInCreator = computed(() => currentPath.value.startsWith('/creator'));
 
 const desktopNavItems = [
   { label: '首页', path: '/' },
@@ -37,13 +41,22 @@ function handleBack() {
 <template>
   <div class="main-layout">
     <header class="top-bar">
-      <!-- 手机端: 返回键 + 页面标题 + 主题切换 -->
+      <!-- 手机端: 返回键 + 页面标题 + 创作台图标(创作者) + 主题切换 -->
       <div class="mobile-header">
         <button v-if="canGoBack" class="icon-btn" @click="handleBack" aria-label="返回">
           <SvgIcon name="icon-back" :size="20" />
         </button>
         <span v-else class="logo">TRPG</span>
         <span class="page-title">{{ pageTitle }}</span>
+        <router-link
+          v-if="showCreatorEntry"
+          to="/creator"
+          class="icon-btn creator-entry-btn"
+          :class="{ active: isInCreator }"
+          aria-label="创作台"
+        >
+          <SvgIcon name="icon-workshop" :size="20" />
+        </router-link>
         <button class="icon-btn theme-toggle" @click="toggleTheme" aria-label="切换主题">
           <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         </button>
@@ -62,6 +75,13 @@ function handleBack() {
           >{{ item.label }}</router-link>
         </nav>
         <div class="desktop-actions">
+          <router-link
+            v-if="showCreatorEntry"
+            to="/creator"
+            class="creator-tab-btn"
+            :class="{ active: isInCreator }"
+            aria-label="创作台"
+          >创作台</router-link>
           <button class="icon-btn theme-toggle" @click="toggleTheme" aria-label="切换主题">
             <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
           </button>
@@ -181,6 +201,37 @@ function handleBack() {
   transition: color var(--transition-fast);
 }
 .avatar-btn:hover { color: var(--color-accent); }
+
+/* 桌面端"创作台"模式切换按钮 */
+.creator-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border: 1px solid var(--color-card-border);
+  background: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
+}
+.creator-tab-btn:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.creator-tab-btn.active {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border-color: var(--color-accent);
+  font-weight: 700;
+}
+
+/* 移动端顶栏创作台图标 */
+.creator-entry-btn {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+.creator-entry-btn.active { color: var(--color-accent); }
+
 .content {
   flex: 1;
   padding: var(--space-4);

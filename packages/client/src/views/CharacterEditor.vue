@@ -165,12 +165,6 @@ onMounted(async () => {
   try {
     rulesets.value = await api.get<{ id: string; name: string }[]>('/rulesets?status=published');
   } catch { /* ignore */ }
-  if (rulesets.value.length === 0) {
-    rulesets.value = [
-      { id: 'coc7', name: '克苏鲁神话 7th' },
-      { id: 'dnd5e', name: 'D&D 5e' },
-    ];
-  }
 
   if (isEditing && characterId) {
     try {

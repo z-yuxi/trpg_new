@@ -1,4 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { useAuthStore } from '../stores/auth-store';
+
+// TypeScript 元信息类型扩展
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean;
+    requiresCreator?: boolean;
+    title?: string;
+  }
+}
 
 const routes = [
   {
@@ -65,7 +75,7 @@ const routes = [
   {
     path: '/creator',
     component: () => import('../views/CreatorDashboard.vue'),
-    meta: { requiresAuth: true, title: '创作者专区' },
+    meta: { requiresAuth: true, requiresCreator: true, title: '创作者专区' },
     children: [
       { path: '', redirect: '/creator/dashboard' },
       { path: 'workshop', name: 'RulesetWorkshop', component: () => import('../views/creator/RulesetWorkshop.vue') },
@@ -118,9 +128,17 @@ router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token');
   if (to.meta.requiresAuth && !token) {
     next({ name: 'Login', query: { redirect: to.fullPath } });
-  } else {
-    next();
+    return;
   }
+  if (to.meta.requiresCreator) {
+    // token 已确认存在（上方已拦截）— 检查 creator 标识
+    const authStore = useAuthStore();
+    if (!authStore.isCreator) {
+      next({ name: 'Forbidden' });
+      return;
+    }
+  }
+  next();
 });
 
 export default router;

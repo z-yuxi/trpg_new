@@ -20,6 +20,9 @@ type CampaignListItem = {
 
 const campaigns = ref<CampaignListItem[]>([]);
 const loading = ref(false);
+const rulesetOptions = ref<Array<{ id: string; name: string }>>([]);
+const moduleOptions = ref<Array<{ id: string; name: string }>>([]);
+const createOptionsLoading = ref(false);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
   running: { label: '进行中', color: 'success' },
@@ -41,6 +44,41 @@ onMounted(loadCampaigns);
 const showCreateDialog = ref(false);
 const createForm = ref({ name: '', ruleset_id: '', module_id: '' });
 const createLoading = ref(false);
+
+async function loadCreateOptions() {
+  createOptionsLoading.value = true;
+  try {
+    const [rulesetRes, moduleRes] = await Promise.allSettled([
+      api.get<{ data?: Array<{ id: string; name: string }> } | Array<{ id: string; name: string }>>('/rulesets?status=published&limit=100'),
+      api.get<{ data?: Array<{ id: string; name?: string; title?: string }> } | Array<{ id: string; name?: string; title?: string }>>('/modules?limit=100'),
+    ]);
+
+    if (rulesetRes.status === 'fulfilled') {
+      const rulesetData = Array.isArray(rulesetRes.value) ? rulesetRes.value : (rulesetRes.value.data ?? []);
+      rulesetOptions.value = rulesetData
+        .filter((item) => item.id)
+        .map((item) => ({ id: item.id, name: item.name }));
+    } else {
+      rulesetOptions.value = [];
+    }
+
+    if (moduleRes.status === 'fulfilled') {
+      const moduleData = Array.isArray(moduleRes.value) ? moduleRes.value : (moduleRes.value.data ?? []);
+      moduleOptions.value = moduleData
+        .filter((item) => item.id)
+        .map((item) => ({ id: item.id, name: item.title ?? item.name ?? '未命名模组' }));
+    } else {
+      moduleOptions.value = [];
+    }
+  } finally {
+    createOptionsLoading.value = false;
+  }
+}
+
+async function openCreateDialog() {
+  showCreateDialog.value = true;
+  await loadCreateOptions();
+}
 
 async function createCampaign() {
   if (!createForm.value.name || !createForm.value.ruleset_id) return;
@@ -82,7 +120,7 @@ function copyCode(code: string) {
       <h1 class="page-title">我的团</h1>
       <div class="header-actions">
         <TButton type="secondary" @click="showJoinDialog = true">加入团</TButton>
-        <TButton type="primary" @click="showCreateDialog = true">创建团</TButton>
+        <TButton type="primary" @click="openCreateDialog">创建团</TButton>
       </div>
     </div>
 
@@ -96,7 +134,7 @@ function copyCode(code: string) {
       title="还没有团"
       description="创建或加入一个团，开始一段属于你的共同叙事。"
       action-text="创建团"
-      @action="showCreateDialog = true"
+      @action="openCreateDialog"
     />
     <div v-else class="campaigns-grid">
       <TCard v-for="c in campaigns" :key="c.id" padding="md" hoverable>
@@ -121,14 +159,13 @@ function copyCode(code: string) {
           <ElInput v-model="createForm.name" maxlength="128" show-word-limit />
         </ElFormItem>
         <ElFormItem label="规则集" required>
-          <ElSelect v-model="createForm.ruleset_id" placeholder="选择规则集" style="width:100%">
-            <ElOption label="克苏鲁神话 7e" value="coc7" />
-            <ElOption label="D&D 5e" value="dnd5e" />
+          <ElSelect v-model="createForm.ruleset_id" placeholder="选择规则集" :loading="createOptionsLoading" style="width:100%">
+            <ElOption v-for="item in rulesetOptions" :key="item.id" :label="item.name" :value="item.id" />
           </ElSelect>
         </ElFormItem>
         <ElFormItem label="模组（可选）">
-          <ElSelect v-model="createForm.module_id" placeholder="选择模组" clearable style="width:100%">
-            <ElOption label="恐惧大陆" value="mod1" />
+          <ElSelect v-model="createForm.module_id" placeholder="选择模组" :loading="createOptionsLoading" clearable style="width:100%">
+            <ElOption v-for="item in moduleOptions" :key="item.id" :label="item.name" :value="item.id" />
           </ElSelect>
         </ElFormItem>
       </ElForm>

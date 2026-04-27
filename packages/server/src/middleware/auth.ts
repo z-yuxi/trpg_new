@@ -36,6 +36,27 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
 }
 
+/**
+ * Creator guard — must be used AFTER authMiddleware.
+ * Allows access only when user.subscription_type === 'creator'
+ * or user.user_type includes 'creator' or 'admin'.
+ */
+export function requireCreator(req: Request, res: Response, next: NextFunction): void {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const isCreator =
+    user.subscription_type === 'creator' ||
+    (Array.isArray(user.user_type) && (user.user_type.includes('creator') || user.user_type.includes('admin')));
+  if (!isCreator) {
+    res.status(403).json({ error: 'Creator permission required' });
+    return;
+  }
+  next();
+}
+
 /** Optional auth - sets req.user if token is present, but continues even without */
 export async function optionalAuthMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];

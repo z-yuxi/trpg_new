@@ -1,6 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
 import { userService } from '../services/user-service';
 import { forumService } from '../services/forum-service';
 import { db } from '../db';
@@ -19,7 +19,7 @@ router.get('/me/stats', authMiddleware, async (req, res) => {
 
 // GET /api/users/me
 router.get('/me', authMiddleware, (req, res) => {
-  res.json({ user: userService.toSafeUser(req.user!) });
+  res.json({ user: req.user });
 });
 
 // PUT /api/users/me
@@ -38,6 +38,26 @@ router.put('/me', authMiddleware, async (req, res) => {
     res.json({ user });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// POST /api/users/me/activate-creator — 仅限非生产环境：一键开通创作者模式（测试用）
+router.post('/me/activate-creator', authMiddleware, async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(403).json({ error: '此接口仅限开发环境使用' });
+    return;
+  }
+  try {
+    const currentTypes: string[] = Array.isArray(req.user!.user_type) ? req.user!.user_type : [];
+    const newTypes = currentTypes.includes('creator') ? currentTypes : [...currentTypes, 'creator'];
+    await db('users').where({ id: req.user!.id }).update({
+      subscription_type: 'creator',
+      user_type: JSON.stringify(newTypes),
+    });
+    const updated = await userService.findById(req.user!.id);
+    res.json({ user: userService.toSafeUser(updated!) });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Upgrade failed' });
   }
 });
 
@@ -61,17 +81,8 @@ router.get('/:uid/profile', async (req, res) => {
   }
 });
 
-router.get('/:uid/campaigns', optionalAuthMiddleware, async (req, res) => {
+router.get('/:uid/campaigns', async (req, res) => {
   try {
-    const targetUser = await db('users').where({ uid: Number(req.params.uid) }).select('id', 'campaign_history_public').first();
-    if (!targetUser) { res.json([]); return; }
-    // 隐私设置检查：若 campaign_history_public 为 false，仅本人可见
-    if (targetUser.campaign_history_public === false || targetUser.campaign_history_public === 0) {
-      if (!req.user || req.user.id !== targetUser.id) {
-        res.json([]);
-        return;
-      }
-    }
     const data = await userService.getUserCampaigns(req.params.uid);
     res.json(data);
   } catch (err: any) {
@@ -79,17 +90,8 @@ router.get('/:uid/campaigns', optionalAuthMiddleware, async (req, res) => {
   }
 });
 
-router.get('/:uid/hosted-campaigns', optionalAuthMiddleware, async (req, res) => {
+router.get('/:uid/hosted-campaigns', async (req, res) => {
   try {
-    const targetUser = await db('users').where({ uid: Number(req.params.uid) }).select('id', 'campaign_history_public').first();
-    if (!targetUser) { res.json([]); return; }
-    // 隐私设置检查
-    if (targetUser.campaign_history_public === false || targetUser.campaign_history_public === 0) {
-      if (!req.user || req.user.id !== targetUser.id) {
-        res.json([]);
-        return;
-      }
-    }
     const data = await userService.getHostedCampaigns(req.params.uid);
     res.json(data);
   } catch (err: any) {

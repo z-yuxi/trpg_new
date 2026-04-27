@@ -1,5 +1,5 @@
 ﻿import { Router, type IRouter } from 'express';
-import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
 import { rulesetService } from '../services/ruleset-service';
 import type { ExecuteRequest, RulesetStatus } from '@trpg/shared';
 import yaml from 'js-yaml';
@@ -53,8 +53,8 @@ router.get('/:id', optionalAuthMiddleware, async (req, res): Promise<void> => {
   }
 });
 
-// POST /api/rulesets — 创建规则集（需登录）
-router.post('/', authMiddleware, async (req, res): Promise<void> => {
+// POST /api/rulesets — 创建规则集（需创作者权限）
+router.post('/', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const { name, version, description, parent_ruleset_id, character_card_schema, recipe_source } = req.body as {
       name?: string;
@@ -88,8 +88,8 @@ router.post('/', authMiddleware, async (req, res): Promise<void> => {
   }
 });
 
-// PUT /api/rulesets/:id — 更新规则集（仅作者）
-router.put('/:id', authMiddleware, async (req, res): Promise<void> => {
+// PUT /api/rulesets/:id — 更新规则集（仅创作者作者）
+router.put('/:id', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const ruleset = await rulesetService.update(req.params['id']!, req.userId!, req.body);
     res.json(ruleset);
@@ -106,8 +106,8 @@ router.put('/:id', authMiddleware, async (req, res): Promise<void> => {
   }
 });
 
-// POST /api/rulesets/:id/publish — 发布规则集（draft → published）
-router.post('/:id/publish', authMiddleware, async (req, res): Promise<void> => {
+// POST /api/rulesets/:id/publish — 发布规则集（draft → published，需创作者权限）
+router.post('/:id/publish', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const ruleset = await rulesetService.publish(req.params['id']!, req.userId!);
     res.json(ruleset);
@@ -158,8 +158,8 @@ router.get('/:id/versions', authMiddleware, async (req, res): Promise<void> => {
   }
 });
 
-// POST /api/rulesets/:id/versions — 手动保存版本快照
-router.post('/:id/versions', authMiddleware, async (req, res): Promise<void> => {
+// POST /api/rulesets/:id/versions — 手动保存版本快照（需创作者权限）
+router.post('/:id/versions', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const { changelog } = req.body as { changelog?: string };
     const version = await rulesetService.saveVersion(req.params['id']!, changelog ?? '', req.userId!);
@@ -172,8 +172,8 @@ router.post('/:id/versions', authMiddleware, async (req, res): Promise<void> => 
   }
 });
 
-// POST /api/rulesets/:id/versions/:vid/rollback — 回滚到指定版本
-router.post('/:id/versions/:vid/rollback', authMiddleware, async (req, res): Promise<void> => {
+// POST /api/rulesets/:id/versions/:vid/rollback — 回滚到指定版本（需创作者权限）
+router.post('/:id/versions/:vid/rollback', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const ruleset = await rulesetService.rollbackToVersion(req.params['id']!, req.params['vid']!, req.userId!);
     res.json(ruleset);

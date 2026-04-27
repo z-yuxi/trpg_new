@@ -24,47 +24,6 @@ interface RulesetLike {
   recruitment_fields?: unknown;
 }
 
-const fallbackRecruitmentFields: Record<string, RecruitmentField[]> = {
-  coc: [
-    {
-      name: 'credit_rating',
-      label: '信用评级范围',
-      type: 'number_range',
-      minLabel: '最低',
-      maxLabel: '最高',
-      default: { min: 0, max: 80 },
-    },
-    {
-      name: 'age_education',
-      label: '年龄/学历要求',
-      type: 'text',
-      placeholder: '例如：成年角色，学历 60 以下',
-    },
-    {
-      name: 'allow_mixed',
-      label: '是否允许混卡',
-      type: 'boolean',
-      default: false,
-    },
-  ],
-  dnd5e: [
-    {
-      name: 'level_range',
-      label: '等级范围',
-      type: 'text',
-      placeholder: '例如：3-5 级',
-    },
-    {
-      name: 'alignment_restrictions',
-      label: '阵营限制',
-      type: 'select',
-      multiple: true,
-      options: ['守序善良', '中立善良', '混乱善良', '守序中立', '绝对中立', '混乱中立', '守序邪恶', '中立邪恶', '混乱邪恶'],
-      default: [],
-    },
-  ],
-};
-
 function toFieldArray(value: unknown): RecruitmentField[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -73,10 +32,6 @@ function toFieldArray(value: unknown): RecruitmentField[] {
       ...item,
       options: Array.isArray(item.options) ? item.options : undefined,
     }));
-}
-
-function extractRulesetId(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 export function resolveRecruitmentFields(ruleset?: RulesetLike | null): RecruitmentField[] {
@@ -91,7 +46,7 @@ export function resolveRecruitmentFields(ruleset?: RulesetLike | null): Recruitm
     : undefined);
   if (schemaFields.length > 0) return schemaFields;
 
-  return fallbackRecruitmentFields[extractRulesetId(ruleset.id)] ?? [];
+  return [];
 }
 
 export function createRecruitmentMetadata(fields: RecruitmentField[]): Record<string, unknown> {
