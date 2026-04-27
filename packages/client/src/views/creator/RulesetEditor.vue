@@ -3,6 +3,7 @@ import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import RuleCanvas from '../../components/rule-canvas/RuleCanvas.vue';
+import RecipeEditor from '../../components/rule-canvas/RecipeEditor.vue';
 import VersionPanel from '../../components/VersionPanel.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import CharacterCardSchemaEditor from '../../components/rule-canvas/CharacterCardSchemaEditor.vue';
@@ -13,7 +14,7 @@ import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
 import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
 import { deserializeFromGraph } from '../../utils/canvas-serializer';
 import { api, getToken } from '../../utils/api';
-import type { CommandGraph } from '@trpg/shared';
+import type { CommandGraph, RulesetRecipeSource } from '@trpg/shared';
 
 interface SchemaField {
   name: string;
@@ -42,11 +43,13 @@ const router = useRouter();
 const rulesetId = route.params.id as string;
 const isNew = rulesetId === 'new';
 
-// ── 编辑模式 L1（表单）/ L3（可视化画布）/ versions（版本管理） ──────────────
-type EditorMode = 'l1' | 'l3' | 'versions';
+// ── 编辑模式 ─────────────────────────────────────────────────────────────────
+type EditorMode = 'l1' | 'l3' | 'recipe' | 'versions';
 const editorMode = ref<EditorMode>('l1');
 /** L3 画布当前的图数据（保存时写入后端） */
 const currentGraph = ref<CommandGraph | null>(null);
+/** Recipe 格式数据 */
+const currentRecipeSource = ref<RulesetRecipeSource | null>(null);
 
 function switchMode(to: EditorMode) {
   if (to === 'l3' && editorMode.value === 'l1') {
@@ -99,6 +102,11 @@ function switchMode(to: EditorMode) {
     return;
   }
   editorMode.value = to;
+}
+
+// ── Recipe 模式回调 ────────────────────────────────────────────────────
+function onRecipeSaved(newSource: RulesetRecipeSource) {
+  currentRecipeSource.value = newSource;
 }
 
 // ── form data ─────────────────────────────────────────────────────────
@@ -318,6 +326,13 @@ async function fetchRuleset() {
       // 恢复指令覆盖
       const co = (rs as any).command_overrides;
       if (Array.isArray(co)) commandOverrides.value = co;
+      // 恢复 recipe_source
+      const recipeSource = (rs as any).recipe_source;
+      if (recipeSource) {
+        currentRecipeSource.value = recipeSource as RulesetRecipeSource;
+        // legacy=false 的规则集默认进入 recipe 编辑模式
+        if ((rs as any).legacy === false) editorMode.value = 'recipe';
+      }
       formData.value = rs;
   } catch { /* ignore */ }
 }
@@ -483,6 +498,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
       <div class="mode-tabs">
         <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')"><SvgIcon name="icon-list" :size="12" /> 表单 (L1)</button>
         <button class="mode-tab" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')"><SvgIcon name="icon-grid" :size="12" /> 画布 (L3)</button>
+        <button class="mode-tab" :class="{ active: editorMode === 'recipe' }" @click="editorMode = 'recipe'"><SvgIcon name="icon-grid" :size="12" /> Recipe</button>
         <button class="mode-tab" :class="{ active: editorMode === 'versions' }" @click="editorMode = 'versions'"><SvgIcon name="icon-history" :size="12" /> 版本</button>
       </div>
       <div class="header-right">
@@ -520,6 +536,15 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
         :parent-id="(formData as any)?.parent_id ?? null"
         @rolledback="fetchRuleset"
         @merged="onMerged"
+      />
+    </div>
+
+    <!-- Recipe 编辑面板 -->
+    <div v-else-if="editorMode === 'recipe'" class="recipe-container">
+      <RecipeEditor
+        :ruleset-id="rulesetId"
+        :recipe-source="currentRecipeSource"
+        @saved="onRecipeSaved"
       />
     </div>
 
@@ -856,6 +881,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 }
 .l3-canvas-container { flex: 1; overflow: hidden; min-height: 0; }
 .versions-container { flex: 1; overflow: auto; min-height: 0; }
+.recipe-container { flex: 1; overflow: auto; min-height: 0; padding: 16px; }
 
 /* 状态机按钮 */
 .status-badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 600; }

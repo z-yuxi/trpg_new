@@ -14,10 +14,10 @@
   /* 功能色（提亮，适配深色背景） */
   --color-info:        var(--color-primary);
   --color-info-bg:     var(--color-primary-light);
-  --color-success:     #22c55e;
-  --color-success-bg:  rgba(34, 197, 94, 0.15);
-  --color-warning:     #f59e0b;
-  --color-warning-bg:  rgba(245, 158, 11, 0.15);
+  --color-success:     #6B8E6B;
+  --color-success-bg:  rgba(107, 142, 107, 0.15);
+  --color-warning:     #C9A227;
+  --color-warning-bg:  rgba(201, 162, 39, 0.15);
   --color-danger:        #C86460;
   --color-danger-hover:  #D8736F;
   --color-danger-active: #B85A56;
@@ -25,21 +25,21 @@
   --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层反色 */
-  --surface-page:     #030712;   /* Gray 950 */
-  --surface-card:     #111827;   /* Gray 900 */
+  --surface-page:     #1C2128;   /* 品牌夜间背景 */
+  --surface-card:     #161B22;   /* 品牌夜间卡片 */
   --surface-hover:    rgba(255, 255, 255, 0.05);
   --surface-active:   rgba(255, 255, 255, 0.10);
-  --surface-elevated: #1f2937;   /* Gray 800，比卡片稍亮 */
+  --surface-elevated: #21262D;   /* 品牌夜间浮层 */
 
   /* 文字层提亮 */
-  --text-primary:   #f9fafb;   /* Gray 50，近白 */
-  --text-body:      #d1d5db;   /* Gray 300 */
+  --text-primary:   #F0F6FC;   /* 品牌夜间标题色 */
+  --text-body:      #B1BAC4;   /* 品牌夜间正文色 */
   --text-secondary: #9ca3af;   /* Gray 400 */
   --text-muted:     #6b7280;   /* Gray 500 */
-  --text-inverse:   #0f172a;   /* Slate 900，深色（用于浅色按钮文字） */
+  --text-inverse:   #101828;   /* 深色（用于浅色按鈕文字） */
 
   /* 边框 */
-  --border-default: rgba(255, 255, 255, 0.10);
+  --border-default: #21262D;
   --border-hover:   rgba(255, 255, 255, 0.20);
   --border-active:  var(--color-primary);
 
@@ -60,31 +60,31 @@
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.60), 0 8px 10px -6px rgba(0, 0, 0, 0.40);
 
   /* 向后兼容别名 */
-  --color-page-bg:        #030712;
-  --color-card-bg:        #111827;
-  --color-card-border:    rgba(255, 255, 255, 0.10);
-  --color-input-bg:       #1f2937;
-  --color-input-border:   rgba(255, 255, 255, 0.10);
+  --color-page-bg:        #1C2128;
+  --color-card-bg:        #161B22;
+  --color-card-border:    #21262D;
+  --color-input-bg:       #21262D;
+  --color-input-border:   #21262D;
   --color-input-focus:    var(--color-primary);
-  --color-text-primary:   #f9fafb;
+  --color-text-primary:   #F0F6FC;
   --color-text-secondary: #9ca3af;
   --color-text-muted:     #6b7280;
-  --color-text-inverse:   #0f172a;
+  --color-text-inverse:   #101828;
   --color-tag-default-bg:   rgba(255, 255, 255, 0.08);
   --color-tag-default-text: #cbd5e1;
 
   /* Element Plus 夜间覆盖 */
-  --el-color-primary:        #60a5fa;
-  --el-color-primary-light-3: rgba(96, 165, 250, 0.7);
-  --el-color-primary-light-5: rgba(96, 165, 250, 0.5);
-  --el-color-primary-light-7: rgba(96, 165, 250, 0.3);
-  --el-color-primary-light-9: rgba(96, 165, 250, 0.1);
-  --el-color-primary-dark-2:  #3b82f6;
-  --el-bg-color:             #111827;
-  --el-bg-color-page:        #030712;
-  --el-text-color-primary:   #f9fafb;
-  --el-text-color-regular:   #d1d5db;
-  --el-border-color:         rgba(255, 255, 255, 0.10);
+  --el-color-primary:        #6B9DC8;
+  --el-color-primary-light-3: rgba(107, 157, 200, 0.7);
+  --el-color-primary-light-5: rgba(107, 157, 200, 0.5);
+  --el-color-primary-light-7: rgba(107, 157, 200, 0.3);
+  --el-color-primary-light-9: rgba(107, 157, 200, 0.1);
+  --el-color-primary-dark-2:  #5A8DB8;
+  --el-bg-color:             #161B22;
+  --el-bg-color-page:        #1C2128;
+  --el-text-color-primary:   #F0F6FC;
+  --el-text-color-regular:   #B1BAC4;
+  --el-border-color:         #21262D;
   --el-fill-color-light:     rgba(255, 255, 255, 0.05);
   --el-mask-color:           rgba(0, 0, 0, 0.7);
 }

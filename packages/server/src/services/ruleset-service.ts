@@ -2,10 +2,13 @@ import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import type { Ruleset, RulesetStatus, ExecuteRequest, ExecuteResponse, RulesetVersion, RulesetVersionDiff, ForkResult, MergeResult, MergeConflict } from '@trpg/shared';
 import type { RulesetRecipeSource, RulesetCompiledGraph, LegacyMeta } from '@trpg/shared';
+import type { Recipe } from '@trpg/shared';
+import { wrapLegacyGraphAsRawRecipe } from '@trpg/shared';
 import { resolveCommand } from '../engine/command-resolver';
+import { parseCommand } from '../engine/command-parser';
 import { GraphExecutor, type GraphDef } from '../engine/executor';
 import { globalRegistry } from '../engine/registry';
-import { validateRecipeSource, compileRecipe } from '../engine/recipe-compiler';
+import { validateRecipe, validateRecipeSource, compileRecipe } from '../engine/recipe-compiler';
 import type { RecipeValidationError } from '../engine/recipe-compiler';
 
 /** Recipe 编译器版本（缓存失效依据之一） */
@@ -286,6 +289,7 @@ export class RulesetService {
 
   /**
    * 执行规则集命令（三层解析：自定义 → 规则集预置 → 通用）。
+   * Recipe 主线：当规则集有 recipe_source.command_recipe_map 时，优先从 compiled_graph 取图。
    * @param ruleset_id  路径参数中的规则集 ID
    * @param body        请求体（新格式，不含 ruleset_id）
    */
@@ -293,24 +297,49 @@ export class RulesetService {
     const ruleset = await this.findById(ruleset_id);
     if (!ruleset) throw Object.assign(new Error('Ruleset not found'), { code: 'NOT_FOUND' });
 
-    // 三层解析
-    const resolved = resolveCommand(body.command, ruleset);
-    if (!resolved) {
-      throw Object.assign(
-        new Error(`Command '${body.command}' not found in ruleset or platform defaults`),
-        { code: 'NOT_FOUND' }
-      );
+    let graph: GraphDef | null = null;
+    let commandName: string = '';
+    let parsedParams: Record<string, unknown> = body.params ?? {};
+
+    // ── Recipe 主线：command_recipe_map → compiled_graph.atoms[recipeId] ──
+    if (!ruleset.legacy && ruleset.recipe_source?.command_recipe_map && ruleset.compiled_graph) {
+      // 尝试 parseCommand（/cmd 格式），失败则直接用原始命令名作为 map key
+      let parsed: ReturnType<typeof parseCommand> | null = null;
+      try { parsed = parseCommand(body.command); } catch { /* fall through */ }
+
+      const lookupKey = parsed?.command ?? body.command;
+      const recipeId = ruleset.recipe_source.command_recipe_map[lookupKey];
+      if (recipeId) {
+        const compiledAtoms = ruleset.compiled_graph.atoms as Record<string, unknown>;
+        const recipeGraph = compiledAtoms[recipeId] as GraphDef | undefined;
+        if (recipeGraph && recipeGraph.nodes) {
+          graph = recipeGraph;
+          commandName = lookupKey;
+          parsedParams = { ...(parsed?.params ?? {}), ...parsedParams };
+        }
+      }
     }
 
-    // 将解析参数 + body.params 合并注入图
-    const mergedParams: Record<string, unknown> = {
-      ...resolved.parsedParams,
-      ...(body.params ?? {}),
-    };
-    let graph = injectParamsIntoGraph(resolved.graph, mergedParams);
+    // ── Legacy 路径：三层命令解析器 ─────────────────────────────────────────
+    if (!graph) {
+      const resolved = resolveCommand(body.command, ruleset);
+      if (!resolved) {
+        throw Object.assign(
+          new Error(`Command '${body.command}' not found in ruleset or platform defaults`),
+          { code: 'NOT_FOUND' }
+        );
+      }
+      graph = resolved.graph;
+      commandName = resolved.name;
+      parsedParams = { ...resolved.parsedParams, ...parsedParams };
+      // 透传 param_map 注入逻辑（已在 resolved.parsedParams 中完成）
+    }
+
+    // 将解析参数注入图的 static 输入
+    let injectedGraph = injectParamsIntoGraph(graph, parsedParams);
 
     // 注入角色数据（优先 mock_context，其次真实角色）
-    const needsCharacterData = graph.nodes.some((n) => n.atom_type === 'character_skill_reader');
+    const needsCharacterData = injectedGraph.nodes.some((n) => n.atom_type === 'character_skill_reader');
     if (needsCharacterData) {
       let characterData: { attributes: Record<string, number>; skills: Record<string, number>; resources: Record<string, { current: number; max: number }> } | null = null;
 
@@ -332,12 +361,12 @@ export class RulesetService {
       }
 
       if (characterData) {
-        graph = injectParamsIntoGraph(graph, { character_data: characterData });
+        injectedGraph = injectParamsIntoGraph(injectedGraph, { character_data: characterData });
       }
     }
 
     const executor = new GraphExecutor(globalRegistry);
-    const result = executor.execute(graph);
+    const result = executor.execute(injectedGraph);
 
     // 从日志中提取骰子投掷信息
     const diceRolls: ExecuteResponse['dice_rolls'] = [];
@@ -375,7 +404,7 @@ export class RulesetService {
       ...(result.error ? { error: result.error } : {}),
       ...(result.failed_node_id !== undefined ? { failed_node_id: result.failed_node_id, failed_stage: 'graph_execute' as const } : {}),
       ...(result.error_code ? { error_code: result.error_code } : {}),
-      command_name: resolved.name,
+      command_name: commandName,
       raw_output: result.output,
     };
   }
@@ -631,6 +660,130 @@ export class RulesetService {
       merged_graph: { atoms: merged, connections: (parent.connections as any[]) ?? [] },
       conflicts,
     };
+  }
+
+  // ── Recipe 测试运行 ───────────────────────────────────────────────────────
+
+  /**
+   * 单个 Recipe 的测试运行（不依赖规则集，用于编辑器实时预览）。
+   * 流程：validate → compile → execute（用 mock 输入）→ 返回 TestRecipeResponse
+   */
+  async testRecipe(params: {
+    recipe: Recipe;
+    allRecipes?: Recipe[];
+    test_inputs?: Record<string, unknown>;
+    mock_context?: {
+      attributes: Record<string, number>;
+      skills: Record<string, number>;
+      resources: Record<string, { current: number; max: number }>;
+    };
+  }): Promise<{
+    success: boolean;
+    output: unknown;
+    logs: unknown[];
+    compiled_preview: { atom_count: number; connection_count: number };
+    error_code?: string;
+    error_message?: string;
+    failed_stage?: string;
+    failed_node_id?: string | null;
+  }> {
+    const { recipe, allRecipes = [], test_inputs = {}, mock_context } = params;
+
+    // 1. 校验
+    const { valid, errors: validErrors } = validateRecipe(recipe, allRecipes);
+    if (!valid) {
+      return {
+        success: false,
+        output: null,
+        logs: [],
+        compiled_preview: { atom_count: 0, connection_count: 0 },
+        error_code: 'RECIPE_VALIDATION_FAILED',
+        error_message: validErrors.map((e) => `${e.path}: ${e.message}`).join('; '),
+        failed_stage: 'validate',
+        failed_node_id: null,
+      };
+    }
+
+    // 2. 编译
+    const compileResult = compileRecipe(recipe, allRecipes);
+    if (!compileResult.success || !compileResult.graph) {
+      return {
+        success: false,
+        output: null,
+        logs: [],
+        compiled_preview: { atom_count: 0, connection_count: 0 },
+        error_code: 'RECIPE_VALIDATION_FAILED',
+        error_message: compileResult.errors.map((e) => `${e.path}: ${e.message}`).join('; '),
+        failed_stage: 'compile',
+        failed_node_id: null,
+      };
+    }
+
+    const graph = compileResult.graph;
+    const atomCount = graph.nodes.length;
+    // connections 数量：graph 没有 connections 字段，用 ref 类型的 inputs 估算
+    const connCount = graph.nodes.reduce((acc, n) => acc + Object.values(n.inputs).filter((i) => i.type === 'ref').length, 0);
+
+    // 3. 注入测试参数
+    let injectedGraph = injectParamsIntoGraph(graph, test_inputs);
+
+    // 4. 注入角色数据
+    if (mock_context) {
+      injectedGraph = injectParamsIntoGraph(injectedGraph, { character_data: mock_context });
+    }
+
+    // 5. 执行
+    const executor = new GraphExecutor(globalRegistry);
+    const result = executor.execute(injectedGraph);
+
+    return {
+      success: result.success,
+      output: result.output,
+      logs: result.logs,
+      compiled_preview: { atom_count: atomCount, connection_count: connCount },
+      ...(result.error ? { error_code: 'EXECUTION_ERROR', error_message: result.error, failed_stage: 'execute', failed_node_id: result.failed_node_id ?? null } : {}),
+    };
+  }
+
+  // ── 旧格式迁移 ────────────────────────────────────────────────────────────
+
+  /**
+   * 将旧格式（atoms/connections）的规则集迁移为 raw Recipe 格式。
+   * 迁移后：legacy=false, recipe_source 存储包装后的 raw recipe, compiled_graph 更新。
+   * 仅限作者操作，且规则集必须是 legacy=true。
+   */
+  async migrateToRecipe(rulesetId: string, userId: string): Promise<Ruleset> {
+    const ruleset = await this.findById(rulesetId);
+    if (!ruleset) throw Object.assign(new Error('Ruleset not found'), { code: 'NOT_FOUND' });
+    if (ruleset.author_id !== userId) throw Object.assign(new Error('Forbidden'), { code: 'FORBIDDEN' });
+    if (!ruleset.legacy) throw Object.assign(new Error('Ruleset is already in Recipe format'), { code: 'BAD_REQUEST' });
+
+    // 包装旧格式为 raw recipe
+    const wrappedRecipe = wrapLegacyGraphAsRawRecipe(
+      ruleset.atoms as object,
+      ruleset.connections as object,
+    );
+    const recipeSource: RulesetRecipeSource = {
+      recipes: [wrappedRecipe],
+      command_recipe_map: {},  // 旧 commands 结构不做自动映射，需用户手动配置
+    };
+
+    const { compiledGraph, errors } = compileRecipeSource(recipeSource);
+    // raw recipe 理论上不会有编译错误；如有则保持 legacy 不变并抛出
+    if (errors.length > 0) {
+      throw Object.assign(new Error('Migration compile failed'), {
+        code: 'RECIPE_VALIDATION_FAILED',
+        errors,
+      });
+    }
+
+    await db('rulesets').where({ id: rulesetId }).update({
+      recipe_source: JSON.stringify(recipeSource),
+      compiled_graph: JSON.stringify(compiledGraph),
+      legacy: 0,
+    });
+
+    return (await this.findById(rulesetId))!;
   }
 }
 

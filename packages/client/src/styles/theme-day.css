@@ -14,10 +14,10 @@
   /* 功能色 */
   --color-info:        var(--color-primary);
   --color-info-bg:     var(--color-primary-light);
-  --color-success:     #16a34a;
-  --color-success-bg:  #f0fdf4;
-  --color-warning:     #f59e0b;
-  --color-warning-bg:  #fffbeb;
+  --color-success:     #6B8E6B;
+  --color-success-bg:  rgba(107, 142, 107, 0.12);
+  --color-warning:     #C9A227;
+  --color-warning-bg:  rgba(201, 162, 39, 0.12);
   --color-danger:        #B85450;
   --color-danger-hover:  #A04743;
   --color-danger-active: #8A3D3A;
@@ -25,21 +25,21 @@
   --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层 */
-  --surface-page:     #f9fafb;
+  --surface-page:     #F5F7FA;
   --surface-card:     #ffffff;
   --surface-hover:    #f3f4f6;
   --surface-active:   #e5e7eb;
   --surface-elevated: #ffffff;
 
   /* 文字层 */
-  --text-primary:   #111827;
+  --text-primary:   #101828;
   --text-body:      #374151;
-  --text-secondary: #6b7280;
+  --text-secondary: #667085;
   --text-muted:     #9ca3af;
   --text-inverse:   #ffffff;
 
   /* 边框 */
-  --border-default: #e5e7eb;
+  --border-default: #E8ECF0;
   --border-hover:   #d1d5db;
   --border-active:  var(--color-primary);
 
@@ -60,14 +60,14 @@
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 
   /* 向后兼容别名 */
-  --color-page-bg:        #f9fafb;
+  --color-page-bg:        #F5F7FA;
   --color-card-bg:        #ffffff;
-  --color-card-border:    #e5e7eb;
-  --color-input-bg:       #f9fafb;
-  --color-input-border:   #e5e7eb;
+  --color-card-border:    #E8ECF0;
+  --color-input-bg:       #F5F7FA;
+  --color-input-border:   #E8ECF0;
   --color-input-focus:    var(--color-primary);
-  --color-text-primary:   #111827;
-  --color-text-secondary: #6b7280;
+  --color-text-primary:   #101828;
+  --color-text-secondary: #667085;
   --color-text-muted:     #9ca3af;
   --color-text-inverse:   #ffffff;
   --color-tag-default-bg:   #f3f4f6;
@@ -81,9 +81,9 @@
   --el-color-primary-light-9: rgba(91, 141, 184, 0.1);
   --el-color-primary-dark-2:  #4A7A9F;
   --el-bg-color:             #ffffff;
-  --el-bg-color-page:        #f9fafb;
-  --el-text-color-primary:   #111827;
+  --el-bg-color-page:        #F5F7FA;
+  --el-text-color-primary:   #101828;
   --el-text-color-regular:   #374151;
-  --el-border-color:         #e5e7eb;
+  --el-border-color:         #E8ECF0;
   --el-fill-color-light:     #f3f4f6;
 }

@@ -315,4 +315,48 @@ router.post('/import', authMiddleware, async (req, res): Promise<void> => {
   }
 });
 
+// POST /api/rulesets/:id/test-recipe — 单 recipe 测试运行（编辑器实时预览，仅作者）
+router.post('/:id/test-recipe', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.findById(req.params['id']!);
+    if (!ruleset) { res.status(404).json({ error: 'Ruleset not found' }); return; }
+    if (ruleset.author_id !== req.userId) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const { recipe, test_inputs, mock_context } = req.body as {
+      recipe?: import('@trpg/shared').Recipe;
+      test_inputs?: Record<string, unknown>;
+      mock_context?: {
+        attributes: Record<string, number>;
+        skills: Record<string, number>;
+        resources: Record<string, { current: number; max: number }>;
+      };
+    };
+    if (!recipe) { res.status(400).json({ error: 'recipe is required' }); return; }
+
+    const allRecipes = ruleset.recipe_source?.recipes ?? [];
+    const result = await rulesetService.testRecipe({ recipe, allRecipes, test_inputs, mock_context });
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/rulesets/:id/migrate-to-recipe — 将旧格式迁移为 Recipe（仅作者，不可逆）
+router.post('/:id/migrate-to-recipe', authMiddleware, async (req, res): Promise<void> => {
+  try {
+    const ruleset = await rulesetService.migrateToRecipe(req.params['id']!, req.userId!);
+    res.json(ruleset);
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string; errors?: unknown[] };
+    if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
+    if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
+    if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    if (e.code === 'RECIPE_VALIDATION_FAILED') {
+      res.status(400).json({ error: e.message, validation_errors: e.errors });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

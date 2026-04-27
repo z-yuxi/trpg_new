@@ -108,10 +108,10 @@
   /* 功能色 */
   --color-info:        var(--color-primary);
   --color-info-bg:     var(--color-primary-light);
-  --color-success:     var(--green-600);
-  --color-success-bg:  var(--green-50);
-  --color-warning:     var(--amber-500);
-  --color-warning-bg:  var(--amber-50);
+  --color-success:     #6B8E6B;
+  --color-success-bg:  rgba(107, 142, 107, 0.12);
+  --color-warning:     #C9A227;
+  --color-warning-bg:  rgba(201, 162, 39, 0.12);
   --color-warning-text: var(--amber-800);
    --color-danger:        var(--brand-accent);
    --color-danger-hover:  var(--brand-accent-hover);
@@ -120,21 +120,21 @@
   --color-danger-bg:     var(--color-danger-light);
 
   /* 背景层 */
-  --surface-page:     var(--gray-50);
+  --surface-page:     #F5F7FA;
   --surface-card:     #ffffff;
   --surface-hover:    var(--gray-100);
   --surface-active:   var(--gray-200);
   --surface-elevated: #ffffff;
 
   /* 文字层 */
-  --text-primary:   var(--gray-900);
+  --text-primary:   #101828;
   --text-body:      var(--gray-700);
-  --text-secondary: var(--gray-500);
+  --text-secondary: #667085;
   --text-muted:     var(--gray-400);
   --text-inverse:   #ffffff;
 
   /* 边框 */
-  --border-default: var(--gray-200);
+  --border-default: #E8ECF0;
   --border-hover:   var(--gray-300);
   --border-active:  var(--color-primary);
 
@@ -220,7 +220,7 @@
    --duration-slow:    350ms;
   --duration-slower:  500ms;
 
-  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+  --ease-out:    cubic-bezier(0.4, 0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
@@ -252,7 +252,7 @@
   --color-text-inverse:   var(--text-inverse);
   --color-secondary:      var(--text-secondary);
   --color-accent:         var(--color-info);
-  --color-accent-hover:   var(--blue-700);
+  --color-accent-hover:   var(--color-primary-hover);
 
   --color-tag-default-bg:   var(--gray-100);
   --color-tag-default-text: var(--slate-600);
