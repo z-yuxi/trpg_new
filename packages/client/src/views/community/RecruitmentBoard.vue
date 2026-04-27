@@ -170,33 +170,72 @@ onMounted(loadPosts);
       title="暂无招募帖"
       description="暂无符合条件的招募帖，换个筛选条件试试。"
     />
-    <div v-else class="post-list">
-      <TCard v-for="p in posts" :key="p.id" padding="md" hoverable class="post-card" @click="goDetail(p.id)">
-        <div class="post-top">
-          <h3 class="post-title">{{ p.title }}</h3>
-          <TTag :color="statusMap[p.status_view]?.color" size="sm">{{ statusMap[p.status_view]?.label }}</TTag>
+    <div v-else class="recruitment-grid">
+      <div
+        v-for="p in posts"
+        :key="p.id"
+        class="recruit-card"
+        :class="{ 'status-full-card': p.status_view === 'full' || p.status_view === 'closed' }"
+        @click="goDetail(p.id)"
+      >
+        <!-- 头部：状态 + 规则集 -->
+        <div class="recruit-header">
+          <span
+            class="status-badge"
+            :class="{
+              'status-open': p.status_view === 'open',
+              'status-full': p.status_view === 'full' || p.status_view === 'grouped',
+              'status-closed': p.status_view === 'closed',
+            }"
+          >{{ statusMap[p.status_view]?.label }}</span>
+          <span class="ruleset-tag">{{ p.ruleset_name || p.ruleset_id }}</span>
         </div>
 
-        <div class="post-line">
-          <span>GM：{{ p.poster_nickname }}</span>
-          <span>规则包：{{ p.ruleset_name || p.ruleset_id }}</span>
+        <!-- 标题 -->
+        <h3 class="recruit-title">{{ p.title }}</h3>
+
+        <!-- 信息行 -->
+        <div class="recruit-info">
+          <div class="info-row">
+            <span class="info-label">GM</span>
+            <span class="info-value">{{ p.poster_nickname }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">玩家</span>
+            <span class="info-value">{{ p.player_count_joined }}/{{ p.player_count_max }}</span>
+            <div class="player-bar">
+              <div
+                class="player-bar-fill"
+                :style="{ width: p.player_count_max ? (p.player_count_joined / p.player_count_max * 100) + '%' : '0%' }"
+              ></div>
+            </div>
+          </div>
+          <div v-if="p.module_name" class="info-row">
+            <span class="info-label">模组</span>
+            <span class="info-value">{{ p.module_name }}</span>
+          </div>
+          <div v-if="p.tags?.length" class="info-row tags-row">
+            <span class="info-label">标签</span>
+            <span class="info-value tags-value">
+              <span v-for="tag in p.tags.slice(0, 3)" :key="tag" class="inline-tag">{{ tag }}</span>
+            </span>
+          </div>
         </div>
-        <div class="post-line">
-          <span>模组：{{ p.module_name || '待定' }}</span>
-          <span>人数：{{ p.player_count_joined }}/{{ p.player_count_max }}</span>
-        </div>
-        <div v-if="p.description" class="post-desc">{{ p.description }}</div>
-        <div v-if="p.tags?.length" class="tag-row">
-          <TTag v-for="tag in p.tags" :key="tag" color="default" size="sm">{{ tag }}</TTag>
-        </div>
-        <div v-if="p.my_application_status" class="post-line apply-status">
-          <span>申请状态</span>
-          <TTag :color="p.my_application_status === 'approved' ? 'success' : p.my_application_status === 'rejected' ? 'danger' : 'warning'" size="sm">
-            {{ p.my_application_status }}
+
+        <!-- 申请状态（仅"我的申请"模式） -->
+        <div v-if="p.my_application_status" class="apply-row">
+          <TTag
+            :color="p.my_application_status === 'approved' ? 'success' : p.my_application_status === 'rejected' ? 'danger' : 'warning'"
+            size="sm"
+          >
+            申请{{ p.my_application_status === 'approved' ? '已通过' : p.my_application_status === 'rejected' ? '已拒绝' : '待审核' }}
           </TTag>
         </div>
-        <div class="post-time">发布时间：{{ formatDate(p.created_at) }}</div>
-      </TCard>
+
+        <div class="recruit-footer">
+          <span class="post-time">{{ formatDate(p.created_at) }}</span>
+        </div>
+      </div>
     </div>
 
     <div class="pager">
@@ -247,12 +286,140 @@ onMounted(loadPosts);
 }
 .tag-row { margin-top: var(--space-2); display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .apply-status { align-items: center; }
-.post-time { margin-top: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
 .pager { display: flex; justify-content: center; margin-top: var(--space-2); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6); }
 .sk-list { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) 0; }
+
+/* ===== 双列紧凑卡片网格 ===== */
+.recruitment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.recruit-card {
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--border-default, #E8ECF0);
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.recruit-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.1);
+}
+
+.status-full-card { opacity: 0.72; }
+
+.recruit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.status-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.status-open   { background: rgba(107, 142, 107, 0.12); color: #6B8E6B; }
+.status-full   { background: rgba(184, 84, 80, 0.1);    color: #B85450; }
+.status-closed { background: rgba(152, 162, 179, 0.15); color: #98A2B3; }
+
+.ruleset-tag {
+  font-size: 11px;
+  color: var(--text-secondary, #667085);
+  background: var(--surface-hover, #F5F7FA);
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recruit-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text-primary, #101828);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recruit-info { display: flex; flex-direction: column; flex: 1; }
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.info-label {
+  color: var(--text-muted, #98A2B3);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.info-value {
+  color: var(--text-body, #344054);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-hover, #F5F7FA);
+  border-radius: 2px;
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.player-bar-fill {
+  height: 100%;
+  background: #6B8E6B;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.tags-row { align-items: flex-start; }
+.tags-value { display: flex; gap: 4px; flex-wrap: wrap; }
+.inline-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-hover, #F5F7FA);
+  color: var(--text-secondary, #667085);
+}
+
+.apply-row { margin-top: 8px; }
+
+.recruit-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-default, #E8ECF0);
+}
+
+.post-time { font-size: 11px; color: var(--text-muted, #98A2B3); }
+
 @media (max-width: 768px) {
   .toolbar { grid-template-columns: 1fr; }
   .board-title-row { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  .recruitment-grid { grid-template-columns: 1fr; }
 }
 </style>

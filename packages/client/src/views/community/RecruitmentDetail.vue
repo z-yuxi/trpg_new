@@ -260,7 +260,6 @@ onMounted(async () => {
           :postAuthorNickname="detail.poster_nickname"
           :postCreatedAt="detail.created_at"
         />
-      </div>
       </TCard>
     </div>
 

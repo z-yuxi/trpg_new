@@ -2,6 +2,7 @@
 import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import TTag from '../components/base/TTag.vue';
+import TCard from '../components/base/TCard.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
@@ -17,10 +18,9 @@ const recruitments = ref<any[]>([]);
 const loading = ref(false);
 
 const quickActions = [
-  { title: '找团', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
-  { title: '做GM', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
-  { title: '发招募', desc: '快速发布你的跑团招募帖', path: '/community/recruit' },
-  { title: '发求组', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
+  { icon: '🔍', title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
+  { icon: '🎲', title: '当 KP', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
+  { icon: '📢', title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
 ];
 
 const mixedRecommendations = computed(() => [
@@ -63,15 +63,9 @@ onMounted(async () => {
 
 <template>
   <div class="home-page">
-    <section class="banner">
-      <div class="banner-inner">
-        <h1 class="banner-title">共叙，专注人与人之间的共同叙事</h1>
-        <p class="banner-subtitle">在这里，与同好相聚，共同书写属于彼此的故事。</p>
-        <div class="banner-actions">
-          <button class="btn-primary" @click="router.push('/campaigns')">我的团</button>
-          <button class="btn-secondary" @click="router.push('/community/recruit')">招募板</button>
-        </div>
-      </div>
+    <section class="hero-banner">
+      <h1 class="hero-title">共叙，专注人与人之间的共同叙事</h1>
+      <p class="hero-subtitle">在这里，与同好相聚，共同书写属于彼此的故事。</p>
     </section>
 
     <div class="content-layout">
@@ -88,20 +82,22 @@ onMounted(async () => {
             暂无战役，<span class="link" @click="router.push('/campaigns')">去创建</span>
           </div>
           <div v-else class="campaign-scroll">
-            <div v-for="c in campaigns" :key="c.id" class="campaign-card" @click="router.push(`/room/${c.id}`)">
-              <div class="campaign-cover">
-                <img v-if="c.cover_url" class="cover-image" :src="c.cover_url" :alt="c.name" />
-                <div v-else class="cover-fallback" aria-hidden="true">
-                  <SvgIcon :name="c.module_id ? 'icon-market' : 'icon-ruleset'" :size="40" class="fallback-icon" />
+            <div v-for="c in campaigns" :key="c.id" class="campaign-scroll-item" @click="router.push(`/room/${c.id}`)">
+              <TCard padding="none" hoverable :elevated="c.status === 'running'" :status="c.status">
+                <div class="campaign-cover">
+                  <img v-if="c.cover_url" class="cover-image" :src="c.cover_url" :alt="c.name" />
+                  <div v-else class="cover-fallback" aria-hidden="true">
+                    <SvgIcon :name="c.module_id ? 'icon-market' : 'icon-ruleset'" :size="40" class="fallback-icon" />
+                  </div>
                 </div>
-              </div>
-              <div class="campaign-info">
-                <div class="campaign-name">{{ c.name }}</div>
-                <div class="campaign-meta">
-                  <TTag :color="statusMap[c.status]?.color ?? 'default'" size="sm">{{ statusMap[c.status]?.label ?? c.status }}</TTag>
-                  <span class="mono-sm">{{ c.room_code }}</span>
+                <div class="campaign-info">
+                  <div class="campaign-name">{{ c.name }}</div>
+                  <div class="campaign-meta">
+                    <TTag :color="statusMap[c.status]?.color ?? 'default'" size="sm">{{ statusMap[c.status]?.label ?? c.status }}</TTag>
+                    <span class="mono-sm">{{ c.room_code }}</span>
+                  </div>
                 </div>
-              </div>
+              </TCard>
             </div>
           </div>
         </section>
@@ -119,9 +115,10 @@ onMounted(async () => {
             <h2 class="section-title">快速组队入口</h2>
           </div>
           <div class="quick-grid">
-            <button v-for="item in quickActions" :key="item.title" class="quick-entry-card" @click="router.push(item.path)">
+            <button v-for="item in quickActions" :key="item.title" class="quick-action-card" @click="router.push(item.path)">
+              <span class="quick-icon">{{ item.icon }}</span>
               <strong>{{ item.title }}</strong>
-              <span>{{ item.desc }}</span>
+              <span class="quick-desc">{{ item.desc }}</span>
             </button>
           </div>
         </section>
@@ -185,55 +182,78 @@ onMounted(async () => {
 
 <style scoped>
 .home-page { max-width: 1100px; margin: 0 auto; padding: 0 var(--space-4) var(--space-8); }
-.banner {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-  border-radius: var(--radius-lg);
-  padding: var(--space-8) var(--space-6);
-  margin-bottom: var(--space-6);
+.hero-banner {
+  background: linear-gradient(135deg, #5B8DB8 0%, #4A7A9F 50%, #3D6A8F 100%);
+  border-radius: 12px;
+  padding: 32px 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.banner-title { font-size: 32px; font-weight: 800; margin: 0 0 var(--space-2); color: var(--text-inverse); }
-.banner-subtitle { font-size: var(--text-base); color: rgba(255, 255, 255, 0.85); margin: 0 0 var(--space-5); }
-.banner-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; }
-.btn-primary {
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
-  font-weight: 700;
-  font-size: var(--text-sm);
-  cursor: pointer;
+.hero-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
 }
-.btn-primary:hover { background: var(--btn-primary-hover); }
-.btn-secondary {
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--btn-secondary-border);
-  background: var(--btn-secondary-bg);
-  color: var(--btn-secondary-text);
-  font-size: var(--text-sm);
-  cursor: pointer;
+.hero-banner::after {
+  content: '';
+  position: absolute;
+  top: -30%;
+  right: -15%;
+  width: 250px;
+  height: 250px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero-title {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  margin: 0 0 var(--space-2);
+  color: rgba(255, 255, 255, 0.95);
+  position: relative;
+}
+.hero-subtitle {
+  font-size: var(--text-base);
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+  position: relative;
 }
 .content-layout { display: grid; grid-template-columns: 1fr 280px; gap: var(--space-6); align-items: start; }
 .main-col { min-width: 0; }
 .side-col { display: flex; flex-direction: column; gap: var(--space-4); }
 .section { margin-bottom: var(--space-7); }
-.quick-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
-.quick-entry-card {
+.quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+.quick-action-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  text-align: left;
-  padding: var(--space-5);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-card);
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-5) var(--space-4);
+  border: 1.5px dashed var(--border-default, #D0D5DD);
+  border-radius: 8px;
+  background: var(--surface-card, #fff);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.quick-entry-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-md); }
-.quick-entry-card strong { color: var(--text-primary); }
-.quick-entry-card span { color: var(--text-secondary); font-size: var(--text-sm); }
+.quick-action-card:hover {
+  border-color: #5B8DB8;
+  background: rgba(91, 141, 184, 0.04);
+  transform: translateY(-2px);
+}
+.quick-action-card .quick-icon { font-size: 24px; line-height: 1; }
+.quick-action-card strong { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; }
+.quick-action-card .quick-desc { color: var(--text-secondary); font-size: var(--text-xs); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
 .section-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0; }
 .see-all { background: none; border: none; color: var(--color-accent); font-size: var(--text-sm); cursor: pointer; }
@@ -241,8 +261,8 @@ onMounted(async () => {
 .link { color: var(--color-accent); cursor: pointer; }
 .campaign-scroll { display: flex; gap: var(--space-3); overflow-x: auto; padding-bottom: var(--space-2); scrollbar-width: none; }
 .campaign-scroll::-webkit-scrollbar { display: none; }
-.campaign-card { min-width: 180px; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; flex-shrink: 0; transition: border-color var(--transition-fast); }
-.campaign-card:hover { border-color: var(--border-hover); }
+.campaign-scroll-item { min-width: 220px; flex-shrink: 0; cursor: pointer; }
+.campaign-scroll-item :deep(.t-card) { overflow: hidden; }
 .campaign-cover { height: 120px; background: var(--surface-hover); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .cover-image { width: 100%; height: 100%; object-fit: cover; }
 .cover-fallback { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
@@ -280,7 +300,7 @@ onMounted(async () => {
   .side-col { display: none; }
   .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ruleset-grid { grid-template-columns: repeat(2, 1fr); }
-  .banner-title { font-size: var(--text-2xl); }
+  .hero-title { font-size: var(--text-xl); }
 }
 @media (max-width: 480px) { .ruleset-grid { grid-template-columns: 1fr; } }
 </style>

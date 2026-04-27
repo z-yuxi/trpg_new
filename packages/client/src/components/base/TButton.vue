@@ -31,25 +31,32 @@ defineProps<{
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   box-shadow: var(--shadow-xs);
-  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast), box-shadow var(--transition-fast);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .t-btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
-.t-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.t-btn:not(:disabled):active { transform: scale(0.98); box-shadow: var(--shadow-xs); }
+.t-btn:not(:disabled):hover { transform: scale(1.02); box-shadow: var(--shadow-sm); }
+.t-btn:active:not(:disabled) { transform: scale(0.96); }
+.t-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(91, 141, 184, 0.3);
+}
 
 /* 尺寸 — 附录 B 3.1 */
 .t-btn--sm { height: 28px; padding: 0 var(--space-3); font-size: var(--text-xs); }
 .t-btn--md { height: 36px; padding: 0 var(--space-4); }
 .t-btn--lg { height: 44px; padding: 0 var(--space-6); font-size: var(--text-base); }
 
-/* primary — 日间深色/夜间浅色，自动反色 */
+/* primary */
 .t-btn--primary {
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
+  background: #5B8DB8;
+  color: #fff;
   box-shadow: var(--shadow-sm);
 }
-.t-btn--primary:not(:disabled):hover { background: var(--btn-primary-hover); box-shadow: var(--shadow-md); }
-.t-btn--primary:not(:disabled):active { background: var(--color-primary-active); }
+.t-btn--primary:hover:not(:disabled) {
+  background: #4A7A9F;
+  transform: scale(1.02);
+}
+.t-btn--primary:not(:disabled):active { background: #3D6A8F; }
 
 /* secondary */
 .t-btn--secondary {
@@ -61,6 +68,7 @@ defineProps<{
 .t-btn--secondary:not(:disabled):hover {
   background: var(--surface-hover);
   border-color: var(--border-hover);
+  transform: scale(1.02);
 }
 
 /* danger */
@@ -70,7 +78,10 @@ defineProps<{
   border: none;
   box-shadow: var(--shadow-sm);
 }
-.t-btn--danger:not(:disabled):hover { background: var(--red-700); }
+.t-btn--danger:not(:disabled):hover {
+  background: var(--color-danger-hover);
+  transform: scale(1.02);
+}
 
 /* ghost */
 .t-btn--ghost {
@@ -82,6 +93,7 @@ defineProps<{
 .t-btn--ghost:not(:disabled):hover {
   background: var(--color-primary-light);
   border-color: var(--border-hover);
+  transform: scale(1.02);
 }
 
 .t-btn__spinner {

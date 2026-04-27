@@ -3,13 +3,23 @@ defineProps<{
   padding?: 'none' | 'sm' | 'md' | 'lg';
   shadow?: boolean;
   hoverable?: boolean;
+  elevated?: boolean;
+  status?: 'running' | 'preparing' | 'paused' | 'ended';
 }>();
 </script>
 
 <template>
   <div
     class="t-card"
-    :class="[`t-card--pad-${padding ?? 'md'}`, { 'has-shadow': shadow, 'is-hoverable': hoverable }]"
+    :class="[
+      `t-card--pad-${padding ?? 'md'}`,
+      {
+        'has-shadow': shadow,
+        'is-hoverable': hoverable,
+        'is-elevated': elevated,
+      },
+      status ? `t-card--status-${status}` : '',
+    ]"
   >
     <slot />
   </div>
@@ -31,9 +41,54 @@ defineProps<{
 
 .has-shadow { box-shadow: var(--shadow-md); }
 
+/* ===== hoverable 增强交互 ===== */
+.is-hoverable {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .is-hoverable:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12);
+}
+
+.is-hoverable:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.1);
+}
+
+.is-hoverable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(91, 141, 184, 0.3);
+}
+
+/* ===== elevated 浮起态 ===== */
+.is-elevated {
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.12);
   transform: translateY(-2px);
+}
+
+/* ===== 状态视觉差异 ===== */
+.t-card--status-running {
+  border-left: 3px solid #6B8E6B;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.1);
+}
+
+.t-card--status-preparing {
+  border-left: 3px dashed #C9A227;
+}
+
+.t-card--status-paused {
+  border-left: 3px dashed #98A2B3;
+  opacity: 0.75;
+  box-shadow: none;
+}
+
+.t-card--status-ended {
+  border-left: 3px solid #98A2B3;
+  opacity: 0.65;
+  filter: saturate(0.7);
+  box-shadow: none;
 }
 </style>
