@@ -329,12 +329,46 @@ export interface Ruleset {
   fork_count?: number;
   /** 乐观锁版本号 */
   lock_version?: number;
+  /**
+   * [旧字段，兼容保留] 直接存储的原子节点定义。
+   * 新建规则集应使用 recipe_source；legacy 数据可继续使用此字段。
+   */
   atoms: object;
+  /**
+   * [旧字段，兼容保留] 直接存储的连接定义。
+   * 新建规则集应使用 recipe_source；legacy 数据可继续使用此字段。
+   */
   connections: object;
   commands: object;
   character_card_schema: object;
   status: RulesetStatus;
   created_at: Date;
+
+  // ===== Recipe 主线字段（新增）=====
+
+  /**
+   * 配方源码（编辑真源）。
+   * 用户编辑 recipe_source，保存时服务端自动 compile，结果写入 compiled_graph。
+   * 为空时表示该规则集是 legacy 格式（atoms/connections 直接存储）。
+   */
+  recipe_source?: import('./recipe').RulesetRecipeSource | null;
+
+  /**
+   * 编译产物缓存（由服务端 compile 自动生成，前端只读）。
+   * 执行器优先读取此字段；不存在时回退到 atoms/connections。
+   */
+  compiled_graph?: import('./recipe').RulesetCompiledGraph | null;
+
+  /**
+   * Legacy 标记。true 表示该规则集来自旧 atoms/connections 格式，
+   * 尚未完成 Recipe 迁移。
+   */
+  legacy?: boolean;
+
+  /**
+   * Legacy 元数据（仅 legacy=true 时有意义）。
+   */
+  legacy_meta?: import('./recipe').LegacyMeta | null;
 }
 
 /** 规则集版本快照 */
@@ -347,6 +381,10 @@ export interface RulesetVersion {
     connections: object;
     commands: object;
     character_card_schema: object;
+    /** Recipe 主线（阶段3后写入） */
+    recipe_source?: import('./recipe').RulesetRecipeSource | null;
+    /** 编译产物缓存（阶段3后写入） */
+    compiled_graph?: import('./recipe').RulesetCompiledGraph | null;
   };
   changelog: string;
   created_at: Date;
@@ -746,3 +784,4 @@ export interface OccupationTemplate {
 }
 
 export * from './events';
+export * from './recipe';

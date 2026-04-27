@@ -56,12 +56,13 @@ router.get('/:id', optionalAuthMiddleware, async (req, res): Promise<void> => {
 // POST /api/rulesets — 创建规则集（需登录）
 router.post('/', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const { name, version, description, parent_ruleset_id, character_card_schema } = req.body as {
+    const { name, version, description, parent_ruleset_id, character_card_schema, recipe_source } = req.body as {
       name?: string;
       version?: string;
       description?: string;
       parent_ruleset_id?: string;
       character_card_schema?: object;
+      recipe_source?: import('@trpg/shared').RulesetRecipeSource;
     };
     if (!name || typeof name !== 'string' || name.trim().length < 1) {
       res.status(400).json({ error: 'name is required' });
@@ -74,9 +75,15 @@ router.post('/', authMiddleware, async (req, res): Promise<void> => {
       author_id: req.userId!,
       parent_ruleset_id,
       character_card_schema,
+      recipe_source,
     });
     res.status(201).json(ruleset);
-  } catch (err) {
+  } catch (err: unknown) {
+    const e = err as { code?: string; message?: string; errors?: unknown[] };
+    if (e.code === 'RECIPE_VALIDATION_FAILED') {
+      res.status(400).json({ error: e.message, validation_errors: e.errors });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -87,10 +94,14 @@ router.put('/:id', authMiddleware, async (req, res): Promise<void> => {
     const ruleset = await rulesetService.update(req.params['id']!, req.userId!, req.body);
     res.json(ruleset);
   } catch (err: unknown) {
-    const e = err as { code?: string; message?: string };
+    const e = err as { code?: string; message?: string; errors?: unknown[] };
     if (e.code === 'NOT_FOUND') { res.status(404).json({ error: e.message }); return; }
     if (e.code === 'FORBIDDEN') { res.status(403).json({ error: e.message }); return; }
     if (e.code === 'BAD_REQUEST') { res.status(400).json({ error: e.message }); return; }
+    if (e.code === 'RECIPE_VALIDATION_FAILED') {
+      res.status(400).json({ error: e.message, validation_errors: e.errors });
+      return;
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });

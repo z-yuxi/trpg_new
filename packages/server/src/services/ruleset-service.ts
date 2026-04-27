@@ -1,11 +1,36 @@
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import type { Ruleset, RulesetStatus, ExecuteRequest, ExecuteResponse, RulesetVersion, RulesetVersionDiff, ForkResult, MergeResult, MergeConflict } from '@trpg/shared';
+import type { RulesetRecipeSource, RulesetCompiledGraph, LegacyMeta } from '@trpg/shared';
 import { resolveCommand } from '../engine/command-resolver';
 import { GraphExecutor, type GraphDef } from '../engine/executor';
 import { globalRegistry } from '../engine/registry';
+import { validateRecipeSource, compileRecipe } from '../engine/recipe-compiler';
+import type { RecipeValidationError } from '../engine/recipe-compiler';
+
+/** Recipe 编译器版本（缓存失效依据之一） */
+const COMPILER_VERSION = '1.0.0';
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as T; } catch { return fallback; }
+  }
+  return value as T;
+}
 
 function rowToRuleset(row: Record<string, unknown>): Ruleset {
+  // 旧格式判断：数据库 legacy 列为 1 或未设置 recipe_source
+  const legacyFlag = row['legacy'];
+  const recipeSourceRaw = row['recipe_source'];
+  const compiledGraphRaw = row['compiled_graph'];
+
+  const recipeSource = parseJsonField<RulesetRecipeSource | null>(recipeSourceRaw, null);
+  const compiledGraph = parseJsonField<RulesetCompiledGraph | null>(compiledGraphRaw, null);
+  const legacy = legacyFlag == null
+    ? recipeSource == null  // 未设置 legacy 列时，按是否有 recipe_source 推断
+    : Boolean(Number(legacyFlag));
+
   return {
     id: row['id'] as string,
     author_id: (row['author_id'] as string) ?? null,
@@ -13,13 +38,68 @@ function rowToRuleset(row: Record<string, unknown>): Ruleset {
     version: row['version'] as string,
     description: (row['description'] as string) ?? '',
     parent_ruleset_id: (row['parent_ruleset_id'] as string) ?? null,
-    atoms: typeof row['atoms'] === 'string' ? JSON.parse(row['atoms'] as string) : (row['atoms'] as object) ?? {},
-    connections: typeof row['connections'] === 'string' ? JSON.parse(row['connections'] as string) : (row['connections'] as object) ?? {},
-    commands: typeof row['commands'] === 'string' ? JSON.parse(row['commands'] as string) : (row['commands'] as object) ?? {},
-    character_card_schema: typeof row['character_card_schema'] === 'string' ? JSON.parse(row['character_card_schema'] as string) : (row['character_card_schema'] as object) ?? {},
+    atoms: parseJsonField<object>(row['atoms'], {}),
+    connections: parseJsonField<object>(row['connections'], {}),
+    commands: parseJsonField<object>(row['commands'], {}),
+    character_card_schema: parseJsonField<object>(row['character_card_schema'], {}),
     status: row['status'] as RulesetStatus,
     created_at: row['created_at'] as Date,
+    // Recipe 主线字段
+    recipe_source: recipeSource,
+    compiled_graph: compiledGraph,
+    legacy,
+    legacy_meta: legacy && !recipeSource
+      ? ({ origin: 'atoms_connections', migration_status: 'pending' } as LegacyMeta)
+      : (legacy && recipeSource ? ({ origin: 'raw_recipe_wrapped', migration_status: 'pending' } as LegacyMeta) : null),
   };
+}
+
+/**
+ * 对 recipe_source 执行 validate + compile，返回编译产物缓存对象。
+ * 若校验失败，抛出含结构化错误的异常。
+ */
+function compileRecipeSource(source: RulesetRecipeSource): {
+  compiledGraph: RulesetCompiledGraph;
+  errors: RecipeValidationError[];
+} {
+  // 1. 批量校验
+  const errorMap = validateRecipeSource(source);
+  if (errorMap.size > 0) {
+    const allErrors: RecipeValidationError[] = [];
+    for (const [recipeId, errs] of errorMap) {
+      errs.forEach((e) => allErrors.push({ ...e, path: `recipes[${recipeId}].${e.path}` }));
+    }
+    return { compiledGraph: null as unknown as RulesetCompiledGraph, errors: allErrors };
+  }
+
+  // 2. 编译每个 recipe，收集产物
+  const compiledRecipes: Record<string, unknown> = {};
+  const compileErrors: RecipeValidationError[] = [];
+
+  for (const recipe of source.recipes) {
+    const result = compileRecipe(recipe, source.recipes);
+    if (!result.success) {
+      result.errors.forEach((e) =>
+        compileErrors.push({ ...e, path: `recipes[${recipe.id}].${e.path}` }),
+      );
+    } else {
+      compiledRecipes[recipe.id] = result.graph;
+    }
+  }
+
+  if (compileErrors.length > 0) {
+    return { compiledGraph: null as unknown as RulesetCompiledGraph, errors: compileErrors };
+  }
+
+  const compiledGraph: RulesetCompiledGraph = {
+    // 兼容执行器的顶层 atoms/connections（聚合所有 recipe 的节点，第一个 recipe 作为默认入口）
+    atoms: compiledRecipes,
+    connections: {},
+    compiled_at: new Date().toISOString(),
+    compiler_version: COMPILER_VERSION,
+  };
+
+  return { compiledGraph, errors: [] };
 }
 
 /** 将命令参数注入图节点的 static 输入（键名匹配时覆盖） */
@@ -73,8 +153,7 @@ export class RulesetService {
       query = query.where('author_id', params.author_id);
     }
     if (params.keyword) {
-      const escaped = params.keyword.replace(/[%_\\]/g, '\\$&');
-      const kw = `%${escaped}%`;
+      const kw = `%${params.keyword}%`;
       query = query.where((q) => {
         q.where('name', 'like', kw).orWhere('description', 'like', kw);
       });
@@ -104,8 +183,27 @@ export class RulesetService {
     author_id: string;
     parent_ruleset_id?: string;
     character_card_schema?: object;
+    /** 若提供 recipe_source，服务端自动 validate + compile */
+    recipe_source?: RulesetRecipeSource;
   }): Promise<Ruleset> {
     const id = generateId();
+
+    // Recipe 主线：自动编译
+    let compiledGraph: RulesetCompiledGraph | null = null;
+    let isLegacy = 1; // 默认 legacy=1（无 recipe_source 时）
+
+    if (params.recipe_source) {
+      const { compiledGraph: cg, errors } = compileRecipeSource(params.recipe_source);
+      if (errors.length > 0) {
+        throw Object.assign(new Error('Recipe validation failed'), {
+          code: 'RECIPE_VALIDATION_FAILED',
+          errors,
+        });
+      }
+      compiledGraph = cg;
+      isLegacy = 0;
+    }
+
     await db('rulesets').insert({
       id,
       author_id: params.author_id,
@@ -118,6 +216,9 @@ export class RulesetService {
       commands: JSON.stringify({}),
       character_card_schema: JSON.stringify(params.character_card_schema ?? {}),
       status: 'draft',
+      recipe_source: params.recipe_source ? JSON.stringify(params.recipe_source) : null,
+      compiled_graph: compiledGraph ? JSON.stringify(compiledGraph) : null,
+      legacy: isLegacy,
     });
     return (await this.findById(id))!;
   }
@@ -134,6 +235,8 @@ export class RulesetService {
       connections: object;
       commands: object;
       character_card_schema: object;
+      /** 新 Recipe 主线：提交 recipe_source 时自动 validate + compile */
+      recipe_source: RulesetRecipeSource;
     }>
   ): Promise<Ruleset> {
     const ruleset = await this.findById(id);
@@ -149,6 +252,20 @@ export class RulesetService {
     if (data.connections !== undefined) updatePayload['connections'] = JSON.stringify(data.connections);
     if (data.commands !== undefined) updatePayload['commands'] = JSON.stringify(data.commands);
     if (data.character_card_schema !== undefined) updatePayload['character_card_schema'] = JSON.stringify(data.character_card_schema);
+
+    // ── Recipe 主线：保存时自动 validate + compile ──────────────────────────
+    if (data.recipe_source !== undefined) {
+      const { compiledGraph, errors } = compileRecipeSource(data.recipe_source);
+      if (errors.length > 0) {
+        throw Object.assign(new Error('Recipe validation failed'), {
+          code: 'RECIPE_VALIDATION_FAILED',
+          errors,
+        });
+      }
+      updatePayload['recipe_source'] = JSON.stringify(data.recipe_source);
+      updatePayload['compiled_graph'] = JSON.stringify(compiledGraph);
+      updatePayload['legacy'] = 0;
+    }
 
     if (Object.keys(updatePayload).length > 0) {
       await db('rulesets').where({ id }).update(updatePayload);
@@ -282,6 +399,9 @@ export class RulesetService {
       connections: ruleset.connections,
       commands: ruleset.commands,
       character_card_schema: ruleset.character_card_schema,
+      // Recipe 主线字段一并快照
+      recipe_source: ruleset.recipe_source ?? null,
+      compiled_graph: ruleset.compiled_graph ?? null,
     };
     await db('ruleset_versions').insert({
       id,
@@ -320,12 +440,19 @@ export class RulesetService {
     if (!version || version.ruleset_id !== rulesetId) {
       throw Object.assign(new Error('Version not found for this ruleset'), { code: 'NOT_FOUND' });
     }
-    const { atoms, connections, commands, character_card_schema } = version.snapshot;
+    const { atoms, connections, commands, character_card_schema, recipe_source, compiled_graph } = version.snapshot as {
+      atoms: object; connections: object; commands: object; character_card_schema: object;
+      recipe_source?: RulesetRecipeSource | null;
+      compiled_graph?: RulesetCompiledGraph | null;
+    };
     await db('rulesets').where({ id: rulesetId }).update({
       atoms: JSON.stringify(atoms),
       connections: JSON.stringify(connections),
       commands: JSON.stringify(commands),
       character_card_schema: JSON.stringify(character_card_schema),
+      recipe_source: recipe_source ? JSON.stringify(recipe_source) : null,
+      compiled_graph: compiled_graph ? JSON.stringify(compiled_graph) : null,
+      legacy: recipe_source ? 0 : 1,
     });
     return (await this.findById(rulesetId))!;
   }
