@@ -70,7 +70,7 @@ async function submit() {
       const accessToken = data?.tokens?.access_token;
       if (!accessToken) throw new Error('注册成功但未获取到令牌');
       if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
-      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url, expiresIn: data?.tokens?.expires_in });
     } else {
       // 登录
       const res = await fetch('/api/auth/login', {
@@ -83,7 +83,7 @@ async function submit() {
       const accessToken = data?.tokens?.access_token;
       if (!accessToken) throw new Error('登录成功但未获取到令牌');
       if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
-      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url });
+      authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url, expiresIn: data?.tokens?.expires_in });
     }
     const redirect = (route.query.redirect as string) || '/';
     router.push(redirect);

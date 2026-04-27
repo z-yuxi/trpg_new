@@ -3,6 +3,8 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { userService } from '../services/user-service';
 import { authService } from '../services/auth-service';
+import { AppError } from '../utils/app-error';
+import { authMiddleware } from '../middleware/auth';
 
 const router: IRouter = Router();
 
@@ -51,9 +53,13 @@ router.post('/register', registerLimiter, async (req, res) => {
     const tokens = authService.generateTokens(user);
     res.status(201).json({ user: userService.toSafeUser(user), tokens });
   } catch (err: unknown) {
-    const msg = (err as Error)?.message ?? '';
-    const status = msg.includes('已注册') ? 409 : 400;
-    res.status(status).json({ error: msg || 'Registration failed' });
+    // 统一返回 400 + 通用消息，避免通过不同状态码暴露手机号是否已注册
+    const internalMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Register-DEBUG] err:`, internalMsg, (err as any)?.stack?.slice(0, 300));
+    if (err instanceof AppError) {
+      console.error(`[Register] ${err.userMessage}`);
+    }
+    res.status(400).json({ error: '注册失败，请稍后再试' });
   }
 });
 
@@ -84,6 +90,16 @@ router.post('/refresh', loginLimiter, async (req, res) => {
     res.json({ tokens });
   } catch {
     res.status(401).json({ error: 'Invalid or expired refresh token' });
+  }
+});
+
+// POST /api/auth/logout — 吊销当前用户所有 refresh token
+router.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    await authService.revokeAllTokens(req.user!.id);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 

@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
 import type { Campaign, CampaignStatus, Scene, SceneType, HistoryVisibility, GridMap, GridToken, GridOverlay, ScheduledMove, StoryTime } from '@trpg/shared';
+import { safeJsonParse } from '../utils/safe-json';
 
 type CampaignWithDisplay = Campaign & {
   cover_url: string | null;
@@ -25,12 +26,8 @@ function rowToCampaign(row: Record<string, unknown>): CampaignWithDisplay {
     module_name: (row['module_name'] as string | null) ?? null,
     ruleset_name: (row['ruleset_name'] as string | null) ?? '',
     gm_user_id: row['gm_user_id'] as string,
-    assistant_gm_ids: typeof row['assistant_gm_ids'] === 'string'
-      ? JSON.parse(row['assistant_gm_ids'] as string)
-      : row['assistant_gm_ids'] as string[],
-    global_story_time: typeof row['global_story_time'] === 'string'
-      ? JSON.parse(row['global_story_time'] as string)
-      : row['global_story_time'] as StoryTime,
+    assistant_gm_ids: safeJsonParse<string[]>(row['assistant_gm_ids'], []),
+    global_story_time: safeJsonParse<StoryTime>(row['global_story_time'], { day: 1, hour: 8, minute: 0 }),
     status: row['status'] as CampaignStatus,
     allow_ob: Boolean(row['allow_ob']),
     is_listed_publicly: Boolean(row['is_listed_publicly']),
@@ -63,12 +60,8 @@ function rowToGridMap(row: Record<string, unknown>): GridMap {
     rows: Number(row['rows'] ?? 10),
     cell_size: Number(row['cell_size'] ?? 48),
     background_image_url: (row['background_image_url'] as string) ?? null,
-    tokens: typeof row['tokens'] === 'string'
-      ? JSON.parse(row['tokens'] as string)
-      : (row['tokens'] as GridToken[]),
-    overlays: typeof row['overlays'] === 'string'
-      ? JSON.parse(row['overlays'] as string)
-      : (Array.isArray(row['overlays']) ? row['overlays'] : []) as GridOverlay[],
+    tokens: safeJsonParse<GridToken[]>(row['tokens'], []),
+    overlays: safeJsonParse<GridOverlay[]>(row['overlays'], []),
     updated_at: row['updated_at'] as Date,
   };
 }
@@ -83,29 +76,34 @@ export class CampaignService {
     const id = generateId();
     const room_code = await this.generateUniqueRoomCode();
 
-    await db('campaigns').insert({
-      id,
-      room_code,
-      name: params.name,
-      ruleset_id: params.ruleset_id,
-      module_id: params.module_id ?? null,
-      gm_user_id: params.gm_user_id,
-      assistant_gm_ids: JSON.stringify([]),
-      global_story_time: JSON.stringify({ day: 1, hour: 8, minute: 0 }),
-      status: 'preparing',
-      allow_ob: false,
-      is_listed_publicly: false,
-      enable_trajectory_matrix: false,
-      enable_grid_map: false,
-      enable_scene_connections: false,
-    });
+    await db.transaction(async (trx) => {
+      await trx('campaigns').insert({
+        id,
+        room_code,
+        name: params.name,
+        ruleset_id: params.ruleset_id,
+        module_id: params.module_id ?? null,
+        gm_user_id: params.gm_user_id,
+        assistant_gm_ids: JSON.stringify([]),
+        global_story_time: JSON.stringify({ day: 1, hour: 8, minute: 0 }),
+        status: 'preparing',
+        allow_ob: false,
+        is_listed_publicly: false,
+        enable_trajectory_matrix: false,
+        enable_grid_map: false,
+        enable_scene_connections: false,
+      });
 
-    // Create default lobby scene
-    await this.createScene({
-      campaign_id: id,
-      name: '大厅',
-      type: 'lobby',
-      history_visibility: 'all',
+      // 在事务内创建默认大厅场景，保证原子性
+      const sceneId = generateId();
+      await trx('scenes').insert({
+        id: sceneId,
+        campaign_id: id,
+        name: '大厅',
+        type: 'lobby',
+        history_visibility: 'all',
+        visible_history_count: 50,
+      });
     });
 
     return this.findById(id) as Promise<Campaign>;
@@ -285,9 +283,7 @@ export class ScheduledMoveService {
       character_id: row['character_id'] as string,
       campaign_id: row['campaign_id'] as string,
       to_scene_id: row['to_scene_id'] as string,
-      execute_at_story: typeof row['execute_at_story'] === 'string'
-        ? JSON.parse(row['execute_at_story'] as string)
-        : row['execute_at_story'] as StoryTime,
+      execute_at_story: safeJsonParse<StoryTime | null>(row['execute_at_story'], null),
       status: row['status'] as ScheduledMove['status'],
       created_at: row['created_at'] as Date,
     };
@@ -324,9 +320,7 @@ export class ScheduledMoveService {
       character_id: row['character_id'] as string,
       campaign_id: row['campaign_id'] as string,
       to_scene_id: row['to_scene_id'] as string,
-      execute_at_story: typeof row['execute_at_story'] === 'string'
-        ? JSON.parse(row['execute_at_story'] as string)
-        : row['execute_at_story'] as StoryTime,
+      execute_at_story: safeJsonParse<StoryTime | null>(row['execute_at_story'], null),
       status: row['status'] as ScheduledMove['status'],
       created_at: row['created_at'] as Date,
       character_name: row['character_name'] as string | undefined,

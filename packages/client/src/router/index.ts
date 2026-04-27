@@ -125,14 +125,13 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _from, next) => {
-  const token = localStorage.getItem('token');
-  if (to.meta.requiresAuth && !token) {
+  const authStore = useAuthStore();
+  if (to.meta.requiresAuth && (!authStore.token || authStore.isTokenExpired())) {
+    authStore.logout();
     next({ name: 'Login', query: { redirect: to.fullPath } });
     return;
   }
   if (to.meta.requiresCreator) {
-    // token 已确认存在（上方已拦截）— 检查 creator 标识
-    const authStore = useAuthStore();
     if (!authStore.isCreator) {
       next({ name: 'Forbidden' });
       return;

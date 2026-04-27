@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io';
 import type { ServerToClientEvents, ClientToServerEvents } from '@trpg/shared';
 import { getMessagesAfter, getRecentMessages } from '../utils/ring-buffer';
 import { db } from '../db';
+import { safeJsonParse } from '../utils/safe-json';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -30,19 +31,21 @@ export async function handleReconnection(
 
   if (missedMessages.length === 0) {
     // 缓冲区中找不到，从 MySQL 查询（断线太久的情况）
+    // 使用时间范围（最近 24 小时）而非固定条数，确保消息完整性
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const dbMessages = await db('chat_messages')
       .where('campaign_id', campaignId)
       .where('id', '>', String(lastEventId))
+      .where('created_at', '>=', since)
       .orderBy('id', 'asc')
-      .limit(100)
       .select();
 
     missedMessages = dbMessages.map((row) => ({
       ...row,
       id: row.id.toString(),
-      visible_to: row.visible_to ? JSON.parse(row.visible_to as string) : null,
-      story_time: row.story_time ? JSON.parse(row.story_time as string) : null,
-      metadata: row.metadata ? JSON.parse(row.metadata as string) : null,
+      visible_to: safeJsonParse(row.visible_to, null),
+      story_time: safeJsonParse(row.story_time, null),
+      metadata: safeJsonParse(row.metadata, null),
     }));
   }
 
@@ -61,9 +64,11 @@ export async function handleReconnection(
       : Promise.resolve(null),
   ]);
 
-  const globalTime = campaignRow?.global_story_time
-    ? JSON.parse(campaignRow.global_story_time as string)
-    : { day: 1, hour: 8, minute: 0 };
+  const globalTime = safeJsonParse(campaignRow?.global_story_time, { day: 1, hour: 8, minute: 0 });
+
+  // 如果断线超过 24 小时（消息可能不完整），通知客户端刷新完整状态
+  const oldestMessageId = missedMessages[0]?.id;
+  const disconnectTooLong = !oldestMessageId || String(lastEventId) < String(oldestMessageId);
 
   socket.emit('missed_messages', {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,5 +76,6 @@ export async function handleReconnection(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     your_state: sceneState ?? ({} as any),
     global_time: globalTime,
+    incomplete: disconnectTooLong,
   });
 }

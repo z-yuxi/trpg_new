@@ -31,7 +31,7 @@ export function parseCommand(input: string): ParsedCommand {
     throw new Error(`Invalid command name: "${command}"`);
   }
 
-  const params: Record<string, string> = {};
+  const params: Record<string, string> = Object.create(null);
   const restParts = parts.slice(1);
 
   // Parse params: either "key=value" pairs or first positional as "expression"
@@ -49,6 +49,14 @@ export function parseCommand(input: string): ParsedCommand {
       if (eqIdx > 0) {
         const key = part.slice(0, eqIdx);
         const value = part.slice(eqIdx + 1);
+        // key 格式校验：防止原型污染和非法属性名
+        if (!key.match(/^[a-z_][a-z0-9_]*$/)) {
+          throw new Error(`Invalid parameter key: "${key}"`);
+        }
+        // value 长度限制
+        if (value.length > 200) {
+          throw new Error(`Parameter value too long: "${key}" (max 200 chars)`);
+        }
         params[key] = value;
       }
     }

@@ -2,6 +2,15 @@ import knex, { type Knex } from 'knex';
 import path from 'path';
 import '../utils/load-env';
 
+if (process.env.NODE_ENV === 'production') {
+  const requiredEnvVars = ['DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_NAME'];
+  for (const varName of requiredEnvVars) {
+    if (!process.env[varName]) {
+      throw new Error(`${varName} environment variable is required in production`);
+    }
+  }
+}
+
 const config: Knex.Config = {
   client: 'mysql2',
   connection: {

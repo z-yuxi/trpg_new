@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
 import type { User } from '@trpg/shared';
+import { AppError } from '../utils/app-error';
 
 const BCRYPT_ROUNDS = 12;
 const UID_START = 1000000;
@@ -17,28 +18,27 @@ export class UserService {
     // Check if phone already exists
     const existing = await db('users').where({ phone }).first();
     if (existing) {
-      throw new Error('该手机号已注册');
+      throw new AppError(409, '该手机号已注册');
     }
 
     const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = generateId();
 
-    // 使用事务 + forUpdate 锁防止并发注册产生相同 UID
-    await db.transaction(async (trx) => {
-      const maxUidRow = await trx('users').max('uid as maxUid').forUpdate().first();
-      const uid = Math.max(UID_START, ((maxUidRow?.maxUid as number) ?? UID_START - 1) + 1);
-      await trx('users').insert({
-        id,
-        uid,
-        phone,
-        password_hash,
-        nickname,
-        avatar_url: '',
-        user_type: JSON.stringify(['player']),
-        creator_level: 1,
-        coins: 0,
-        subscription_type: 'free',
-      });
+    // Generate unique UID
+    const maxUidRow = await db('users').max('uid as maxUid').first();
+    const uid = Math.max(UID_START, ((maxUidRow?.maxUid as number) ?? UID_START - 1) + 1);
+
+    await db('users').insert({
+      id,
+      uid,
+      phone,
+      password_hash,
+      nickname,
+      avatar_url: '',
+      user_type: JSON.stringify(['player']),
+      creator_level: 1,
+      coins: 0,
+      subscription_type: 'free',
     });
 
     return this.findById(id) as Promise<User>;
@@ -204,16 +204,6 @@ export class UserService {
       subscription_type: row['subscription_type'] as User['subscription_type'],
       created_at: row['created_at'] as Date,
     };
-  }
-
-  /** 返回不含 password_hash 的安全用户对象，用于对外 API 响应 */
-  toSafeUser(row: User | Record<string, unknown>): Omit<User, 'password_hash'> {
-    const user = 'password_hash' in row && typeof (row as User).id === 'string'
-      ? (row as User)
-      : this.rowToUser(row as Record<string, unknown>);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password_hash, ...safe } = user;
-    return safe;
   }
 }
 

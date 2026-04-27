@@ -23,6 +23,37 @@ export function registerChatHandlers(
     socket.on('join_room', async (data) => {
       try {
         const { campaign_id, character_id, last_event_id } = data;
+
+        // 校验用户是否为该 campaign 的 GM 或成员
+        const campaign = await db('campaigns').where({ id: campaign_id }).first();
+        if (!campaign) {
+          socket.emit('error_message', { message: '战役不存在' });
+          return;
+        }
+        const isGm = campaign.gm_user_id === userId;
+        if (!isGm) {
+          const member = await db('character_scene_states as css')
+            .join('character_sheets as cs', 'cs.id', 'css.character_id')
+            .where('css.campaign_id', campaign_id)
+            .where('cs.user_id', userId)
+            .first();
+          if (!member) {
+            socket.emit('error_message', { message: '无权加入该房间' });
+            return;
+          }
+        }
+
+        // 校验 character_id 归属
+        if (character_id) {
+          const sheet = await db('character_sheets')
+            .where({ id: character_id, user_id: userId })
+            .first();
+          if (!sheet) {
+            socket.emit('error_message', { message: '角色不属于当前用户' });
+            return;
+          }
+        }
+
         socket.data.campaignId = campaign_id;
         socket.data.characterId = character_id;
         socket.join(`campaign:${campaign_id}`);
@@ -290,6 +321,10 @@ export function registerChatHandlers(
         const move = await db('scheduled_moves').where({ id: move_id, status: 'pending' }).first();
         if (!move) return;
 
+        // 校验 GM 身份
+        const approveCampaign = await db('campaigns').where({ id: move.campaign_id }).first();
+        if (!approveCampaign || approveCampaign.gm_user_id !== userId) return;
+
         const { record, from_scene_id } = await approveMove(move_id, userId, story_arrival_time ?? null);
         if (!record) return;
 
@@ -357,6 +392,10 @@ export function registerChatHandlers(
         const { move_id } = data;
         const move = await db('scheduled_moves').where({ id: move_id }).first();
         if (!move) return;
+
+        // 校验 GM 身份
+        const rejectCampaign = await db('campaigns').where({ id: move.campaign_id }).first();
+        if (!rejectCampaign || rejectCampaign.gm_user_id !== userId) return;
 
         await db('scheduled_moves').where({ id: move_id }).update({ status: 'cancelled' });
 

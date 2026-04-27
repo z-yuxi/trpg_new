@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import type { GridToken, StoryTime } from '@trpg/shared';
 import { authMiddleware } from '../middleware/auth';
 import { campaignService, scheduledMoveService } from '../services/campaign-service';
@@ -16,8 +17,18 @@ import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { generateId, snowflake } from '@trpg/shared';
 import { io } from '../app';
+import { safeJsonParse } from '../utils/safe-json';
 
 const router: IRouter = Router();
+
+// 速率限制：防止房间码遍历攻击，每 IP 每分钟最多 20 次
+const joinLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '请求过于频繁，请稍后再试' },
+});
 
 // 所有战役路由都需要认证
 router.use(authMiddleware);
@@ -54,6 +65,29 @@ const createSchema = z.object({
 const sceneObPermissionSchema = z.object({
   user_id: z.string().min(1),
 });
+
+const createSceneSchema = z.object({
+  name: z.string().min(1).max(100),
+  type: z.enum(['lobby', 'room', 'outdoor', 'dungeon', 'special']).optional(),
+  description: z.string().max(2000).optional(),
+});
+
+const createNpcSchema = z.object({
+  name: z.string().min(1).max(100),
+  display_name: z.string().max(100).optional(),
+  description: z.string().max(2000).optional(),
+  avatar_url: z.string().max(500).optional(),
+  voice_tips: z.string().max(500).optional(),
+  attributes: z.unknown().optional(),
+  skills: z.unknown().optional(),
+  resources: z.unknown().optional(),
+  is_temporary: z.boolean().optional(),
+  is_playable: z.boolean().optional(),
+  is_active: z.boolean().optional(),
+  source_module_npc_id: z.string().optional(),
+});
+
+const updateNpcSchema = createNpcSchema.partial().omit({ source_module_npc_id: true });
 
 function parseStoryTime(value: unknown): StoryTime | null {
   try {
@@ -105,7 +139,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/campaigns/join（必须在 /:id 之前注册）
-router.post('/join', async (req, res) => {
+router.post('/join', joinLimiter, async (req, res) => {
   const { code } = req.body;
   if (!code) {
     res.status(400).json({ error: 'room code is required' });
@@ -197,6 +231,11 @@ router.put('/:id/scenes/:sceneId/grid-map', async (req, res) => {
 
 // POST /api/campaigns/:id/scenes
 router.post('/:id/scenes', async (req, res) => {
+  const parsed = createSceneSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
@@ -205,15 +244,15 @@ router.post('/:id/scenes', async (req, res) => {
     await db('scenes').insert({
       id,
       campaign_id: req.params.id,
-      name: req.body.name,
-      type: req.body.type,
-      description: req.body.description ?? '',
+      name: parsed.data.name,
+      type: parsed.data.type ?? 'room',
+      description: parsed.data.description ?? '',
       created_by: req.user!.id,
     });
     const scene = await db('scenes').where({ id }).first();
     res.status(201).json(scene);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+    res.status(500).json({ error: 'Create failed' });
   }
 });
 
@@ -570,33 +609,37 @@ router.get('/:id/scenes/connections', async (req, res) => {
 
 // POST /api/campaigns/:id/npcs
 router.post('/:id/npcs', async (req, res) => {
+  const parsed = createNpcSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create NPCs' }); return; }
     const id = generateId();
-    const { name, display_name, description, avatar_url, voice_tips, attributes, skills, resources, is_temporary, is_playable, is_active, source_module_npc_id } = req.body as Record<string, unknown>;
     await db('campaign_npcs').insert({
       id,
       campaign_id: req.params.id,
       created_by: req.user!.id,
-      name,
-      display_name: display_name ?? name,
-      description,
-      avatar_url: avatar_url ?? '',
-      voice_tips,
-      attributes,
-      skills,
-      resources,
-      is_temporary: is_temporary ?? false,
-      is_playable: is_playable ?? true,
-      is_active: is_active ?? true,
-      source_module_npc_id,
+      name: parsed.data.name,
+      display_name: parsed.data.display_name ?? parsed.data.name,
+      description: parsed.data.description,
+      avatar_url: parsed.data.avatar_url ?? '',
+      voice_tips: parsed.data.voice_tips,
+      attributes: parsed.data.attributes,
+      skills: parsed.data.skills,
+      resources: parsed.data.resources,
+      is_temporary: parsed.data.is_temporary ?? false,
+      is_playable: parsed.data.is_playable ?? true,
+      is_active: parsed.data.is_active ?? true,
+      source_module_npc_id: parsed.data.source_module_npc_id,
     });
     const npc = await db('campaign_npcs').where({ id }).first();
     res.status(201).json(npc);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+    res.status(500).json({ error: 'Create failed' });
   }
 });
 
@@ -614,20 +657,24 @@ router.get('/:id/npcs', async (req, res) => {
 
 // PUT /api/campaigns/:id/npcs/:npcId
 router.put('/:id/npcs/:npcId', async (req, res) => {
+  const parsed = updateNpcSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update NPCs' }); return; }
-    const allowed = ['name', 'display_name', 'description', 'avatar_url', 'voice_tips', 'attributes', 'skills', 'resources', 'is_temporary', 'is_playable', 'is_active'];
     const updates: Record<string, unknown> = {};
-    for (const key of allowed) {
-      if ((req.body as Record<string, unknown>)[key] !== undefined) updates[key] = (req.body as Record<string, unknown>)[key];
+    for (const [key, val] of Object.entries(parsed.data)) {
+      if (val !== undefined) updates[key] = val;
     }
     await db('campaign_npcs').where({ id: req.params.npcId, campaign_id: req.params.id }).update(updates);
     const npc = await db('campaign_npcs').where({ id: req.params.npcId }).first();
     res.json(npc ?? { error: 'Not found' });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
@@ -720,9 +767,9 @@ router.get('/:id/messages', async (req, res) => {
     const serialized = messages.map((m: Record<string, unknown>) => ({
       ...m,
       id: m['id']?.toString(),
-      visible_to: m['visible_to'] ? JSON.parse(m['visible_to'] as string) : null,
-      story_time: m['story_time'] ? JSON.parse(m['story_time'] as string) : null,
-      metadata: m['metadata'] ? JSON.parse(m['metadata'] as string) : null,
+      visible_to: safeJsonParse(m['visible_to'], null),
+      story_time: safeJsonParse(m['story_time'], null),
+      metadata: safeJsonParse(m['metadata'], null),
     }));
 
     // GM 可查看所有消息；普通玩家只能看 visible_to=null 或包含自己角色 ID 的消息
@@ -928,9 +975,7 @@ router.get('/:id/characters', async (req, res) => {
         avatar_url: row['avatar_url'] || '',
         ruleset_id: row['ruleset_id'],
         scene_id: row['scene_id'] || null,
-        personal_story_time: row['personal_story_time']
-          ? (typeof row['personal_story_time'] === 'string' ? JSON.parse(row['personal_story_time'] as string) : row['personal_story_time'])
-          : null,
+        personal_story_time: safeJsonParse(row['personal_story_time'], null),
         online: onlineUserIds.has(String(row['user_id'])),
       })),
     );
@@ -957,8 +1002,7 @@ router.get('/:id/characters/:charId', async (req, res) => {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
 
-    const parseJson = (val: unknown) =>
-      typeof val === 'string' ? JSON.parse(val as string) : val;
+    const parseJson = (val: unknown) => safeJsonParse(val, null);
 
     res.json({
       id: sheet.id,
