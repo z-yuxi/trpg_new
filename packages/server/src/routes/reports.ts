@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware as requireAuth } from '../middleware/auth';
 import { db } from '../db';
-import { nanoid } from 'nanoid';
+import { generateId } from '@trpg/shared';
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: '不支持的内容类型' });
   }
 
-  const id = nanoid();
+  const id = generateId();
   await db('content_reports').insert({
     id,
     reporter_user_id: userId,

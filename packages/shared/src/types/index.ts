@@ -581,6 +581,71 @@ export interface MockContext {
   resources: Record<string, { current: number; max: number }>;  // e.g. { "HP": { current: 10, max: 14 } }
 }
 
+// ===== 引擎错误码与告警码（§ 十六.5）=====
+
+export type EngineErrorCode =
+  | 'INTENT_PARSE_FAILED'
+  | 'COMMAND_NOT_FOUND'
+  | 'COMMAND_NOT_SUPPORTED'
+  | 'PERMISSION_DENIED'
+  | 'RUNTIME_MODIFIER_CONFLICT'
+  | 'MODIFIER_OUT_OF_RANGE'
+  | 'UNSUPPORTED_MODIFIER'
+  | 'RECIPE_NOT_FOUND'
+  | 'RECIPE_VALIDATION_FAILED'
+  | 'UNKNOWN_RECIPE_TYPE'
+  | 'MISSING_CHARACTER_DATA'
+  | 'DSL_EVAL_ERROR'
+  | 'DSL_NON_BOOLEAN_CONDITION'
+  | 'EXPRESSION_TIMEOUT'
+  | 'STEP_RESULT_UNAVAILABLE'
+  | 'RESULT_COLLECT_FAILED'
+  | 'VERSION_UNSUPPORTED'
+  | 'INVALID_VERSION_FORMAT'
+  | 'IMPORT_SCHEMA_INVALID'
+  | 'IMPORT_RELATION_MISSING'
+  | 'IMPORT_PERMISSION_DENIED'
+  | 'IMPORT_RULESET_REQUIRED';
+
+export type EngineWarningCode =
+  | 'NO_TIER_MATCHED'
+  | 'MODIFIER_IGNORED'
+  | 'UNKNOWN_FIELDS_IGNORED'
+  | 'MINOR_VERSION_DOWNLEVEL'
+  | 'ROUNDTRIP_LOSSY';
+
+export type FailedStage =
+  | 'intent_parse'
+  | 'command_match'
+  | 'modifier_extract'
+  | 'recipe_lookup'
+  | 'context_load'
+  | 'graph_execute'
+  | 'result_collect'
+  | 'compile'
+  | 'validate'
+  | 'import';
+
+export interface EngineWarning {
+  code: EngineWarningCode;
+  message: string;
+  field_path?: string;
+}
+
+/**
+ * 运行时修饰符（规范化后，§ 十六③ ModifierExtract 阶段产物）
+ * 未出现的字段保持 undefined，不设全局默认值。
+ */
+export interface NormalizedModifiers {
+  bonus_dice?: number;       // 1–9，与 penalty_dice 互斥
+  penalty_dice?: number;     // 1–9，与 bonus_dice 互斥
+  difficulty_level?: number; // 0 起，越界时自动夹紧
+  dc_override?: number;      // 覆盖目标值（优先于 target_bonus）
+  target_bonus?: number;     // 叠加到目标值
+  advantage?: boolean;       // 与 disadvantage 同时出现时相互抵消
+  disadvantage?: boolean;
+}
+
 /**
  * execute 端点请求体（ruleset_id 已由路径参数 :id 承担，不出现在请求体）。
  * context 与 mock_context 二选一；两者同时存在时优先 mock_context。
@@ -588,13 +653,19 @@ export interface MockContext {
 export interface ExecuteRequest {
   /** 完整命令字符串，e.g. "/rc 侦查 60" */
   command: string;
+  /** 原始用户输入，用于日志溯源（等同于 command，可选冗余） */
+  raw_text?: string;
   /** 命令参数（命令字符串无法解析时的备用，键名需与图节点输入键匹配） */
   params?: Record<string, unknown>;
+  /** 规范化后的运行时修饰符（§ 十六③ 产物） */
+  runtime_modifiers?: NormalizedModifiers;
   /** 真实角色上下文 */
   context?: {
     character_id: string;
     campaign_id: string;
     scene_id?: string;
+    /** 调用者角色，用于权限判断 */
+    caller_role?: 'gm' | 'player' | 'system';
   };
   /** 编辑器预览时使用的模拟角色数据，不需要真实角色/团 */
   mock_context?: MockContext;
@@ -606,22 +677,27 @@ export interface NodeExecutionLog {
   inputs: Record<string, unknown>;
   output: unknown;
   duration_ms: number;
+  /** 节点执行状态（§ 十八.4） */
+  status?: 'success' | 'skipped' | 'failed';
+  error_code?: EngineErrorCode;
+  error_message?: string;
 }
 
-/** execute 端点返回体 */
+/** execute 端点返回体（对齐 § 十六.4 ExecuteResponse） */
 export interface ExecuteResponse {
   success: boolean;
   /** 可读的最终结果描述 */
   result: string;
   dice_rolls: Array<{ expression: string; value: number; detail: string }>;
-  logs: Array<{
-    node_id: string;
-    atom_type: string;
-    inputs: Record<string, unknown>;
-    output: unknown;
-    duration_ms: number;
-  }>;
+  logs: NodeExecutionLog[];
+  warnings: EngineWarning[];
   error?: string;
+  /** 失败阶段（§ 十六 FailedStage） */
+  failed_stage?: FailedStage;
+  /** 结构化错误码 */
+  error_code?: EngineErrorCode;
+  /** graph_execute 阶段失败时指向失败节点；其他阶段为 null */
+  failed_node_id?: string | null;
   /** 解析出的命令名（如 'en', 'sc', 'ra'），供调用方进行后处理 */
   command_name?: string;
   /** 图执行的原始输出，供调用方读取结构化结果 */

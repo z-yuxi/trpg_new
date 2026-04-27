@@ -1,4 +1,4 @@
-import type { NodeExecutionLog } from '@trpg/shared';
+import type { NodeExecutionLog, EngineErrorCode } from '@trpg/shared';
 import type { AtomRegistry } from './registry';
 
 /** 输入来源：静态值 或 引用其他节点的输出 */
@@ -24,6 +24,10 @@ export interface GraphExecuteResult {
   success: boolean;
   output: unknown;
   error?: string;
+  /** 失败时指向失败节点 id（§ 十六⑥ graph_execute 阶段使用） */
+  failed_node_id?: string;
+  /** 结构化错误码（§ 十六.5） */
+  error_code?: EngineErrorCode;
   logs: NodeExecutionLog[];
 }
 
@@ -34,7 +38,7 @@ export class GraphExecutor {
     const logs: NodeExecutionLog[] = [];
 
     if (!graph.nodes || graph.nodes.length === 0) {
-      return { success: false, output: null, error: 'Graph has no nodes', logs };
+      return { success: false, output: null, error: 'Graph has no nodes', error_code: 'STEP_RESULT_UNAVAILABLE', logs };
     }
 
     // Topological sort
@@ -42,7 +46,7 @@ export class GraphExecutor {
     try {
       sortedIds = this.topologicalSort(graph.nodes);
     } catch (err) {
-      return { success: false, output: null, error: (err as Error).message, logs };
+      return { success: false, output: null, error: (err as Error).message, error_code: 'DSL_EVAL_ERROR', logs };
     }
 
     const nodeResults = new Map<string, unknown>();
@@ -57,9 +61,21 @@ export class GraphExecutor {
           resolvedInputs[key] = source.value;
         } else if (source.type === 'ref') {
           if (!nodeResults.has(source.node_id)) {
+            logs.push({
+              node_id: nodeId,
+              node_type: nodeDef.atom_type,
+              inputs: resolvedInputs,
+              output: null,
+              duration_ms: 0,
+              status: 'failed',
+              error_code: 'STEP_RESULT_UNAVAILABLE',
+              error_message: `Referenced node '${source.node_id}' has not been executed`,
+            });
             return {
               success: false,
               output: null,
+              failed_node_id: nodeId,
+              error_code: 'STEP_RESULT_UNAVAILABLE',
               error: `Node '${nodeId}': referenced node '${source.node_id}' has not been executed`,
               logs,
             };
@@ -74,7 +90,24 @@ export class GraphExecutor {
       try {
         atom = this.registry.get(nodeDef.atom_type);
       } catch (err) {
-        return { success: false, output: null, error: (err as Error).message, logs };
+        logs.push({
+          node_id: nodeId,
+          node_type: nodeDef.atom_type,
+          inputs: resolvedInputs,
+          output: null,
+          duration_ms: 0,
+          status: 'failed',
+          error_code: 'UNKNOWN_RECIPE_TYPE',
+          error_message: (err as Error).message,
+        });
+        return {
+          success: false,
+          output: null,
+          failed_node_id: nodeId,
+          error_code: 'UNKNOWN_RECIPE_TYPE',
+          error: (err as Error).message,
+          logs,
+        };
       }
 
       const start = Date.now();
@@ -82,9 +115,22 @@ export class GraphExecutor {
       try {
         atomOutput = atom.execute(resolvedInputs);
       } catch (err) {
+        const duration_ms = Date.now() - start;
+        logs.push({
+          node_id: nodeId,
+          node_type: nodeDef.atom_type,
+          inputs: resolvedInputs,
+          output: null,
+          duration_ms,
+          status: 'failed',
+          error_code: 'DSL_EVAL_ERROR',
+          error_message: (err as Error).message,
+        });
         return {
           success: false,
           output: null,
+          failed_node_id: nodeId,
+          error_code: 'DSL_EVAL_ERROR',
           error: `Node '${nodeId}' (${nodeDef.atom_type}) threw: ${(err as Error).message}`,
           logs,
         };
@@ -98,6 +144,7 @@ export class GraphExecutor {
         inputs: resolvedInputs,
         output: atomOutput.result,
         duration_ms,
+        status: 'success',
       });
     }
 
@@ -106,6 +153,7 @@ export class GraphExecutor {
       return {
         success: false,
         output: null,
+        error_code: 'RESULT_COLLECT_FAILED',
         error: `output_node_id '${graph.output_node_id}' not found in graph`,
         logs,
       };

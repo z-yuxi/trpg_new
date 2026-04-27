@@ -86,8 +86,8 @@ describe('RulesetService.executeCommand — 集成测试', () => {
     expect(result.success).toBe(true);
     // 至少包含 dice_roll, threshold_compare 两个节点日志
     expect(result.logs.length).toBeGreaterThanOrEqual(2);
-    // 日志中包含 dice_roll 节点（atom_type 字段）
-    const diceLog = result.logs.find((l) => l.atom_type === 'dice_roll');
+    // 日志中包含 dice_roll 节点（node_type 字段）
+    const diceLog = result.logs.find((l) => l.node_type === 'dice_roll');
     expect(diceLog).toBeDefined();
     const rollOutput = diceLog!.output as { total: number };
     expect(typeof rollOutput.total).toBe('number');
@@ -125,7 +125,7 @@ describe('RulesetService.executeCommand — 集成测试', () => {
       });
 
       expect(result.success).toBe(true);
-      const branchLog = result.logs.find((l) => l.atom_type === 'if_else');
+      const branchLog = result.logs.find((l) => l.node_type === 'if_else');
       expect(branchLog).toBeDefined();
       const branchOutput = branchLog!.output as { value: string; branch: string };
       // condition=true → 走 then 分支 → value='成功'

@@ -252,14 +252,11 @@ export class RulesetService {
       success: result.success,
       result: resultText,
       dice_rolls: diceRolls,
-      logs: result.logs.map((l) => ({
-        node_id: l.node_id,
-        atom_type: l.node_type,
-        inputs: l.inputs,
-        output: l.output,
-        duration_ms: l.duration_ms,
-      })),
+      logs: result.logs,
+      warnings: [],
       ...(result.error ? { error: result.error } : {}),
+      ...(result.failed_node_id !== undefined ? { failed_node_id: result.failed_node_id, failed_stage: 'graph_execute' as const } : {}),
+      ...(result.error_code ? { error_code: result.error_code } : {}),
       command_name: resolved.name,
       raw_output: result.output,
     };

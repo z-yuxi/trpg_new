@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authMiddleware as requireAuth } from '../middleware/auth';
 import { db } from '../db';
-import { nanoid } from 'nanoid';
+import { generateId } from '@trpg/shared';
 
 const router = Router();
 
@@ -40,7 +40,7 @@ router.post('/:id/gm-notes', requireAuth, async (req, res) => {
     return res.status(400).json({ error: '笔记内容不能为空' });
   }
 
-  const id = nanoid();
+  const id = generateId();
   await db('gm_private_notes').insert({
     id,
     campaign_id: campaignId,

@@ -92,6 +92,21 @@ const inviteSceneId = ref('');
 const selectedInviteCharacterIds = ref<string[]>([]);
 const inviteSceneName = computed(() => scenes.value.find((s) => s.id === inviteSceneId.value)?.name ?? '');
 
+// 私密场 OB 旁听权限管理
+const showObPermissionDialog = ref(false);
+const obPermissionSceneId = ref('');
+const obPermissionUserId = ref('');
+const obPermissionLoading = ref(false);
+const obPermissions = ref<Array<{ id: string; user_id: string; granted_by: string; granted_at: string }>>([]);
+const obPermissionSceneName = computed(() => scenes.value.find((s) => s.id === obPermissionSceneId.value)?.name ?? '');
+const roomUserIds = computed(() => {
+  const set = new Set<string>();
+  for (const char of roomCharacters.value) {
+    if (char.userId) set.add(char.userId);
+  }
+  return [...set.values()];
+});
+
 function handleInviteToScene(sceneId: string) {
   inviteSceneId.value = sceneId;
   selectedInviteCharacterIds.value = [];
@@ -111,6 +126,57 @@ async function submitInvite() {
     ElMessage.success('邀请成功');
   } catch {
     ElMessage.error('邀请失败');
+  }
+}
+
+async function loadObPermissions() {
+  if (!obPermissionSceneId.value) return;
+  obPermissionLoading.value = true;
+  try {
+    const data = await api.get<Array<{ id: string; user_id: string; granted_by: string; granted_at: string }>>(
+      `/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions`
+    );
+    obPermissions.value = data ?? [];
+  } catch {
+    obPermissions.value = [];
+    ElMessage.error('加载 OB 权限失败');
+  } finally {
+    obPermissionLoading.value = false;
+  }
+}
+
+async function handleManageObPermissions(sceneId: string) {
+  obPermissionSceneId.value = sceneId;
+  obPermissionUserId.value = '';
+  showObPermissionDialog.value = true;
+  await loadObPermissions();
+}
+
+async function submitGrantObPermission() {
+  const userId = obPermissionUserId.value.trim();
+  if (!obPermissionSceneId.value || !userId) return;
+  try {
+    await api.post(`/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions/grant`, {
+      user_id: userId,
+    });
+    ElMessage.success('已授予 OB 旁听权限');
+    obPermissionUserId.value = '';
+    await loadObPermissions();
+  } catch {
+    ElMessage.error('授予权限失败');
+  }
+}
+
+async function revokeObPermission(userId: string) {
+  if (!obPermissionSceneId.value || !userId) return;
+  try {
+    await api.post(`/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions/revoke`, {
+      user_id: userId,
+    });
+    ElMessage.success('已撤销 OB 旁听权限');
+    await loadObPermissions();
+  } catch {
+    ElMessage.error('撤销权限失败');
   }
 }
 
@@ -404,6 +470,27 @@ onMounted(async () => {
       ElMessage.warning(`${data.truncated_fields.join('、')} 超过上限，已自动截断`);
     }
   });
+
+  // 私密场 OB 授权变更通知（发给被授权/被撤销用户）
+  const roomSocket = socketClient.getRoomSocket() as any;
+  roomSocket?.on?.('ob_permission_granted', async (data: { scene_id?: string; user_id?: string }) => {
+    if (data?.user_id && data.user_id !== authStore.userId) return;
+    ElMessage.info('你获得了一个私密场的 OB 旁听权限');
+    await fetchMyVirtualScenes();
+  });
+  roomSocket?.on?.('ob_permission_revoked', async (data: { scene_id?: string; user_id?: string }) => {
+    if (data?.user_id && data.user_id !== authStore.userId) return;
+    ElMessage.warning('你的某个私密场 OB 旁听权限已被撤销');
+    await fetchMyVirtualScenes();
+    const current = scenes.value.find((s) => s.id === currentSceneId.value);
+    if (current?.type === 'virtual') {
+      const allow = new Set(myVirtualSceneIds.value);
+      if (!allow.has(current.id)) {
+        const fallback = scenes.value.find((s) => s.type === 'spatial' || s.type === 'lobby') ?? scenes.value[0];
+        if (fallback?.id) switchScene(fallback.id);
+      }
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -464,6 +551,7 @@ onUnmounted(() => {
           @gm-force-move="openForceMove"
           @create-virtual-scene="handleCreateVirtualScene"
           @invite-to-scene="handleInviteToScene"
+          @manage-ob-permissions="handleManageObPermissions"
         />
       </template>
       <template #chat-area>
@@ -555,6 +643,45 @@ onUnmounted(() => {
       </template>
     </ElDialog>
 
+    <!-- 管理私密场 OB 旁听权限 -->
+    <ElDialog v-model="showObPermissionDialog" :title="`OB 权限管理：${obPermissionSceneName}`" width="520px">
+      <div class="ob-permission-panel">
+        <div class="ob-permission-row">
+          <ElSelect
+            v-model="obPermissionUserId"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="输入或选择 user_id"
+            style="width: 100%"
+          >
+            <ElOption
+              v-for="uid in roomUserIds"
+              :key="uid"
+              :label="uid"
+              :value="uid"
+            />
+          </ElSelect>
+          <TButton type="primary" :disabled="!obPermissionUserId.trim()" @click="submitGrantObPermission">授权</TButton>
+        </div>
+
+        <div class="ob-permission-list" v-loading="obPermissionLoading">
+          <div v-if="obPermissions.length === 0" class="ob-empty">当前暂无 OB 旁听授权</div>
+          <div v-for="item in obPermissions" :key="item.id" class="ob-item">
+            <div class="ob-item-main">
+              <div class="ob-item-user">{{ item.user_id }}</div>
+              <div class="ob-item-meta">授权人 {{ item.granted_by }} · {{ item.granted_at }}</div>
+            </div>
+            <TButton type="danger" @click="revokeObPermission(item.user_id)">撤销</TButton>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <TButton type="secondary" @click="showObPermissionDialog = false">关闭</TButton>
+      </template>
+    </ElDialog>
+
     <!-- 团内角色卡状态 Modal -->
     <CharacterCardModal
       :visible="showCharCardModal"
@@ -578,4 +705,29 @@ onUnmounted(() => {
 .gm-slide-leave-to { max-height: 0; opacity: 0; }
 .gm-slide-enter-to,
 .gm-slide-leave-from { max-height: 260px; opacity: 1; }
+
+.ob-permission-panel { display: grid; gap: 12px; }
+.ob-permission-row { display: flex; gap: 8px; align-items: center; }
+.ob-permission-list {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+}
+.ob-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-sm);
+}
+.ob-item-main { min-width: 0; }
+.ob-item-user { font-size: var(--text-sm); color: var(--color-text-primary); font-weight: 600; }
+.ob-item-meta { font-size: var(--text-xs); color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-empty { font-size: var(--text-sm); color: var(--color-text-muted); text-align: center; padding: 16px 0; }
 </style>

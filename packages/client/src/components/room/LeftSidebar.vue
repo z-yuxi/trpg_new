@@ -23,6 +23,7 @@ const emit = defineEmits<{
   'jump-to-message': [messageId: string];
   'create-virtual-scene': [];
   'invite-to-scene': [sceneId: string];
+  'manage-ob-permissions': [sceneId: string];
 }>();
 
 const groupOpen = ref({
@@ -193,6 +194,12 @@ function handleForceMove() {
               title="邀请角色进入"
               @click.stop="emit('invite-to-scene', scene.id)"
             >邀请</button>
+            <button
+              v-if="isGm"
+              class="inline-icon-btn invite-btn"
+              title="管理 OB 旁听权限"
+              @click.stop="emit('manage-ob-permissions', scene.id)"
+            >OB</button>
           </div>
           <div v-if="virtualScenes.length === 0" class="empty-hint">暂无私密场</div>
         </div>

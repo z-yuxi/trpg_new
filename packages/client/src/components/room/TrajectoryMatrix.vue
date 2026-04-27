@@ -181,7 +181,6 @@ onUnmounted(() => {
                 :style="{ backgroundColor: sceneColor(getSegmentAt(char.id, slot.day, slot.hour)?.scene_id ?? '') }"
                 :class="{ moving: isMovingType(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '') }"
               >
-                <span class="chip-icon">{{ moveIcon(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '') }}</span>
                 <span class="chip-icon"><SvgIcon :name="moveIcon(getSegmentAt(char.id, slot.day, slot.hour)?.move_type ?? '')" :size="10" /></span>
                 <span class="chip-text">{{ sceneShort(getSegmentAt(char.id, slot.day, slot.hour)?.scene_name ?? '') }}</span>
               </div>
