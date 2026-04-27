@@ -11,6 +11,8 @@ import forumRoutes from './forum';
 import moduleRoutes from './modules';
 import uploadRoutes from './upload';
 import occupationRoutes from './occupations';
+import reportsRoutes from './reports';
+import gmNotesRoutes from './gm-notes';
 
 const router: IRouter = Router();
 
@@ -29,5 +31,7 @@ router.use('/forum', forumRoutes);
 router.use('/modules', moduleRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/occupations', occupationRoutes);
+router.use('/reports', reportsRoutes);
+router.use('/campaigns', gmNotesRoutes);
 
 export default router;

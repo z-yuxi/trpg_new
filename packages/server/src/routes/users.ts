@@ -87,4 +87,65 @@ router.get('/:uid/created-modules', async (req, res) => {
   }
 });
 
+// PUT /api/users/me/password
+router.put('/me/password', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    current_password: z.string().min(1),
+    new_password: z.string().min(8).max(64),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    await userService.changePassword(req.user!.id, parsed.data.current_password, parsed.data.new_password);
+    res.json({ success: true });
+  } catch (err: any) {
+    const isUserError = err?.message === '当前密码错误';
+    res.status(isUserError ? 400 : 500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// PUT /api/users/me/privacy
+router.put('/me/privacy', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    profile_public: z.boolean().optional(),
+    online_visible: z.boolean().optional(),
+    campaign_history_public: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    await userService.updatePrivacySettings(req.user!.id, parsed.data);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
+// PUT /api/users/me/notification-settings
+router.put('/me/notification-settings', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    system: z.boolean().optional(),
+    recruit: z.boolean().optional(),
+    dm: z.boolean().optional(),
+    mention: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  try {
+    await userService.updateNotificationSettings(req.user!.id, parsed.data);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  }
+});
+
 export default router;

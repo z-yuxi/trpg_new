@@ -72,11 +72,13 @@ const stats = computed(() => ({
 async function loadProducts() {
   loading.value = true;
   try {
-    const [rsData, modData] = await Promise.all([
-      api.get<Ruleset[]>('/rulesets/mine'),
+    const [rsBody, modData] = await Promise.all([
+      api.get<unknown>('/rulesets/mine'),
       api.get<Module[]>('/modules/mine'),
     ]);
-    rulesets.value = rsData;
+    rulesets.value = Array.isArray(rsBody)
+      ? (rsBody as Ruleset[])
+      : ((rsBody as { data?: Ruleset[] }).data ?? []);
     modules.value = modData;
   } catch {
     ElMessage.error('加载作品列表失败');

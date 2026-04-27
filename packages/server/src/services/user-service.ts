@@ -161,6 +161,34 @@ export class UserService {
     return [...modules, ...rulesets].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const row = await db('users').where({ id: userId }).select('password_hash').first();
+    if (!row) throw new Error('User not found');
+    const valid = await bcrypt.compare(currentPassword, row.password_hash as string);
+    if (!valid) throw new Error('当前密码错误');
+    const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    await db('users').where({ id: userId }).update({ password_hash: newHash });
+  }
+
+  async updatePrivacySettings(userId: string, settings: {
+    profile_public?: boolean;
+    online_visible?: boolean;
+    campaign_history_public?: boolean;
+  }): Promise<void> {
+    await db('users').where({ id: userId }).update(settings);
+  }
+
+  async updateNotificationSettings(userId: string, settings: {
+    system?: boolean;
+    recruit?: boolean;
+    dm?: boolean;
+    mention?: boolean;
+  }): Promise<void> {
+    await db('users').where({ id: userId }).update({
+      notification_settings: JSON.stringify(settings),
+    });
+  }
+
   private rowToUser(row: Record<string, unknown>): User {
     return {
       id: row['id'] as string,

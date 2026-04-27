@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import type { ServerToClientEvents, ClientToServerEvents } from '@trpg/shared';
 import { authService } from '../services/auth-service';
 import { setupUserHandler } from './user-handler';
+import { registerChatHandlers } from './chat-handler';
 
 export type TypedIO = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -13,8 +14,8 @@ export function createSocketServer(httpServer: HttpServer): TypedIO {
     pingTimeout: 10000,
   });
 
-  // 鉴权中间件：从 auth token 中提取 userId
-  io.of('/room').use(async (socket, next) => {
+  const roomNsp = io.of('/room');
+  roomNsp.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token as string;
       if (!token) throw new Error('Missing auth token');
@@ -25,6 +26,7 @@ export function createSocketServer(httpServer: HttpServer): TypedIO {
       next(new Error('Authentication failed'));
     }
   });
+  registerChatHandlers(roomNsp as Parameters<typeof registerChatHandlers>[0]);
 
   const userNsp = io.of('/user');
   userNsp.use(async (socket, next) => {
