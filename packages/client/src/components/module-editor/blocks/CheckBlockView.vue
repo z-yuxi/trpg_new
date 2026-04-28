@@ -1,7 +1,7 @@
 <template>
   <node-view-wrapper class="block-view block-view--check">
     <div class="block-header" @click.prevent="toggleCollapse">
-      <span class="block-icon">🎲</span>
+      <SvgIcon name="icon-dice" :size="16" class="block-icon" />
       <span class="block-title">{{ checkTitle }}</span>
       <span class="block-tag">检定</span>
       <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
@@ -69,6 +69,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
+import SvgIcon from '../../SvgIcon.vue';
 
 const props = defineProps<{
   node: any;

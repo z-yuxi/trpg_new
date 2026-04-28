@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElDialog, ElMessage } from 'element-plus';
@@ -226,7 +226,7 @@ onMounted(loadModules);
 }
 .cover {
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #5B8DB8) 18%, transparent), color-mix(in srgb, var(--color-warning, #f59e0b) 14%, transparent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary, #5B8DB8) 18%, transparent), color-mix(in srgb, var(--color-warning, #C9A227) 14%, transparent));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -244,7 +244,7 @@ onMounted(loadModules);
 .module-head h2 { margin: 0; font-size: var(--text-lg); color: var(--text-primary); }
 .module-head p { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
 .meta-row { display: flex; flex-wrap: wrap; gap: var(--space-3); color: var(--text-muted); font-size: var(--text-xs); }
-.notice-countdown { color: var(--color-warning, #f59e0b); font-weight: 600; }
+.notice-countdown { color: var(--color-warning, #C9A227); font-weight: 600; }
 .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .dialog-form { display: flex; flex-direction: column; gap: var(--space-2); }
 .dialog-form label { color: var(--text-secondary); font-size: var(--text-sm); }

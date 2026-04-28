@@ -525,7 +525,7 @@ onMounted(() => {
 .empty-hint { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-3); }
 .sm-btn { padding: 3px 10px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-xs); white-space: nowrap; }
 .sm-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
-.sm-btn.danger { background: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+.sm-btn.danger { background: rgba(184, 84, 80, 0.08); color: #A04743; border-color: rgba(184, 84, 80, 0.3); }
 .sm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .form-body { display: flex; flex-direction: column; }
 .form-label { font-size: var(--text-xs); color: var(--color-text-secondary); margin-bottom: 4px; }
@@ -542,7 +542,7 @@ onMounted(() => {
 .radio-row { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; font-size: var(--text-sm); }
 .dlg-btn { padding: 6px 16px; border: 1px solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-page-bg); cursor: pointer; font-size: var(--text-sm); }
 .dlg-btn.accent { background: var(--color-accent); color: #fff; border-color: var(--color-accent); margin-left: var(--space-2); }
-.dlg-btn.danger { background: #b91c1c; color: #fff; border-color: #b91c1c; margin-left: var(--space-2); }
+.dlg-btn.danger { background: #A04743; color: #fff; border-color: #A04743; margin-left: var(--space-2); }
 .move-info { flex: 1; }
 .move-btns { display: flex; gap: var(--space-2); flex-shrink: 0; }
 .force-move-row { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; margin-top: 6px; }

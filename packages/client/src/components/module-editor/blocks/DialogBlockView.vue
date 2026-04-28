@@ -1,7 +1,7 @@
 <template>
   <node-view-wrapper class="block-view block-view--dialog">
     <div class="block-header" @click.prevent="toggleCollapse">
-      <span class="block-icon">💬</span>
+      <SvgIcon name="icon-message" :size="16" class="block-icon" />
       <span class="block-title">{{ attrs.dialog_title || '未命名对话' }}</span>
       <span class="block-tag">对话·{{ participants.length }}人</span>
       <button class="block-del" title="删除块" @click.stop="deleteNode">✕</button>
@@ -66,6 +66,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3';
+import SvgIcon from '../../SvgIcon.vue';
 
 const props = defineProps<{
   node: any;

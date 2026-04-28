@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import ClueCard from '../ClueCard.vue';
@@ -213,7 +213,7 @@ onMounted(loadClues);
   background: none; border: none; cursor: pointer; color: var(--text-muted);
   padding: 5px; border-radius: var(--radius-sm); display: flex; align-items: center;
 }
-.danger-btn:hover { background: #fee2e2; color: #dc2626; }
+.danger-btn:hover { background: rgba(184, 84, 80, 0.08); color: #B85450; }
 .expand-icon { color: var(--text-muted); }
 
 .clue-preview-wrap {

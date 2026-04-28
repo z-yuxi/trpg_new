@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * GmClueGrantOverlay — 内联线索发放浮层
  * GM 在叙事模式下快速发放线索，无需进入导演台。
@@ -284,8 +284,8 @@ watch(() => props.campaignId, () => loadClues());
   transition: all var(--transition-fast);
 }
 .tab-btn.active {
-  color: var(--color-accent, #3b82f6);
-  border-bottom-color: var(--color-accent, #3b82f6);
+  color: var(--color-accent, #5B8DB8);
+  border-bottom-color: var(--color-accent, #5B8DB8);
   font-weight: 600;
 }
 
@@ -367,14 +367,14 @@ watch(() => props.campaignId, () => loadClues());
   border-radius: 4px;
 }
 .clue-row-badge.revealed {
-  background: color-mix(in srgb, var(--color-success, #22c55e) 15%, transparent);
-  color: var(--color-success, #22c55e);
+  background: color-mix(in srgb, var(--color-success, #6B8E6B) 15%, transparent);
+  color: var(--color-success, #6B8E6B);
 }
 .grant-btn {
   padding: 4px 14px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--color-accent, #3b82f6);
+  background: var(--color-accent, #5B8DB8);
   color: #fff;
   font-size: var(--text-sm);
   font-weight: 500;
@@ -403,7 +403,7 @@ watch(() => props.campaignId, () => loadClues());
 }
 .form-input:focus, .form-textarea:focus {
   outline: none;
-  border-color: var(--color-accent, #3b82f6);
+  border-color: var(--color-accent, #5B8DB8);
 }
 .theme-row {
   display: flex;
@@ -424,16 +424,16 @@ watch(() => props.campaignId, () => loadClues());
   transition: all var(--transition-fast);
 }
 .theme-pill.active {
-  background: var(--color-accent, #3b82f6);
+  background: var(--color-accent, #5B8DB8);
   color: #fff;
-  border-color: var(--color-accent, #3b82f6);
+  border-color: var(--color-accent, #5B8DB8);
 }
 .preview-wrap { max-height: 200px; overflow-y: auto; }
 .create-grant-btn {
   padding: 8px 20px;
   border: none;
   border-radius: var(--radius-md);
-  background: var(--color-accent, #3b82f6);
+  background: var(--color-accent, #5B8DB8);
   color: #fff;
   font-size: var(--text-sm);
   font-weight: 600;

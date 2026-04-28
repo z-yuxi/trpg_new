@@ -22,66 +22,6 @@
    --brand-accent-hover-dark: #D8736F;
    --brand-accent-light-dark: rgba(184, 84, 80, 0.15);
 
-  /* ===================================================
-     2.1 基础颜色（Base Colors）— 不直接使用，只给语义变量引用
-     =================================================== */
-
-  /* Slate 色系 - 平台主色 */
-  --slate-50: #f8fafc;
-  --slate-100: #f1f5f9;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --slate-800: #1e293b;
-  --slate-900: #0f172a;
-
-  /* Gray 色系 - 中性灰阶 */
-  --gray-50:  #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-900: #111827;
-  --gray-950: #030712;
-
-  /* 功能色 */
-  --blue-50:  #eff6ff;
-  --blue-100: #dbeafe;
-  --blue-500: #3b82f6;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-
-  --green-50:  #f0fdf4;
-  --green-100: #dcfce7;
-  --green-500: #22c55e;
-  --green-600: #16a34a;
-  --green-700: #15803d;
-
-  --amber-50:  #fffbeb;
-  --amber-100: #fef3c7;
-  --amber-400: #fbbf24;
-  --amber-500: #f59e0b;
-  --amber-600: #d97706;
-  --amber-800: #92400e;
-
-  --red-50:  #fef2f2;
-  --red-100: #fee2e2;
-  --red-500: #ef4444;
-  --red-600: #dc2626;
-  --red-700: #b91c1c;
-
-  --purple-50:  #f3e5f5;
-  --purple-700: #6a1b9a;
-
-  --indigo-500: #6366f1;
-
   /* Canvas（规则画布）专用颜色 */
   --canvas-bg:            #1e1e2e;
   --canvas-input-bg:      #2a2a3e;
@@ -99,44 +39,45 @@
      2.2 语义化颜色变量 — 日间模式默认值
      =================================================== */
 
-  /* 主色（品牌雾霾蓝） */
-   --color-primary:        var(--brand-primary);
-   --color-primary-hover:  var(--brand-primary-hover);
-   --color-primary-active: var(--brand-primary-active);
-   --color-primary-light:  var(--brand-primary-light);
+  /* 主色（品牌雾霾蓝，锁定不可改） */
+  --color-primary:        #5B8DB8;
+  --color-primary-hover:  #4A7A9F;
+  --color-primary-active: #3D6A8F;
+  --color-primary-light:  rgba(91, 141, 184, 0.12);
 
-  /* 功能色 */
+  /* 功能色（低饱和度，与冷调品牌色协调） */
   --color-info:        var(--color-primary);
   --color-info-bg:     var(--color-primary-light);
   --color-success:     #6B8E6B;
-  --color-success-bg:  rgba(107, 142, 107, 0.12);
+  --color-success-bg:  rgba(107, 142, 107, 0.1);
   --color-warning:     #C9A227;
-  --color-warning-bg:  rgba(201, 162, 39, 0.12);
-  --color-warning-text: var(--amber-800);
-   --color-danger:        var(--brand-accent);
-   --color-danger-hover:  var(--brand-accent-hover);
-   --color-danger-active: var(--brand-accent-active);
-   --color-danger-light:  var(--brand-accent-light);
-  --color-danger-bg:     var(--color-danger-light);
+  --color-warning-bg:  rgba(201, 162, 39, 0.1);
+  --color-danger:        #B85450;
+  --color-danger-hover:  #A04743;
+  --color-danger-active: #8A3D3A;
+  --color-danger-light:  rgba(184, 84, 80, 0.1);
+  --color-danger-bg:     rgba(184, 84, 80, 0.1);
 
   /* 背景层 */
   --surface-page:     #F5F7FA;
-  --surface-card:     #ffffff;
-  --surface-hover:    var(--gray-100);
-  --surface-active:   var(--gray-200);
-  --surface-elevated: #ffffff;
+  --surface-card:     #FFFFFF;
+  --surface-hover:    #F9FAFB;
+  --surface-active:   #E8ECF0;
+  --surface-elevated: #FFFFFF;
 
-  /* 文字层 */
+  /* 文字层（四级明度梯度） */
   --text-primary:   #101828;
-  --text-body:      var(--gray-700);
+  --text-body:      #344054;
   --text-secondary: #667085;
-  --text-muted:     var(--gray-400);
-  --text-inverse:   #ffffff;
+  --text-muted:     #98A2B3;
+  --text-inverse:   #FFFFFF;
 
   /* 边框 */
-  --border-default: #E8ECF0;
-  --border-hover:   var(--gray-300);
+  --border-default: #D0D5DD;
+  --border-hover:   #98A2B3;
   --border-active:  var(--color-primary);
+  --border-light:   #E8ECF0;
+  --border-divider: #E8ECF0;
 
   /* 按钮专用（日间：深色背景 + 白字） */
   --btn-primary-bg:     var(--color-primary);
@@ -150,11 +91,11 @@
   /* ===================================================
      2.5 阴影（Shadows）
      =================================================== */
-  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.03);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 8px -2px rgba(16, 24, 40, 0.1), 0 2px 4px -2px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
+  --shadow-xl: 0 20px 24px -4px rgba(16, 24, 40, 0.08), 0 8px 8px -4px rgba(16, 24, 40, 0.03);
 
   /* ===================================================
      2.3 间距系统（Space）— 4px 基数
@@ -220,7 +161,7 @@
    --duration-slow:    350ms;
   --duration-slower:  500ms;
 
-  --ease-out:    cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
@@ -243,19 +184,20 @@
   --color-page-bg:        var(--surface-page);
   --color-card-bg:        var(--surface-card);
   --color-card-border:    var(--border-default);
-  --color-input-bg:       var(--surface-page);
+  --color-input-bg:       var(--surface-card);
   --color-input-border:   var(--border-default);
   --color-input-focus:    var(--color-primary);
   --color-text-primary:   var(--text-primary);
+  --color-text-body:      var(--text-body);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted:     var(--text-muted);
   --color-text-inverse:   var(--text-inverse);
   --color-secondary:      var(--text-secondary);
-  --color-accent:         var(--color-info);
-  --color-accent-hover:   var(--color-primary-hover);
+  --color-accent:         #5B8DB8;
+  --color-accent-hover:   #4A7A9F;
 
-  --color-tag-default-bg:   var(--gray-100);
-  --color-tag-default-text: var(--slate-600);
+  --color-tag-default-bg:   #F0F2F5;
+  --color-tag-default-text: #475467;
 
    /* 兼容旧组件别名 */
    --color-error: var(--color-danger);

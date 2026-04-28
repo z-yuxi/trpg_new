@@ -18,9 +18,9 @@ const recruitments = ref<any[]>([]);
 const loading = ref(false);
 
 const quickActions = [
-  { icon: '🔍', title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
-  { icon: '🎲', title: '当 KP', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
-  { icon: '📢', title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
+  { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
+  { icon: 'icon-dice',     title: '当 KP', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
+  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
 ];
 
 const mixedRecommendations = computed(() => [
@@ -116,7 +116,7 @@ onMounted(async () => {
           </div>
           <div class="quick-grid">
             <button v-for="item in quickActions" :key="item.title" class="quick-action-card" @click="router.push(item.path)">
-              <span class="quick-icon">{{ item.icon }}</span>
+              <SvgIcon :name="item.icon" :size="24" class="quick-icon" />
               <strong>{{ item.title }}</strong>
               <span class="quick-desc">{{ item.desc }}</span>
             </button>
@@ -251,7 +251,7 @@ onMounted(async () => {
   background: rgba(91, 141, 184, 0.04);
   transform: translateY(-2px);
 }
-.quick-action-card .quick-icon { font-size: 24px; line-height: 1; }
+.quick-action-card .quick-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
 .quick-action-card strong { color: var(--text-primary); font-size: var(--text-sm); font-weight: 600; }
 .quick-action-card .quick-desc { color: var(--text-secondary); font-size: var(--text-xs); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }

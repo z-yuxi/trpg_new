@@ -31,11 +31,13 @@ interface RecruitmentPostVM {
   created_at: string;
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   fixedType?: 'gm_recruit' | 'player_seek';
   mine?: 'posted' | 'applied';
-  rulesets: RulesetOption[];
-}>();
+  rulesets?: RulesetOption[];
+}>(), {
+  rulesets: () => [],
+});
 
 const router = useRouter();
 const loading = ref(false);

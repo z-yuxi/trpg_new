@@ -110,15 +110,15 @@ async function changePassword() {
 .form-input:focus { border-color: var(--color-accent); }
 .strength-bar { height: 4px; background: var(--surface-hover); border-radius: 2px; margin-top: 6px; overflow: hidden; }
 .strength-fill { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; }
-.strength-fill.weak { background: #ef4444; }
-.strength-fill.medium { background: #f59e0b; }
-.strength-fill.strong { background: #22c55e; }
-.strength-fill.very-strong { background: #16a34a; }
+.strength-fill.weak { background: #B85450; }
+.strength-fill.medium { background: #C9A227; }
+.strength-fill.strong { background: #6B8E6B; }
+.strength-fill.very-strong { background: #6B8E6B; }
 .strength-label { font-size: var(--text-xs); margin-top: 4px; }
-.strength-label.weak { color: #ef4444; }
-.strength-label.medium { color: #f59e0b; }
-.strength-label.strong { color: #22c55e; }
-.strength-label.very-strong { color: #16a34a; }
+.strength-label.weak { color: #B85450; }
+.strength-label.medium { color: #C9A227; }
+.strength-label.strong { color: #6B8E6B; }
+.strength-label.very-strong { color: #6B8E6B; }
 .save-btn {
   padding: var(--space-2) var(--space-5); border: none; border-radius: var(--radius-md);
   background: var(--color-accent); color: #fff; cursor: pointer;

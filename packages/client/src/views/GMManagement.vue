@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
@@ -209,9 +209,9 @@ onMounted(() => {
   transition: all var(--transition-fast);
 }
 .return-btn:hover {
-  background: var(--color-accent, #3b82f6);
+  background: var(--color-accent, #5B8DB8);
   color: #fff;
-  border-color: var(--color-accent, #3b82f6);
+  border-color: var(--color-accent, #5B8DB8);
 }
 
 .theme-toggle-btn {
@@ -282,15 +282,15 @@ onMounted(() => {
   color: var(--color-text-primary);
 }
 .nav-item.active {
-  color: var(--color-accent, #2563eb);
-  background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--color-page-bg));
-  border-left-color: var(--color-accent, #2563eb);
+  color: var(--color-accent, #4A7A9F);
+  background: color-mix(in srgb, var(--color-accent, #4A7A9F) 10%, var(--color-page-bg));
+  border-left-color: var(--color-accent, #4A7A9F);
   font-weight: 600;
 }
 .nav-badge {
   margin-left: auto;
   padding: 2px 8px;
-  background: var(--color-error, #ef4444);
+  background: var(--color-error, #B85450);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -352,7 +352,7 @@ onMounted(() => {
 
   .nav-item.active {
     border-left-color: transparent;
-    border-bottom-color: var(--color-accent, #2563eb);
+    border-bottom-color: var(--color-accent, #4A7A9F);
   }
 }
 </style>

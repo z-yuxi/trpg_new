@@ -589,8 +589,8 @@ onBeforeRouteLeave(() => {
 }
 
 .progress-step.done .step-dot {
-  border-color: var(--color-success, #16a34a);
-  background: var(--color-success, #16a34a);
+  border-color: var(--color-success, #6B8E6B);
+  background: var(--color-success, #6B8E6B);
   color: #fff;
 }
 
@@ -613,7 +613,7 @@ onBeforeRouteLeave(() => {
   background: var(--border-default);
   z-index: 0;
 }
-.step-connector.filled { background: var(--color-success, #16a34a); }
+.step-connector.filled { background: var(--color-success, #6B8E6B); }
 
 /* ===== 步骤面板 ===== */
 .step-panel {
@@ -700,7 +700,7 @@ onBeforeRouteLeave(() => {
   color: var(--text-secondary);
 }
 .sp-bar strong { font-size: var(--text-lg); color: var(--text-primary); }
-.sp-bar strong.danger { color: var(--color-danger, #dc2626); }
+.sp-bar strong.danger { color: var(--color-danger, #B85450); }
 .occ-label { color: var(--text-muted); }
 .skills-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--space-2); }
 .skill-row { display: flex; align-items: center; gap: var(--space-2); }
@@ -710,7 +710,7 @@ onBeforeRouteLeave(() => {
 /* ===== Step 5: 背景 ===== */
 .field-group { display: flex; flex-direction: column; gap: var(--space-1); }
 .field-label { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-secondary); }
-.required { color: var(--color-danger, #dc2626); }
+.required { color: var(--color-danger, #B85450); }
 .field-textarea {
   width: 100%;
   padding: var(--space-3);
@@ -776,7 +776,7 @@ onBeforeRouteLeave(() => {
 .attr-num { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary); }
 .preview-text { font-size: var(--text-sm); color: var(--text-body); line-height: var(--leading-relaxed); }
 
-.save-error { color: var(--color-danger, #dc2626); font-size: var(--text-sm); }
+.save-error { color: var(--color-danger, #B85450); font-size: var(--text-sm); }
 
 /* ===== 派生属性 ===== */
 .derived-panel {
@@ -809,11 +809,11 @@ onBeforeRouteLeave(() => {
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-success, #16a34a) 8%, transparent);
-  border: 1px solid var(--color-success, #16a34a);
+  background: color-mix(in srgb, var(--color-success, #6B8E6B) 8%, transparent);
+  border: 1px solid var(--color-success, #6B8E6B);
   border-radius: var(--radius-lg);
 }
-.saved-code-label { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-success, #16a34a); }
+.saved-code-label { font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--color-success, #6B8E6B); }
 .saved-code-row { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
 .code-tag {
   font-family: monospace;

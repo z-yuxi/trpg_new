@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { GridMap as GridMapState, GridToken, GridOverlay } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
@@ -79,7 +79,7 @@ function buildSeedTokens(): GridToken[] {
     label: tokenLabel(character.name),
     x: index % 6,
     y: Math.floor(index / 6),
-    color: '#2563eb',
+    color: '#4A7A9F',
   }));
   const npcTokens = props.npcs.map((npc, index) => ({
     id: `npc:${npc.id}`,
@@ -758,7 +758,7 @@ onUnmounted(() => {
   text-shadow: 0 0 2px #000;
 }
 .color-btn.color-selected { border-color: var(--color-accent); }
-.tool-btn.danger { color: #ef4444; border-color: #ef4444; }
+.tool-btn.danger { color: #B85450; border-color: #B85450; }
 .side-panel {
   display: flex;
   flex-direction: column;

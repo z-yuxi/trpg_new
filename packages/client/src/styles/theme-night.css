@@ -1,90 +1,97 @@
 /* ============================================================
-   夜间主题 — 覆盖（data-theme="night"）
-   按附录 B 2.3 反色策略：Slate 200 主色 + Gray 950 背景
+   夜间主题 — 覆盖（data-theme="night" / data-theme="dark"）
+   三级背景拉开层次，四级文字建立阅读节奏
    ============================================================ */
 
 :root[data-theme='night'],
 :root[data-theme='dark'] {
-  /* 主色提亮（品牌提亮蓝） */
-  --color-primary:        #6B9DC8;
-  --color-primary-hover:  #7AACE0;
-  --color-primary-active: #5A8DB8;
-  --color-primary-light:  rgba(91, 141, 184, 0.2);
+  /* ===== 品牌色（夜间提亮） ===== */
+  --color-primary: #6B9DC8;
+  --color-primary-hover: #7AACE0;
+  --color-primary-active: #5B8DB8;
+  --color-primary-light: rgba(107, 157, 200, 0.15);
+  --color-accent: #6B9DC8;
+  --color-accent-hover: #7AACE0;
 
-  /* 功能色（提亮，适配深色背景） */
-  --color-info:        var(--color-primary);
-  --color-info-bg:     var(--color-primary-light);
-  --color-success:     #6B8E6B;
-  --color-success-bg:  rgba(107, 142, 107, 0.15);
-  --color-warning:     #C9A227;
-  --color-warning-bg:  rgba(201, 162, 39, 0.15);
-  --color-danger:        #C86460;
-  --color-danger-hover:  #D8736F;
-  --color-danger-active: #B85A56;
-  --color-danger-light:  rgba(184, 84, 80, 0.15);
-  --color-danger-bg:     var(--color-danger-light);
+  /* ===== 背景层（三级灰，拉开卡片与页面的对比） ===== */
+  --color-page-bg: #0D1117;
+  --color-card-bg: #161B22;
+  --color-card-border: #30363D;
+  --color-input-bg: #1C2128;
+  --color-input-border: #30363D;
+  --color-input-focus: #6B9DC8;
 
-  /* 背景层反色 */
-  --surface-page:     #1C2128;   /* 品牌夜间背景 */
-  --surface-card:     #161B22;   /* 品牌夜间卡片 */
-  --surface-hover:    rgba(255, 255, 255, 0.05);
-  --surface-active:   rgba(255, 255, 255, 0.10);
-  --surface-elevated: #21262D;   /* 品牌夜间浮层 */
+  --surface-page: #0D1117;
+  --surface-card: #161B22;
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.08);
+  --surface-elevated: #1C2128;
 
-  /* 文字层提亮 */
-  --text-primary:   #F0F6FC;   /* 品牌夜间标题色 */
-  --text-body:      #B1BAC4;   /* 品牌夜间正文色 */
-  --text-secondary: #9ca3af;   /* Gray 400 */
-  --text-muted:     #6b7280;   /* Gray 500 */
-  --text-inverse:   #101828;   /* 深色（用于浅色按鈕文字） */
+  /* ===== 文字（四级明度梯度，夜间整体提亮） ===== */
+  --color-text-primary: #F0F6FC;
+  --color-text-body: #C9D1D9;
+  --color-text-secondary: #8B949E;
+  --color-text-muted: #484F58;
+  --color-text-inverse: #0D1117;
 
-  /* 边框 */
-  --border-default: #21262D;
-  --border-hover:   rgba(255, 255, 255, 0.20);
+  --text-primary:   #F0F6FC;
+  --text-body:      #C9D1D9;
+  --text-secondary: #8B949E;
+  --text-muted:     #484F58;
+  --text-inverse:   #0D1117;
+
+  /* ===== 边框 ===== */
+  --border-default: #30363D;
+  --border-hover:   #484F58;
   --border-active:  var(--color-primary);
+  --border-light:   #21262D;
+  --border-divider: rgba(255, 255, 255, 0.06);
 
-  /* 按鈕反色（品牌蓝背景 + 白字） */
+  /* ===== 按钮 ===== */
   --btn-primary-bg:     var(--color-primary);
-  --btn-primary-text:   #ffffff;
+  --btn-primary-text:   #FFFFFF;
   --btn-primary-hover:  var(--color-primary-hover);
 
   --btn-secondary-bg:     transparent;
-  --btn-secondary-text:   #d1d5db;
-  --btn-secondary-border: rgba(255, 255, 255, 0.10);
+  --btn-secondary-text:   #C9D1D9;
+  --btn-secondary-border: #30363D;
 
-  /* 阴影（加深，适配深色环境） */
-  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.15);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.40), 0 2px 4px -2px rgba(0, 0, 0, 0.20);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.50), 0 4px 6px -4px rgba(0, 0, 0, 0.30);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.60), 0 8px 10px -6px rgba(0, 0, 0, 0.40);
+  /* ===== 功能色（夜间降饱和、提亮度） ===== */
+  --color-info:     var(--color-primary);
+  --color-info-bg:  var(--color-primary-light);
+  --color-success:     #7B9E7B;
+  --color-success-bg:  rgba(123, 158, 123, 0.15);
+  --color-warning:     #D4B44A;
+  --color-warning-bg:  rgba(212, 180, 74, 0.12);
+  --color-danger:      #C86460;
+  --color-danger-hover: #D8736F;
+  --color-danger-active: #B85A56;
+  --color-danger-light: rgba(200, 100, 96, 0.15);
+  --color-danger-bg:   rgba(200, 100, 96, 0.12);
 
-  /* 向后兼容别名 */
-  --color-page-bg:        #1C2128;
-  --color-card-bg:        #161B22;
-  --color-card-border:    #21262D;
-  --color-input-bg:       #21262D;
-  --color-input-border:   #21262D;
-  --color-input-focus:    var(--color-primary);
-  --color-text-primary:   #F0F6FC;
-  --color-text-secondary: #9ca3af;
-  --color-text-muted:     #6b7280;
-  --color-text-inverse:   #101828;
-  --color-tag-default-bg:   rgba(255, 255, 255, 0.08);
-  --color-tag-default-text: #cbd5e1;
+  /* ===== Tag 专用 ===== */
+  --color-tag-default-bg:   rgba(255, 255, 255, 0.06);
+  --color-tag-default-text: #8B949E;
 
-  /* Element Plus 夜间覆盖 */
-  --el-color-primary:        #6B9DC8;
-  --el-color-primary-light-3: rgba(107, 157, 200, 0.7);
-  --el-color-primary-light-5: rgba(107, 157, 200, 0.5);
-  --el-color-primary-light-7: rgba(107, 157, 200, 0.3);
-  --el-color-primary-light-9: rgba(107, 157, 200, 0.1);
-  --el-color-primary-dark-2:  #5A8DB8;
-  --el-bg-color:             #161B22;
-  --el-bg-color-page:        #1C2128;
-  --el-text-color-primary:   #F0F6FC;
-  --el-text-color-regular:   #B1BAC4;
-  --el-border-color:         #21262D;
-  --el-fill-color-light:     rgba(255, 255, 255, 0.05);
-  --el-mask-color:           rgba(0, 0, 0, 0.7);
+  /* ===== 阴影（夜间加重，否则完全不可见） ===== */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 16px -4px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 24px -4px rgba(0, 0, 0, 0.7), 0 8px 8px -4px rgba(0, 0, 0, 0.5);
+
+  /* ===== Element Plus 覆盖 ===== */
+  --el-color-primary:         #6B9DC8;
+  --el-color-primary-light-3: #5B8DB8;
+  --el-color-primary-light-5: #4A7A9F;
+  --el-color-primary-light-7: #3D6A8F;
+  --el-color-primary-light-9: rgba(107, 157, 200, 0.15);
+  --el-color-primary-dark-2:  #7AACE0;
+  --el-bg-color:              #161B22;
+  --el-bg-color-page:         #0D1117;
+  --el-text-color-primary:    #F0F6FC;
+  --el-text-color-regular:    #C9D1D9;
+  --el-border-color:          #30363D;
+  --el-fill-color-light:      #1C2128;
+  --el-mask-color:            rgba(0, 0, 0, 0.7);
 }

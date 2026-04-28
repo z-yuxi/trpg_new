@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { api } from '../../utils/api';
@@ -192,7 +192,7 @@ watch(() => props.campaignId, () => {
   font-size: var(--text-xl, 20px);
   font-weight: 700;
   font-family: var(--font-mono);
-  color: var(--color-accent, #3b82f6);
+  color: var(--color-accent, #5B8DB8);
 }
 
 /* Section */
@@ -216,7 +216,7 @@ watch(() => props.campaignId, () => {
   margin: 0;
 }
 .section-count {
-  background: var(--color-error, #ef4444);
+  background: var(--color-error, #B85450);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -232,7 +232,7 @@ watch(() => props.campaignId, () => {
   margin-left: auto;
   border: none;
   background: none;
-  color: var(--color-accent, #3b82f6);
+  color: var(--color-accent, #5B8DB8);
   cursor: pointer;
   font-size: var(--text-sm);
   padding: 2px 6px;
@@ -284,7 +284,7 @@ watch(() => props.campaignId, () => {
 }
 .move-char { font-weight: 600; color: var(--color-text-primary); }
 .move-arrow { color: var(--color-text-muted); }
-.move-scene { color: var(--color-accent, #3b82f6); }
+.move-scene { color: var(--color-accent, #5B8DB8); }
 .move-time { margin-left: auto; font-size: var(--text-xs); font-family: var(--font-mono); color: var(--color-text-muted); }
 .move-actions {
   display: flex;
@@ -315,11 +315,11 @@ watch(() => props.campaignId, () => {
   font-weight: 500;
   transition: filter var(--transition-fast);
 }
-.btn-approve { background: var(--color-success, #22c55e); color: #fff; }
+.btn-approve { background: var(--color-success, #6B8E6B); color: #fff; }
 .btn-approve:hover { filter: brightness(1.1); }
 .btn-reject { background: var(--color-page-bg); color: var(--color-text-secondary); border: 1px solid var(--color-card-border); }
-.btn-reject:hover { color: var(--color-error, #ef4444); border-color: var(--color-error, #ef4444); }
-.btn-danger-sm { background: var(--color-error, #ef4444); color: #fff; }
+.btn-reject:hover { color: var(--color-error, #B85450); border-color: var(--color-error, #B85450); }
+.btn-danger-sm { background: var(--color-error, #B85450); color: #fff; }
 .btn-danger-sm:hover { filter: brightness(1.1); }
 .btn-ghost-sm { background: none; color: var(--color-text-secondary); border: 1px solid var(--color-card-border); }
 .btn-ghost-sm:hover { background: var(--color-page-bg); }
@@ -342,7 +342,7 @@ watch(() => props.campaignId, () => {
 .player-avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
-  background: var(--color-accent, #3b82f6);
+  background: var(--color-accent, #5B8DB8);
   color: #fff;
   display: flex;
   align-items: center;

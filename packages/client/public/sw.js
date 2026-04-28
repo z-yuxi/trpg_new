@@ -23,11 +23,16 @@ async function cacheFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const response = await fetch(request);
-  if (request.method === 'GET' && response.ok) {
-    cache.put(request, response.clone());
+  try {
+    const response = await fetch(request);
+    if (request.method === 'GET' && response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const fallback = await cache.match('/');
+    return fallback ?? new Response('Offline', { status: 503 });
   }
-  return response;
 }
 
 // 安装：预缓存核心资源

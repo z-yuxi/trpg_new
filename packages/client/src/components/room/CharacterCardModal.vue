@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * CharacterCardModal.vue
  * 团内角色卡状态编辑弹窗
@@ -248,7 +248,7 @@ watch(() => props.visible, (v) => {
 }
 .modal-close:hover { color: var(--text-primary); }
 .modal-loading, .modal-error { padding: var(--space-6); text-align: center; color: var(--text-muted); }
-.modal-error { color: var(--color-danger, #dc2626); }
+.modal-error { color: var(--color-danger, #B85450); }
 .modal-body {
   flex: 1; overflow-y: auto;
   padding: var(--space-4);
@@ -308,6 +308,6 @@ watch(() => props.visible, (v) => {
   background: none; border: none; cursor: pointer;
   color: var(--text-muted); padding: 4px;
 }
-.remove-btn:hover { color: var(--color-danger, #dc2626); }
+.remove-btn:hover { color: var(--color-danger, #B85450); }
 .empty-hint { font-size: var(--text-sm); color: var(--text-muted); font-style: italic; }
 </style>

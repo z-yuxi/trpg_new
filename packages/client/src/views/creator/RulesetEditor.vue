@@ -986,12 +986,12 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .run-btn:hover:not(:disabled) { opacity: 0.85; }
 .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .preview-result { border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
-.result-ok { background: color-mix(in srgb, #22c55e 8%, var(--surface-base)); border: 1px solid color-mix(in srgb, #22c55e 30%, transparent); }
-.result-err { background: color-mix(in srgb, #ef4444 8%, var(--surface-base)); border: 1px solid color-mix(in srgb, #ef4444 30%, transparent); }
+.result-ok { background: color-mix(in srgb, #6B8E6B 8%, var(--surface-base)); border: 1px solid color-mix(in srgb, #6B8E6B 30%, transparent); }
+.result-err { background: color-mix(in srgb, #B85450 8%, var(--surface-base)); border: 1px solid color-mix(in srgb, #B85450 30%, transparent); }
 .result-summary { display: flex; align-items: center; gap: var(--space-2); }
 .result-badge { font-size: var(--text-xs); padding: 1px 8px; border-radius: 100px; font-weight: 600; }
-.badge-ok { background: color-mix(in srgb, #22c55e 20%, transparent); color: #16a34a; }
-.badge-err { background: color-mix(in srgb, #ef4444 20%, transparent); color: #dc2626; }
+.badge-ok { background: color-mix(in srgb, #6B8E6B 20%, transparent); color: #6B8E6B; }
+.badge-err { background: color-mix(in srgb, #B85450 20%, transparent); color: #B85450; }
 .result-text { font-size: var(--text-sm); font-weight: 500; color: var(--text-primary); }
 .dice-rolls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .dice-chip { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 2px 10px; font-size: var(--text-xs); font-family: var(--font-mono); }
@@ -1002,5 +1002,5 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .log-node { font-family: var(--font-mono); color: var(--color-accent); min-width: 80px; }
 .log-type { color: var(--text-muted); min-width: 120px; }
 .log-output { color: var(--text-primary); word-break: break-all; }
-.error-msg { font-size: var(--text-xs); color: #dc2626; font-family: var(--font-mono); }
+.error-msg { font-size: var(--text-xs); color: #B85450; font-family: var(--font-mono); }
 </style>

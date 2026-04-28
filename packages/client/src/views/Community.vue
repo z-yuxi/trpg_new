@@ -1,132 +1,166 @@
 ﻿<script setup lang="ts">
-import { useRoute } from 'vue-router';
+import { computed } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
+import TButton from '../components/base/TButton.vue';
+import SvgIcon from '../components/SvgIcon.vue';
 
 const route = useRoute();
+const router = useRouter();
 
-const BOARD_ITEMS = [
-  { key: 'rules',      label: '规则问答' },
-  { key: 'creation',   label: '模组创作' },
-  { key: 'experience', label: '游玩体验' },
-  { key: 'newbie',     label: '新人求助' },
-  { key: 'lounge',     label: '水区' },
-];
+const tabs = [
+  { key: 'recruit', label: '招募板', icon: 'icon-recruit', to: '/community/recruit' },
+  { key: 'discuss', label: '讨论区', icon: 'icon-message', to: '/community/forum/lounge' },
+  { key: 'qa', label: '规则问答', icon: 'icon-help-circle', to: '/community/forum/rules' },
+] as const;
 
-function isRecruitActive() {
-  return route.path.startsWith('/community/recruit') || route.path === '/community';
-}
-function isBoardActive(key: string) {
-  return route.params.board === key;
+const activeTab = computed(() => {
+  if (route.path.startsWith('/community/forum/rules')) return 'qa';
+  if (route.path.startsWith('/community/forum/')) return 'discuss';
+  if (route.path.startsWith('/community/recruit')) return 'recruit';
+  return 'recruit';
+});
+
+function navigateTab(target: (typeof tabs)[number]) {
+  if (route.path === target.to) return;
+  router.push(target.to);
 }
 </script>
 
 <template>
-  <div class="community-layout">
-    <!-- 左侧导航 -->
-    <aside class="community-sidebar">
-      <nav>
-        <div class="nav-section">
-          <div class="section-label">招募板</div>
-          <router-link to="/community/recruit" class="nav-link" :class="{ active: isRecruitActive() }">
-            招募板
-          </router-link>
-        </div>
+  <div class="community">
+    <!-- 社区 Banner（背景层） -->
+    <div class="community-banner">
+      <div class="banner-content">
+        <h1 class="banner-title">社区</h1>
+        <p class="banner-desc">找到你的冒险伙伴，分享你的故事</p>
+      </div>
+      <div class="banner-action">
+        <TButton type="primary" @click="router.push('/community/recruit')">
+          <SvgIcon name="icon-plus" :size="16" />
+          去招募板发布
+        </TButton>
+      </div>
+    </div>
 
-        <div class="nav-section">
-          <div class="section-label">讨论区</div>
-          <router-link
-            v-for="board in BOARD_ITEMS"
-            :key="board.key"
-            :to="`/community/forum/${board.key}`"
-            class="nav-link"
-            :class="{ active: isBoardActive(board.key) }"
-          >
-            {{ board.label }}
-          </router-link>
-        </div>
+    <!-- 一级导航 Tab（中景层） -->
+    <nav class="primary-tabs">
+      <button
+        v-for="tab in tabs"
+        :key="tab.key"
+        class="primary-tab"
+        :class="{ active: activeTab === tab.key }"
+        @click="navigateTab(tab)"
+      >
+        <SvgIcon :name="tab.icon" :size="16" />
+        {{ tab.label }}
+      </button>
+    </nav>
 
-        <div class="nav-section">
-          <router-link to="/community/activity" class="nav-link" active-class="active">
-            我的动态
-          </router-link>
-        </div>
-      </nav>
-    </aside>
-
-    <!-- 右侧内容区 -->
-    <div class="community-content">
-      <router-view />
+    <!-- 内容区（前景层） -->
+    <div class="tab-content">
+      <RouterView />
     </div>
   </div>
 </template>
 
 <style scoped>
-.community-layout {
-  display: flex;
-  min-height: calc(100vh - var(--navbar-height, 56px) - 56px);
-  max-width: 1200px;
+.community {
+  max-width: 860px;
   margin: 0 auto;
-  padding: var(--space-4);
-  gap: var(--space-5);
 }
 
-/* 左侧导航 */
-.community-sidebar {
-  width: 200px;
-  flex-shrink: 0;
-}
-
-nav {
-  position: sticky;
-  top: calc(var(--navbar-height, 56px) + var(--space-4));
+/* ===== 社区 Banner（背景层） ===== */
+.community-banner {
+  background: linear-gradient(135deg, var(--color-primary, #5B8DB8) 0%, var(--color-primary-active, #3D6A8F) 100%);
+  border-radius: var(--radius-xl, 12px);
+  padding: 24px;
+  margin-bottom: 20px;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
 }
 
-.nav-section {
+/* 装饰纹理 */
+.community-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.banner-title {
+  font-size: var(--text-xl, 20px);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 4px;
+}
+
+.banner-desc {
+  font-size: var(--text-sm, 14px);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.banner-action {
+  position: relative;
+  z-index: 1;
+}
+
+/* Banner 内按钮反色 */
+.banner-action :deep(.t-btn--primary) {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--color-primary, #5B8DB8);
+}
+.banner-action :deep(.t-btn--primary:hover) {
+  background: #FFFFFF;
+}
+
+/* ===== 一级导航 Tab（中景层） ===== */
+.primary-tabs {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--border-default);
-  margin-bottom: var(--space-3);
-}
-.nav-section:last-child { border-bottom: none; margin-bottom: 0; }
-
-.section-label {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0 var(--space-2);
-  margin-bottom: var(--space-1);
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-active, #E8ECF0);
+  border-radius: var(--radius-lg, 8px);
+  margin-bottom: 16px;
 }
 
-.nav-link {
-  display: block;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.nav-link:hover { background: var(--surface-hover); color: var(--text-primary); }
-.nav-link.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: var(--font-medium); }
-
-/* 右侧内容 */
-.community-content {
+.primary-tab {
   flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary, #667085);
+  font-size: var(--text-sm, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 响应式：手机折叠侧边栏 */
-@media (max-width: 768px) {
-  .community-layout { flex-direction: column; padding: var(--space-3); }
-  .community-sidebar { width: 100%; }
-  nav { position: static; flex-direction: row; flex-wrap: wrap; gap: var(--space-1); }
-  .nav-section { flex-direction: row; border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex-wrap: wrap; align-items: center; }
-  .section-label { display: none; }
+.primary-tab:hover:not(.active) {
+  color: var(--color-text-body, #344054);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.primary-tab.active {
+  background: var(--color-primary, #5B8DB8);
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(91, 141, 184, 0.3);
+}
+
+/* ===== 内容区 ===== */
+.tab-content {
+  min-height: 300px;
 }
 </style>
+

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="module-editor-page">
     <input
       ref="importInput"
@@ -520,8 +520,8 @@ function goBack() {
 .btn--primary:disabled { background: var(--color-disabled, #bdbdbd); cursor: not-allowed; }
 .btn--secondary { background: var(--color-hover, #f5f5f5); color: var(--color-text, #333); }
 .btn--secondary:hover { background: var(--color-border, #e0e0e0); }
-.btn--danger { background: var(--color-danger, #dc2626); color: #fff; }
-.btn--danger:hover { background: #b91c1c; }
+.btn--danger { background: var(--color-danger, #B85450); color: #fff; }
+.btn--danger:hover { background: #A04743; }
 .btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
 /* 布局 */

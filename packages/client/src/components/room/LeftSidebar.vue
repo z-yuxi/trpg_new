@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 import type { Scene, StoryTime } from '@trpg/shared';
@@ -340,7 +340,7 @@ function handleForceMove() {
   min-width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #dc2626;
+  background: #B85450;
   color: #fff;
   font-size: 11px;
   display: inline-flex;

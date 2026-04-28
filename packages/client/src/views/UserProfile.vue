@@ -299,7 +299,7 @@ onMounted(loadProfile);
 .work-card { background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--space-4); }
 .work-type { font-size: var(--text-xs); color: var(--text-muted); margin-bottom: 4px; }
 .work-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin-bottom: var(--space-2); }
-.work-status { font-size: var(--text-xs); padding: 1px 8px; border-radius: 100px; background: color-mix(in srgb, #22c55e 15%, transparent); color: #16a34a; }
+.work-status { font-size: var(--text-xs); padding: 1px 8px; border-radius: 100px; background: color-mix(in srgb, #6B8E6B 15%, transparent); color: #6B8E6B; }
 
 @media (max-width: 600px) {
   .profile-header { flex-direction: column; }
