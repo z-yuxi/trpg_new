@@ -133,7 +133,7 @@ describe('E2E - 招募系统主链路', () => {
     it('A6 可查看招募列表（未登录）', async () => {
       const res = await request.get('/api/recruitment');
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('items');
+      expect(res.body).toHaveProperty('data');
     });
 
     it('A7 帖子详情包含必要字段', async () => {
@@ -449,6 +449,6 @@ describe('E2E - 冒烟：基础端点', () => {
   it('招募列表支持分页参数', async () => {
     const res = await request.get('/api/recruitment?page=1&limit=5');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('items');
+    expect(res.body).toHaveProperty('data');
   });
 });

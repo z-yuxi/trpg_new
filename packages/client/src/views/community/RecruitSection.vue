@@ -265,7 +265,7 @@ onMounted(async () => {
                 :model-value="!!(postForm.metadata[field.name])"
                 @update:model-value="(value) => (postForm.metadata[field.name] = value)"
               />
-              <template v-else-if="field.type === 'range'">
+              <template v-else-if="field.type === 'number_range'">
                 <div class="range-row">
                   <ElInputNumber
                     :model-value="(postForm.metadata[`${field.name}_min`] as number | null | undefined) ?? null"

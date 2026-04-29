@@ -190,6 +190,14 @@ export class UserService {
     });
   }
 
+  /**
+   * 移除 password_hash 后返回安全用户对象（用于 API 响应）。
+   */
+  toSafeUser(user: User): Omit<User, 'password_hash'> {
+    const { password_hash: _omit, ...safe } = user;
+    return safe;
+  }
+
   private rowToUser(row: Record<string, unknown>): User {
     return {
       id: row['id'] as string,

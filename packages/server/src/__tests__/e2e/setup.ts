@@ -51,6 +51,10 @@ const rows: Record<string, any[]> = {
   campaign_members: [],
   scenes: [],
   chat_messages: [],
+  recruitment_posts: [],
+  recruitment_applications: [],
+  campaign_reviews: [],
+  user_reputation: [],
 };
 
 function makeBuilder(tableName: string): any {
@@ -69,10 +73,25 @@ function makeBuilder(tableName: string): any {
 
   builder.where = (cond: any, val?: any) => {
     if (typeof cond === 'string') builder._where[col(cond)] = val;
+    else if (typeof cond === 'function') { /* subquery builder — no-op in mock */ }
     else Object.entries(cond).forEach(([k, v]) => { builder._where[col(k)] = v; });
     return builder;
   };
   builder.whereIn = (col: string, vals: any[]) => { builder._whereIn = { col, vals }; return builder; };
+  // ─── Stubs: operadores não suportados retornam builder sem modificar _where ───
+  builder.whereRaw = () => builder;
+  builder.whereNull = () => builder;
+  builder.whereNotNull = () => builder;
+  builder.whereNot = () => builder;
+  builder.orWhere = () => builder;
+  builder.orWhereNull = () => builder;
+  builder.having = () => builder;
+  builder.distinct = () => builder;
+  builder.groupBy = () => builder;
+  builder.modify = (fn: (b: any) => void) => { fn(builder); return builder; };
+  builder.onConflict = () => ({ merge: () => builder, ignore: () => builder });
+  builder.andOn = () => builder;
+  builder.on = () => builder;
   builder.select = () => builder;
   builder.first = () => { builder._first = true; return builder; };
   builder.limit = () => builder;

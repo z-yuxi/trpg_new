@@ -6,6 +6,7 @@
     "build": "tsc",
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
+    "test:accept": "vitest run --config vitest.acceptance.config.ts",
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {

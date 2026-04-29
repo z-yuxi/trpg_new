@@ -25,7 +25,7 @@ const mockMessages: ILFMessage[] = [
     scene_id: 'scene-1',
     scene_name: '旅馆大堂',
     story_time: mockStoryTime,
-    speaker: 'KP',
+    speaker: 'KP', // terminology-ok — ILF 格式测试夹具，KP 是历史数据字段值
     type: 'narration',
     content: '大堂里弥漫着烟草的气味。',
   },

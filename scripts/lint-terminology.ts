@@ -19,12 +19,12 @@
 
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const ROOT = join(__dirname, '..');
+/**
+ * ROOT 取命令运行目录（pnpm scripts 从 workspace 根执行）。
+ * 避免使用 import.meta.url / __dirname，确保 tsx / ts-node / node 均可执行。
+ */
+const ROOT = process.cwd();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 禁止词汇列表（来源：附录 02 §二 术语词典）

@@ -7,7 +7,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "lint:terms": "tsx scripts/lint-terminology.ts"
+    "lint:terms": "tsx scripts/lint-terminology.ts",
+    "test:accept": "pnpm --filter @trpg/server test:accept"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

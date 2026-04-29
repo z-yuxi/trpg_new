@@ -28,8 +28,35 @@ jobs:
       - name: 运行术语守卫
         run: pnpm lint:terms
 
+  acceptance-gate:
+    name: 发布门禁（auth + 招募筛选 + 消息可见性）
+    runs-on: ubuntu-latest
+    env:
+      JWT_SECRET: ci_test_jwt_secret_not_for_production
+      DB_HOST: 127.0.0.1
+      DB_USER: trpg
+      DB_PASSWORD: trpg_password
+      DB_NAME: trpg_platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 运行验收套件（发布门禁）
+        run: pnpm test:accept
+
   unit-tests:
-    name: 单元测试（server + client + shared）
+    name: 全量单元测试（server + client + shared）
     runs-on: ubuntu-latest
     env:
       JWT_SECRET: ci_test_jwt_secret_not_for_production
