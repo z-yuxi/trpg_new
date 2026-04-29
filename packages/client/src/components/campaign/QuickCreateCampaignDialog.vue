@@ -40,7 +40,7 @@ interface ModuleOption {
 const props = withDefaults(
   defineProps<{
     visible: boolean;
-    /** 从资产库进入时预填 */
+    /** 从我的资产进入时预填 */
     prefillModuleId?: string | null;
     prefillRulesetId?: string | null;
     rulesets?: RulesetOption[];

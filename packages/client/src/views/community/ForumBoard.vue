@@ -82,7 +82,7 @@ async function submitPost() {
     showPostDialog.value = false;
     newTitle.value = '';
     newContent.value = '';
-    router.push(`/community/thread/${thread.id}`);
+    router.push(`/discuss/thread/${thread.id}`);
   } catch (e: any) {
     ElMessage.error(e?.message ?? '发帖失败');
   } finally {
@@ -105,7 +105,7 @@ function formatTime(iso: string | null) {
 }
 
 function goThread(id: string) {
-  router.push(`/community/thread/${id}`);
+  router.push(`/discuss/thread/${id}`);
 }
 
 function excerpt(content: string) {

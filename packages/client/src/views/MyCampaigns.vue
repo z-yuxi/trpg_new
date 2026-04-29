@@ -203,7 +203,7 @@ function copyCode(code: string) {
     </ElDialog>
 
     <!-- 加入团弹窗 -->
-    <ElDialog v-model="showJoinDialog" title="加入团" width="360px">
+    <ElDialog v-model="showJoinDialog" title="加入房间" width="360px">
       <ElInput v-model="joinCode" placeholder="输入 6 位房间代码" maxlength="6" style="font-family:var(--font-mono);letter-spacing:4px;text-align:center" />
       <template #footer>
         <TButton type="secondary" @click="showJoinDialog = false">取消</TButton>

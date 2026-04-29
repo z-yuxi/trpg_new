@@ -17,7 +17,7 @@ const routes = [
     children: [
       // 根路径：未登录显示首页，已登录跳探索（由 beforeEach 处理）
       { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页' } },
-      // 探索（原资产库）
+      // 探索
       { path: 'explore', name: 'Explore', component: () => import('../views/AssetLibrary.vue'), meta: { title: '探索' } },
       // 招募
       { path: 'recruit', name: 'Recruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募' } },

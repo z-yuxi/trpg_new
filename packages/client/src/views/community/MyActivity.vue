@@ -86,7 +86,7 @@ onMounted(fetchActivity);
         :items="threadTimelineItems"
         empty-title="暂无发帖记录"
         empty-description="发布第一篇帖子后，这里会显示你的创作轨迹。"
-        @open="(targetId) => router.push(`/community/thread/${targetId}`)"
+        @open="(targetId) => router.push(`/discuss/thread/${targetId}`)"
       />
     </template>
 
@@ -95,7 +95,7 @@ onMounted(fetchActivity);
         :items="postTimelineItems"
         empty-title="暂无回复记录"
         empty-description="参与一次讨论后，这里会记录你的互动内容。"
-        @open="(targetId) => router.push(`/community/thread/${targetId}`)"
+        @open="(targetId) => router.push(`/discuss/thread/${targetId}`)"
       />
     </template>
   </div>

@@ -32,7 +32,7 @@ onMounted(scrollToHash);
       <div class="step-index">01</div>
       <div class="step-body">
         <h2>创建或加入团</h2>
-        <p>先前往“我的团”创建自己的团，或通过社区招募帖加入正在招募的团。成团后，房间会出现在你的“我的团”中。</p>
+        <p>先前往「房间」创建自己的房间，或通过招募帖加入正在招募的团。成团后，房间会出现在「房间」列表中。</p>
         <div class="action-row">
           <button class="primary-btn" @click="router.push('/rooms')">前往房间</button>
           <button class="ghost-btn" @click="router.push('/login')">先登录账号</button>
@@ -44,7 +44,7 @@ onMounted(scrollToHash);
       <div class="step-index">02</div>
       <div class="step-body">
         <h2>浏览规则集和模组</h2>
-        <p>进入广场后，你可以先看公开模组与规则集。对新玩家来说，优先挑“入门”难度的内容更容易上手。</p>
+        <p>进入「探索」后，你可以先看公开模组与规则包。对新玩家来说，优先挑“入门”难度的内容更容易上手。</p>
         <div class="action-row">
           <button class="primary-btn" @click="router.push('/explore')">前往探索</button>
           <button class="ghost-btn" @click="router.push('/mine/characters')">准备角色卡</button>
