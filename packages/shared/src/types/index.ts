@@ -178,7 +178,16 @@ export interface SceneConnection {
 
 // ===== 招募帖 =====
 export type RecruitmentType = 'gm_recruit' | 'player_seek';
-export type RecruitmentStatus = 'open' | 'closed' | 'full';
+/** 招募帖生命周期状态（见产品设计 表8）
+ * draft      草稿，未发布
+ * open       招募中，有空位
+ * full       满员，仍在招募（可进候补）
+ * grouped    已成团，关联 campaign_id
+ * closed     GM手动关闭或截止时间到
+ * dissolved  房间解散后回写
+ * archived   30天后自动归档
+ */
+export type RecruitmentStatus = 'draft' | 'open' | 'full' | 'grouped' | 'closed' | 'dissolved' | 'archived';
 
 export interface RecruitmentPost {
   id: string;
@@ -198,7 +207,14 @@ export interface RecruitmentPost {
   created_at: Date;
 }
 
-export type RecruitmentApplicationStatus = 'pending' | 'approved' | 'rejected';
+/** 申请状态（见产品设计 表2）
+ * pending    已申请，待GM审核
+ * invited    GM已通过，等待玩家24h内确认
+ * confirmed  玩家已确认，已占席位
+ * waiting    候补队列
+ * rejected   申请被拒或超时未确认
+ */
+export type RecruitmentApplicationStatus = 'pending' | 'invited' | 'confirmed' | 'waiting' | 'rejected';
 
 export interface RecruitmentApplication {
   id: string;
@@ -207,6 +223,9 @@ export interface RecruitmentApplication {
   character_id: string | null;
   message: string;
   status: RecruitmentApplicationStatus;
+  reject_reason: string | null;
+  invited_expires_at: Date | null;
+  waiting_position: number | null;
   created_at: Date;
   updated_at: Date;
 }

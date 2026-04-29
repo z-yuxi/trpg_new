@@ -71,7 +71,9 @@ export class CampaignService {
     name: string;
     ruleset_id: string;
     gm_user_id: string;
-    module_id?: string;
+    module_id?: string | null;
+    is_listed_publicly?: boolean;
+    allow_ob?: boolean;
   }): Promise<Campaign> {
     const id = generateId();
     const room_code = await this.generateUniqueRoomCode();
@@ -87,8 +89,8 @@ export class CampaignService {
         assistant_gm_ids: JSON.stringify([]),
         global_story_time: JSON.stringify({ day: 1, hour: 8, minute: 0 }),
         status: 'preparing',
-        allow_ob: false,
-        is_listed_publicly: false,
+        allow_ob: params.allow_ob ?? false,
+        is_listed_publicly: params.is_listed_publicly ?? false,
         enable_trajectory_matrix: false,
         enable_grid_map: false,
         enable_scene_connections: false,

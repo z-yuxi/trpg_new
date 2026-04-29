@@ -1,13 +1,12 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
-import { RecruitmentService } from '../services/recruitment-service';
+import { recruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
 import { postCommentService } from '../services/post-comment-service';
 import { db } from '../db';
 
 const router: IRouter = Router();
-const recruitmentService = new RecruitmentService();
 
 const createSchema = z.object({
   title: z.string().min(1).max(50),
@@ -21,9 +20,9 @@ const createSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
+// 仅允许编辑内容字段；状态变更通过专用路由（publish/close/dissolve/group）
 const updateSchema = z.object({
   title: z.string().min(1).max(50).optional(),
-  status: z.enum(['open', 'closed', 'full']).optional(),
   module_name: z.string().max(100).optional().nullable(),
   player_count_max: z.number().int().min(1).max(20).optional(),
   schedule_text: z.string().max(255).optional().nullable(),
@@ -69,7 +68,7 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       tag: typeof req.query.tag === 'string' ? req.query.tag.trim() : undefined,
       type: req.query.type as 'gm_recruit' | 'player_seek' | undefined,
       ruleset_id: typeof req.query.ruleset_id === 'string' ? req.query.ruleset_id : undefined,
-      status: req.query.status as 'open' | 'full' | 'grouped' | 'closed' | undefined,
+      status: typeof req.query.status === 'string' ? (req.query.status as any) : undefined,
       poster_id: mine === 'posted' ? req.user!.id : undefined,
       applicant_user_id: mine === 'applied' ? req.user!.id : undefined,
     });
@@ -93,6 +92,55 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
   }
 });
 
+// POST /:id/publish — 发布草稿（draft → open）
+router.post('/:id/publish', authMiddleware, async (req, res) => {
+  try {
+    const post = await recruitmentService.publish(req.params.id, req.user!.id);
+    res.json(post);
+  } catch (err: any) {
+    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
+    res.status(status).json({ error: err?.message ?? 'Publish failed' });
+  }
+});
+
+// POST /:id/close — 手动关闭招募（open/full → closed）
+router.post('/:id/close', authMiddleware, async (req, res) => {
+  try {
+    const post = await recruitmentService.close(req.params.id, req.user!.id);
+    res.json(post);
+  } catch (err: any) {
+    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
+    res.status(status).json({ error: err?.message ?? 'Close failed' });
+  }
+});
+
+// POST /:id/dissolve — 解散团（grouped → dissolved）
+router.post('/:id/dissolve', authMiddleware, async (req, res) => {
+  try {
+    const post = await recruitmentService.dissolve(req.params.id, req.user!.id);
+    res.json(post);
+  } catch (err: any) {
+    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
+    res.status(status).json({ error: err?.message ?? 'Dissolve failed' });
+  }
+});
+
+// POST /applications/:applicationId/confirm — 玩家确认入团（invited → confirmed）
+// 必须注册在 /:id 之前，避免路由冲突
+router.post('/applications/:applicationId/confirm', authMiddleware, async (req, res) => {
+  try {
+    const application = await recruitmentService.confirmApplication({
+      application_id: req.params.applicationId,
+      applicant_user_id: req.user!.id,
+    });
+    res.json(application);
+  } catch (err: any) {
+    const status = err.message === '申请不存在' ? 404 : 400;
+    res.status(status).json({ error: err?.message ?? 'Confirm failed' });
+  }
+});
+
+// POST /:id/apply — 申请加入；?type=waiting 进入候补队列
 router.post('/:id/apply', authMiddleware, async (req, res) => {
   const schema = z.object({
     character_id: z.string().optional().nullable(),
@@ -104,12 +152,15 @@ router.post('/:id/apply', authMiddleware, async (req, res) => {
     return;
   }
 
+  const applyType = req.query.type === 'waiting' ? 'waiting' : 'normal';
+
   try {
     const application = await recruitmentService.createApplication({
       post_id: req.params.id,
       applicant_user_id: req.user!.id,
       character_id: parsed.data.character_id,
       message: parsed.data.message,
+      apply_type: applyType,
     });
 
     const post = await db('recruitment_posts').where({ id: req.params.id }).select('poster_id', 'title').first();
@@ -117,9 +168,9 @@ router.post('/:id/apply', authMiddleware, async (req, res) => {
       notificationService.createNotification({
         userId: post['poster_id'] as string,
         type: 'social',
-        title: '你的招募帖有新申请',
-        content: `《${post['title'] as string ?? '招募帖'}》收到了新的加入申请。`,
-        metadata: { post_id: req.params.id, application_id: application['id'] },
+        title: applyType === 'waiting' ? '你的招募帖有新候补申请' : '你的招募帖有新申请',
+        content: `《${post['title'] as string ?? '招募帖'}》收到了新的${applyType === 'waiting' ? '候补' : ''}申请。`,
+        metadata: { post_id: req.params.id, application_id: application.id },
       }).catch(() => {});
     }
 
@@ -160,8 +211,12 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /:id/applications/:applicationId/review — GM 审批申请
 router.post('/:id/applications/:applicationId/review', authMiddleware, async (req, res) => {
-  const schema = z.object({ action: z.enum(['approve', 'reject']) });
+  const schema = z.object({
+    action: z.enum(['approve', 'reject']),
+    reject_reason: z.string().max(500).optional().nullable(),
+  });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -174,30 +229,27 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, async (re
       application_id: req.params.applicationId,
       owner_id: req.user!.id,
       action: parsed.data.action,
+      reject_reason: parsed.data.reject_reason,
     });
-    // 通知申请者
-    const applicantUserId = (result as Record<string, unknown>)['applicant_user_id'] as string | undefined;
-    if (applicantUserId) {
-      const isApprove = parsed.data.action === 'approve';
-      notificationService.createNotification({
-        userId: applicantUserId,
-        type: 'audit',
-        title: isApprove ? '招募申请已通过' : '招募申请已拒绝',
-        content: isApprove
-          ? '你的招募申请已被GM批准，等待成团通知。'
-          : '你的招募申请未获批准，可继续寻找其他团。',
-        metadata: { post_id: req.params.id, application_id: req.params.applicationId },
-      }).catch(() => {/* 通知失败不影响主流程 */});
-    }
+    const isApprove = parsed.data.action === 'approve';
+    notificationService.createNotification({
+      userId: result.applicant_user_id,
+      type: 'audit',
+      title: isApprove ? '招募申请已通过，请确认入团' : '招募申请已拒绝',
+      content: isApprove
+        ? '你的招募申请已被GM批准，请在24小时内点击"确认入团"，否则将自动失效。'
+        : `你的招募申请未获批准。${parsed.data.reject_reason ? `原因：${parsed.data.reject_reason}` : ''}`,
+      metadata: { post_id: req.params.id, application_id: req.params.applicationId },
+    }).catch(() => {});
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Review failed' });
   }
 });
 
-router.post('/:id/form-group', authMiddleware, async (req, res) => {
+// POST /:id/group — GM 发起成团（confirmed 玩家 → 创建房间）
+router.post('/:id/group', authMiddleware, async (req, res) => {
   const schema = z.object({
-    selected_application_ids: z.array(z.string()).min(1),
     module_name: z.string().max(100).optional().nullable(),
   });
   const parsed = schema.safeParse(req.body);
@@ -210,9 +262,23 @@ router.post('/:id/form-group', authMiddleware, async (req, res) => {
     const result = await recruitmentService.formGroup({
       post_id: req.params.id,
       owner_id: req.user!.id,
-      selected_application_ids: parsed.data.selected_application_ids,
       module_name: parsed.data.module_name,
     });
+    // 通知已确认玩家
+    const confirmedApps = await db('recruitment_applications')
+      .where({ post_id: req.params.id, status: 'confirmed' })
+      .select('applicant_user_id') as Array<Record<string, unknown>>;
+    const postRow = await db('recruitment_posts').where({ id: req.params.id }).select('title').first() as Record<string, unknown> | undefined;
+    const title = postRow?.['title'] as string ?? '招募帖';
+    for (const app of confirmedApps) {
+      notificationService.createNotification({
+        userId: app['applicant_user_id'] as string,
+        type: 'audit',
+        title: '你已成功加入团！',
+        content: `《${title}》已成团，快去我的团查看吧。`,
+        metadata: { campaign_id: result.campaign_id, post_id: req.params.id },
+      }).catch(() => {});
+    }
     res.json(result);
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Group formation failed' });

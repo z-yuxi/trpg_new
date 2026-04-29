@@ -57,9 +57,14 @@ async function ensureCampaignMember(
 }
 
 const createSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(128),
   ruleset_id: z.string().min(1),
-  module_id: z.string().optional(),
+  /** 来自模组资产入口时传入；规则包入口时留空（固定 null） */
+  module_id: z.string().optional().nullable(),
+  /** 是否公开招募，默认 false（私密团） */
+  is_listed_publicly: z.boolean().optional(),
+  /** 是否允许观战，默认 false */
+  allow_ob: z.boolean().optional(),
 });
 
 const sceneObPermissionSchema = z.object({
@@ -121,7 +126,14 @@ router.post('/', async (req, res) => {
     return;
   }
   try {
-    const campaign = await campaignService.create({ ...parsed.data, gm_user_id: req.user!.id });
+    const campaign = await campaignService.create({
+      name: parsed.data.name,
+      ruleset_id: parsed.data.ruleset_id,
+      module_id: parsed.data.module_id ?? undefined,
+      gm_user_id: req.user!.id,
+      is_listed_publicly: parsed.data.is_listed_publicly,
+      allow_ob: parsed.data.allow_ob,
+    });
     res.status(201).json(campaign);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Create failed' });

@@ -1,0 +1,122 @@
+本附录定义 AI 在安全工程中可以独立完成的任务范围、输出标准、以及与人类安全专家的协作接口。
+AI 应严格遵守本附录中的“强制输出格式”和“不得触碰的红线”。
+
+一、AI 可独立完成的安全任务清单
+以下任务不需要人工实时介入，AI 可直接生成代码、配置或测试脚本。
+
+任务类别	具体内容	输出格式	验收标准
+CI 安全扫描配置	依赖漏洞扫描、禁用库检查、Secret 检测、镜像扫描的 CI YAML	YAML	正确集成到 GitHub Actions/GitLab CI，能阻断高危漏洞的合并
+API 越权测试脚本	基于 OpenAPI 生成测试集合，覆盖未登录、普通用户越权、水平越权	Postman JSON / Newman JS	所有测试用例通过率为 0 或返回预期错误码
+Prometheus 告警规则	基于文档指标生成告警阈值	YAML	导入 Prometheus 后无语法错误，能模拟触发
+Nginx/Ingress WAF 配置	ModSecurity Core Rule Set (Paranoia Level 1) + 自定义规则（防路径遍历、防 SQL 注入）	ConfigMap / 配置文件	通过 OWASP ZAP 的主动扫描，高危项清零
+安全响应预案	常见攻击类型的应急流程、日志查询语句、止血操作	Markdown	兼职安全顾问评审通过
+日志分析查询	用于 Loki / ELK 的 LogQL / KQL 查询（如失败登录、异常高频请求）	查询语句	能正确返回攻击痕迹
+代码安全加固	扫描并修复 v-html 未过滤、弱 token 存储、硬编码 secret	Git PR（含 diff）	ESLint 规则通过，无漏报
+AI 输出时必须包含：
+
+文件路径
+
+使用说明（如何集成）
+
+预期效果（如何验证）
+
+二、AI 不得擅自处理的安全工作（必须等待人工确认）
+以下情况 AI 应输出 // ASK: ... 并停止生成，等待人类安全专家反馈。
+
+业务逻辑漏洞：例如“成团后玩家退出，招募帖重新 open 时，原候补玩家应自动转正”是否合理？涉及状态机交叉。
+
+合规相关问题：涉及 GDPR、个人信息保护法、未成年人隐私的处理方式。
+
+生产环境配置变更：如修改 CORS 策略、关闭 CSRF 保护、降低限流阈值。
+
+权限边界设计：当文档未明确定义“A 角色是否能查看 B 角色的私密消息”时。
+
+输出示例：
+
+markdown
+// ASK: 文档中未定义「观战者是否可在公共场发言」。当前默认禁止。请确认。
+三、与外部安全专家的协作接口
+当 AI 需要外部专家介入时，应生成一份标准化工单，包含：
+
+yaml
+title: 需要人工安全审计 - [模块名称]
+severity: high | medium | low
+description: |
+  问题描述（引用文档章节、代码位置）
+  已尝试的 AI 分析结论（如有）
+  需要专家确认的具体问题
+attachments:
+  - 相关代码文件路径
+  - 复现步骤（如可复现）
+expected_deliverable: 安全审计报告 / 修复建议 / 威胁模型更新
+AI 应将此工单输出为 Markdown 文件，存入 docs/security/tickets/ 目录。
+
+四、AI 生成安全配置时的强制基线
+无论任务要求如何，AI 生成的安全配置必须满足以下最低标准：
+
+配置项	强制值
+Cookie Secure 标志	true（生产环境）
+Cookie HttpOnly	true（所有 token）
+Cookie SameSite	Lax（或 Strict 如不涉及跨站）
+响应头 X-Content-Type-Options	nosniff
+响应头 X-Frame-Options	DENY
+响应头 Content-Security-Policy	default-src 'self'（可放宽到 CDN，但不允许 unsafe-inline）
+TLS 版本	≥ 1.2
+敏感信息（密码、secret）	禁止硬编码，必须从环境变量或 secret 管理服务读取
+违反上述任何一条，AI 必须输出 // SECURITY_ERROR 并停止生成。
+
+五、AI 生成安全测试用例的完整性要求
+针对每个 API 接口，AI 生成的安全测试集必须至少包含：
+
+无认证访问 → 预期 401
+
+凭证失效（过期 token / 错误 token）→ 预期 401
+
+普通用户访问 GM 接口 → 预期 403
+
+普通用户访问他人数据（如尝试 GET /recruitment?poster_id=其他用户）→ 数据列表不应包含他人私有数据
+
+参数篡改：
+
+修改 campaign_id 为不存在的 ID → 预期 404 或 403
+
+修改 player_count_max 为超范围值（如 100）→ 预期 400
+
+幂等键重复提交 → 第二次请求应返回 200 且数据不重复
+
+AI 应使用 supertest 或 playwright 生成可执行代码，而不仅仅是文档。
+
+六、AI 可以自主使用的安全工具（无需审批）
+以下开源工具 AI 可以直接在代码或 CI 配置中调用：
+
+SAST：Semgrep, ESLint (security plugin), SonarJS
+
+DAST：ZAP (baseline scan), Nuclei (template scan)
+
+SCA：npm audit, Snyk (CLI)
+
+Secret scanning：trufflehog, gitleaks
+
+Container scanning：Trivy, Grype
+
+AI 应使用最新稳定版本，并在注释中注明使用的工具版本号。
+
+七、AI 安全检查清单（每次生成代码后自检）
+AI 在输出任何代码（特别是后端 API、前端表单、数据库操作）之前，必须逐项确认：
+
+是否对所有用户输入（URL 参数、JSON body、FormData）做了类型/范围校验？
+
+是否对数据库查询参数使用了参数化查询（或 ORM 自动转义）？无字符串拼接 SQL？
+
+是否错误响应中返回了堆栈信息（禁止）？生产环境应关闭 NODE_ENV=production。
+
+是否使用了不安全的随机数生成？掷骰必须用 crypto.randomInt，而非 Math.random。
+
+是否在日志中记录了敏感信息（密码、token、手机号）？应该脱敏或禁止。
+
+是否对文件上传做了类型、大小、内容校验（防 webshell）？
+
+是否限制了每个用户/IP 的请求频率（至少登录接口、发帖接口）？
+
+如果任何一项未通过，AI 必须主动补充修复代码，并在注释中标注 // Fixed: ...
+
