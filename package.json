@@ -6,10 +6,12 @@
     "dev:client": "pnpm --filter @trpg/client dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "lint:terms": "tsx scripts/lint-terminology.ts"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=20.0.0",

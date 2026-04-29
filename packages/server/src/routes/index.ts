@@ -16,6 +16,7 @@ import gmNotesRoutes from './gm-notes';
 import metricsRoutes from './metrics';
 import membershipRoutes from './membership';
 import experimentRoutes from './experiments';
+import reviewRoutes from './reviews';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -69,5 +70,6 @@ router.use('/campaigns', gmNotesRoutes);
 router.use('/metrics', metricsRoutes);
 router.use('/membership', membershipRoutes);
 router.use('/experiments', experimentRoutes);
+router.use('/', reviewRoutes);
 
 export default router;

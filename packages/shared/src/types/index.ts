@@ -325,6 +325,35 @@ export function isActiveApplication(status: RecruitmentApplicationStatus): boole
   return status === 'pending' || status === 'invited' || status === 'waiting';
 }
 
+// ===== 评价与信誉 =====
+
+/** 跑团结束后 GM↔玩家双向评价 */
+export interface CampaignReview {
+  id: string;
+  campaign_id: string;
+  reviewer_id: string;
+  reviewee_id: string;
+  reviewer_role: 'gm' | 'player';
+  /** 星级 1~5 */
+  rating: number;
+  comment: string | null;
+  created_at: Date;
+}
+
+/** 用户信誉汇总（滚动均值） */
+export interface ReputationScore {
+  user_id: string;
+  /** 所有收到评价的平均星级（保留两位小数） */
+  avg_rating: number;
+  /** 总收到评价数 */
+  total_reviews: number;
+  /** 作为 GM 收到的评价数 */
+  gm_reviews: number;
+  /** 作为玩家收到的评价数 */
+  player_reviews: number;
+  updated_at: Date;
+}
+
 // ===== 规则集 =====
 export type RulesetStatus = 'draft' | 'reviewing' | 'published' | 'deprecated';
 

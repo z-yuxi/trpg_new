@@ -188,3 +188,66 @@ describe('性能基准 - 招募帖创建写入', () => {
     expect(p99).toBeLessThan(800);
   }, 30_000);
 });
+
+// ─── 新增：Schedule 筛选性能（任务 D） ────────────────────────────────────────
+
+describe('性能基准 - schedule_weekday / schedule_time_slot 筛选', () => {
+  it('带时间段筛选的招募列表 P99 < 500ms', async () => {
+    // 热身
+    for (let i = 0; i < 3; i++) {
+      await request.get('/api/recruitment?schedule_weekday=sat&schedule_time_slot=evening');
+    }
+    const { p99, errRate } = await measureConcurrent(20, () =>
+      request.get('/api/recruitment?schedule_weekday=sat&schedule_time_slot=evening'),
+    );
+    console.log(`  [时段筛选列表] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
+    expect(errRate).toBeLessThan(0.01);
+    expect(p99).toBeLessThan(500);
+  });
+
+  it('带最少席位筛选的招募列表 P99 < 500ms', async () => {
+    const { p99, errRate } = await measureConcurrent(20, () =>
+      request.get('/api/recruitment?min_seats=2'),
+    );
+    console.log(`  [席位筛选列表] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
+    expect(errRate).toBeLessThan(0.01);
+    expect(p99).toBeLessThan(500);
+  });
+
+  it('组合筛选（weekday + time_slot + min_seats）P99 < 600ms', async () => {
+    const { p99, errRate } = await measureConcurrent(20, () =>
+      request.get('/api/recruitment?schedule_weekday=sat&schedule_time_slot=evening&min_seats=1'),
+    );
+    console.log(`  [组合筛选] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
+    expect(errRate).toBeLessThan(0.01);
+    expect(p99).toBeLessThan(600);
+  });
+});
+
+// ─── 新增：消息查询（history_visibility=none）性能 ─────────────────────────────
+
+describe('性能基准 - 消息时段过滤 (history_visibility=none EXISTS 子查询)', () => {
+  /**
+   * 由于 E2E 环境使用 in-memory mock DB，无法直接测试真实 SQL EXISTS 子查询。
+   * 此处验证接口层面的响应时间，确保路由层不引入额外阻塞。
+   *
+   * 真实 DB 性能由 CI 环境中的集成测试或手工 EXPLAIN 验证：
+   *   EXPLAIN SELECT ... WHERE EXISTS (SELECT 1 FROM scene_participations
+   *     WHERE character_id IN (...) AND scene_id = ? AND joined_at <= ? AND ...)
+   * 预期：Using index (idx_sp_char_scene_joined)
+   */
+  it('消息历史接口（含场景 ID 参数）20并发 P99 < 400ms', async () => {
+    if (!gmToken) return;
+    const CONCURRENCY = 20;
+    // 用一个不存在的 campaignId 快速测量路由层开销
+    const { p99, errRate } = await measureConcurrent(CONCURRENCY, () =>
+      request
+        .get('/api/campaigns/perf-test-no-exist/scenes/scene-000/messages?limit=50')
+        .set('Authorization', 'Bearer ' + gmToken),
+    );
+    console.log(`  [消息历史接口] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
+    // 接口应快速返回 404（路由层）而非挂起
+    expect(p99).toBeLessThan(400);
+  });
+});
+
