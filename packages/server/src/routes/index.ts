@@ -17,6 +17,7 @@ import metricsRoutes from './metrics';
 import membershipRoutes from './membership';
 import experimentRoutes from './experiments';
 import reviewRoutes from './reviews';
+import adminReputationRoutes from './admin-reputation';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -58,6 +59,7 @@ router.use('/users', userRoutes);
 // reviewRoutes 必须在 campaignRoutes 之前注册，避免被 campaignRoutes 的 authMiddleware 拦截
 router.use('/', reviewRoutes);
 router.use('/campaigns', campaignRoutes);
+router.use('/admin', adminReputationRoutes);
 router.use('/characters', characterRoutes);
 router.use('/rulesets', rulesetRoutes);
 router.use('/recruitment', recruitmentRoutes);

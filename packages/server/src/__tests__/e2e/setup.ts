@@ -41,11 +41,12 @@ vi.mock('../../db/redis', () => ({
     session: (id: string) => 'session:' + id,
     sceneMessages: (id: string) => 'scene:' + id + ':messages',
     userOnline: (id: string) => 'user:' + id + ':online',
+    messageBuffer: (id: string) => 'campaign:' + id + ':messages',
   },
 }));
 
 /** 内存数据库存储（跨所有 builder 共享）*/
-const rows: Record<string, any[]> = {
+export const rows: Record<string, any[]> = {
   users: [],
   campaigns: [],
   campaign_members: [],
@@ -55,6 +56,13 @@ const rows: Record<string, any[]> = {
   recruitment_applications: [],
   campaign_reviews: [],
   user_reputation: [],
+  reputation_audit_log: [],
+  review_appeals: [],
+  scheduled_moves: [],
+  character_scene_states: [],
+  character_sheets: [],
+  scene_participations: [],
+  position_history: [],
 };
 
 function makeBuilder(tableName: string): any {
@@ -99,12 +107,26 @@ function makeBuilder(tableName: string): any {
   builder.orderBy = () => builder;
   builder.join = () => builder;
   builder.leftJoin = () => builder;
-  builder.max = (expr: string) => { builder._maxCol = expr; return builder; };
+  builder.max = (expr: string | Record<string, string>) => {
+    if (typeof expr === 'object') {
+      // e.g. { max_pos: 'waiting_position' } → store as 'waiting_position as max_pos'
+      const [alias, col] = Object.entries(expr)[0];
+      builder._maxCol = `${col} as ${alias}`;
+    } else {
+      builder._maxCol = expr;
+    }
+    return builder;
+  };
   builder.count = (_expr?: string) => { builder._countMode = true; return builder; };
   builder.clone = () => { const c = makeBuilder(table); Object.assign(c._where, builder._where); return c; };
   builder.union = (_other: any) => builder;
   builder.andWhereNot = (_key: string, _val: any) => builder;
   builder.forUpdate = () => builder;
+  builder.decrement = (_col: string, _n: number) => ({
+    where: () => builder,
+    then: (resolve: (v: any) => any) => { resolve(0); },
+    catch: () => builder,
+  });
 
   builder.insert = async (data: any) => {
     if (!rows[table]) rows[table] = [];
@@ -151,8 +173,20 @@ function makeBuilder(tableName: string): any {
       return builder._first ? result : [result];
     }
     if (builder._maxCol) {
-      const colName = (builder._maxCol as string).split(' as ')[1] ?? builder._maxCol;
-      const maxVal = (rows[table] ?? []).reduce((m: number, r: any) => Math.max(m, r.uid ?? 0), 0);
+      // _maxCol may be set via .max('col as alias') or .max({ alias: 'col' })
+      // We stored the raw expression in _maxCol; extract real column name
+      const rawExpr = builder._maxCol as string;
+      const colName = rawExpr.includes(' as ') ? rawExpr.split(' as ')[1].trim() : rawExpr;
+      const realCol = rawExpr.includes(' as ') ? rawExpr.split(' as ')[0].trim() : rawExpr;
+      const filtered = (rows[table] ?? []).filter((r) =>
+        Object.entries(builder._where).every(([k, v]) => r[k] === v)
+      );
+      const maxVal = filtered.length > 0
+        ? filtered.reduce((m: number, r: any) => {
+            const v = Number(r[realCol] ?? 0);
+            return v > m ? v : m;
+          }, 0)
+        : null;
       const result = { [colName]: maxVal };
       return builder._first ? result : [result];
     }

@@ -20,7 +20,9 @@ export default defineConfig({
     include: [
       'src/__tests__/e2e/auth.e2e.test.ts',
       'src/__tests__/e2e/recruitment*.e2e.test.ts',
+      'src/__tests__/e2e/gm-move-boundary.e2e.test.ts',
       'src/__tests__/message-visibility.test.ts',
+      'src/__tests__/scene-ob-boundary.test.ts',
       'src/__tests__/contract/api-contract.test.ts',
     ],
     env: {

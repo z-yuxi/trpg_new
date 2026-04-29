@@ -1,5 +1,6 @@
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
+import { reputationAuditService } from './reputation-audit-service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -110,8 +111,26 @@ export class ReviewService {
         throw err;
       });
 
+    // 查询变动前的信誉快照（用于审计日志）
+    const oldReputation = await this.getReputation(reviewee_id);
+
     // 异步更新信誉汇总（不阻塞响应）
-    this._updateReputation(reviewee_id, reviewer_role).catch(() => {/* 忽略汇总失败，不影响评价写入 */});
+    this._updateReputation(reviewee_id, reviewer_role).then(async () => {
+      // 更新完成后查询新快照，写入审计日志
+      const newReputation = await this.getReputation(reviewee_id);
+      await reputationAuditService.logReputationChange({
+        review_id: id,
+        user_id: reviewee_id,
+        reviewer_id,
+        campaign_id,
+        reviewer_role,
+        rating,
+        old_avg_rating: oldReputation.avg_rating,
+        new_avg_rating: newReputation.avg_rating,
+        old_total_reviews: oldReputation.total_reviews,
+        new_total_reviews: newReputation.total_reviews,
+      });
+    }).catch(() => {/* 忽略汇总/审计失败，不影响评价写入 */});
 
     const row = await db('campaign_reviews').where({ id }).first();
     return this._rowToReview(row);

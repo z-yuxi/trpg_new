@@ -1,4 +1,4 @@
-# 附录 D：规则编辑器（原附录 F：规则引擎）
+﻿# 附录 D：规则编辑器（原附录 F：规则引擎）
 
 | 文档版本 | 日期         | 说明                                                |
 | ---- | ---------- | ------------------------------------------------- |
@@ -443,7 +443,7 @@ CREATE TABLE character_scene_states (
 
 ---
 
-## 12. 废弃概念清单（不再使用）
+## 11. 废弃概念清单（不再使用）
 
 以下概念来自早期工业级设计，在轻量架构中**不再出现**：
 
@@ -464,7 +464,7 @@ CREATE TABLE character_scene_states (
 
 ## 一、指令系统完善（三层模型）
 
-### 1.1 引擎指令解析器接口
+### 11.1 引擎指令解析器接口
 
 ```typescript
 // 规则包中的指令声明（扩展附录 D01 的 commands 字段）
@@ -521,7 +521,7 @@ interface CustomCommand {
 }
 ```
 
-### 1.2 平台预置指令库（引擎内置）
+### 11.2 平台预置指令库（引擎内置）
 
 ```yaml
 # 引擎内置默认配置（不可修改）
@@ -546,7 +546,7 @@ platform_command_defaults:
   # ... 其他预置指令
 ```
 
-### 1.3 引擎执行流程（支持规则包覆盖）
+### 11.3 引擎执行流程（支持规则包覆盖）
 
 ```
 用户输入指令（如 "ra 侦查"）
@@ -565,7 +565,7 @@ platform_command_defaults:
 执行节点图，返回结果
 ```
 
-### 1.4 前端助理台指令速查接口
+### 11.4 前端助理台指令速查接口
 
 ```typescript
 // GET /api/v1/rulesets/{ruleset_id}/commands
@@ -584,7 +584,7 @@ interface AvailableCommand {
 // 并应用 command_overrides 覆盖描述等。
 ```
 
-### 1.5 获取规则包的招募表单字段
+### 11.5 获取规则包的招募表单字段
 
 前端在 GM 选择规则包后，调用此接口获取动态表单配置。
 
@@ -607,7 +607,7 @@ interface AvailableCommand {
 
 ## 二、派生值实时计算（formula_eval 原子）
 
-### 2.1 新增原子节点
+### 11.6 新增原子节点
 
 ```yaml
 - id: "formula_eval"
@@ -623,13 +623,13 @@ interface AvailableCommand {
       type: "number"
 ```
 
-### 2.2 引擎实现
+### 11.7 引擎实现
 
 - 使用安全表达式解析库（如 `expr-eval` 或 `mathjs`），禁止 `eval`。
 - 变量名从 inputs.variables 中读取，支持嵌套（如 `derived.dex_mod`）。
 - 错误处理：表达式非法或变量缺失时返回 `null`，并记录错误日志。
 
-### 2.3 角色卡编辑器集成
+### 11.8 角色卡编辑器集成
 
 前端在用户修改基础属性后，调用引擎执行 `formula_eval` 节点（通过 `/api/v1/engine/evaluate` 接口），实时刷新派生值显示。
 
@@ -650,7 +650,7 @@ POST /api/v1/engine/evaluate
 
 ## 三、职业解析器（occupation_apply + level_up）
 
-### 3.1 职业模板数据结构（扩展附录 E）
+### 11.9 职业模板数据结构（扩展附录 E）
 
 ```typescript
 interface OccupationTemplate {
@@ -679,7 +679,7 @@ interface OccupationTemplate {
 }
 ```
 
-### 3.2 新增原子节点
+### 11.10 新增原子节点
 
 #### `occupation_apply`（创建角色卡时调用）
 
@@ -721,7 +721,7 @@ interface OccupationTemplate {
 3. 将特性 ID 列表写入角色卡的 `features` 字段。
 4. 应用属性加成（如增加力量值）。
 
-### 3.3 与角色卡系统的集成
+### 11.11 与角色卡系统的集成
 
 - 创建角色卡流程的“选择职业”步骤，前端调用 `occupation_apply` 预览效果，确认后保存。
 - 角色卡详情页的“升级”按钮，调用 `level_up` 并刷新界面。
@@ -731,7 +731,7 @@ interface OccupationTemplate {
 
 ## 四、动作调度器（回合制抽象原子）
 
-### 4.1 新增原子节点
+### 11.12 新增原子节点
 
 | 原子类型 | 功能 | 输入 | 输出 |
 |---------|------|------|------|
@@ -741,7 +741,7 @@ interface OccupationTemplate {
 | `get_turn_state` | 查询回合状态 | `campaign_id: string` | `turn_order: string[]`, `current_index: number`, `round_number: number` |
 | `on_turn_start` | 特殊钩子（系统自动触发） | `actor_id: string` | 执行规则包定义的子图 |
 
-### 4.2 回合状态存储
+### 11.13 回合状态存储
 
 引擎不持久化回合状态，但允许规则包将状态写入 `campaign_round_state` 表（业务层负责）。引擎提供原子节点读写该表的能力：
 
@@ -756,7 +756,7 @@ interface OccupationTemplate {
     - name: "turn_state"   # { turn_order, current_index, round_number }
 ```
 
-### 4.3 规则包使用示例（DND 战斗开始）
+### 11.14 规则包使用示例（DND 战斗开始）
 
 ```yaml
 # 在规则包的 custom_commands 中定义
@@ -780,7 +780,7 @@ connections:
   - from: "save_state.success" → to: "broadcast.message"
 ```
 
-### 4.4 引擎职责边界重申
+### 11.15 引擎职责边界重申
 
 - 引擎提供上述**抽象能力**，不内置任何具体规则（如“回合开始自动恢复动作点”）。
 - 规则包通过组合这些原子实现 DND 的附赠动作、COC 的追逐轮等。
@@ -790,7 +790,7 @@ connections:
 
 ## 五、节点图事务与错误处理
 
-### 5.1 事务语义
+### 11.16 事务语义
 
 每个节点执行时，若该节点有副作用（如 `resource_modify`、`db_update`），引擎应记录**补偿操作**。当后续节点失败时，根据 `on_error` 策略决定是否回滚。
 
@@ -804,7 +804,7 @@ interface NodeExecution {
 }
 ```
 
-### 5.2 规则包级错误策略
+### 11.17 规则包级错误策略
 
 在规则包 YAML 中可配置：
 
@@ -815,7 +815,7 @@ error_handling:
   on_node_timeout: "rollback"
 ```
 
-### 5.3 引擎实现要点
+### 11.18 引擎实现要点
 
 - 执行节点图前先进行**拓扑排序**并检测循环依赖。
 - 使用**执行栈**记录已完成节点的副作用，若失败则逆序调用补偿。
@@ -826,7 +826,7 @@ error_handling:
 
 ## 六、规则包热加载 API
 
-### 6.1 接口定义
+### 11.19 接口定义
 
 ```http
 POST /api/v1/rulesets/{ruleset_id}/reload
@@ -838,7 +838,7 @@ Content-Type: application/json
 }
 ```
 
-### 6.2 引擎行为
+### 11.20 引擎行为
 
 1. 从数据库重新加载规则包 YAML，解析 `atoms`、`connections`、`commands` 等。
 2. 校验新规则包的节点图无循环依赖，且所有引用的原子类型仍存在。
@@ -848,7 +848,7 @@ Content-Type: application/json
    - 若修改了节点图结构（如增加/删除节点），需通知房间内的 GM：“规则包已更新，部分进行中的检定可能使用旧规则，请手动刷新。”
 5. 记录热加载日志到 `ruleset_reload_logs` 表。
 
-### 6.3 安全限制
+### 11.21 安全限制
 
 - 仅规则包作者或平台管理员可调用。
 - 热加载频率限制：同一规则包 1 分钟内最多 5 次。
@@ -888,12 +888,12 @@ CREATE TABLE ruleset_reload_logs (
 
 ## 八、移动端适配边界（迁自附录 J）
 
-### 8.1 Recipe 编辑器移动端策略
+### 11.22 Recipe 编辑器移动端策略
 
 1. 移动端保留查看入口，仅支持只读查看已发布规则配方。
 2. 编辑控件统一隐藏，点击编辑入口统一提示“请在电脑上使用此功能”。
 3. 任何未在本附录声明的移动端编辑能力不得自行开放。
 
-### 8.2 与全局降级规则关系
+### 11.23 与全局降级规则关系
 
 本附录仅定义规则编辑器模块边界；通用降级原则、触摸规范、兼容性与验收指标统一遵循 A06，不在本附录重复维护。
