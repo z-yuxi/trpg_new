@@ -1,0 +1,443 @@
+openapi: '3.0.3'
+info:
+  title: 创作者收益 API
+  version: '1.0.0'
+  description: |
+    创作者收益系统：模组销售流水、收益汇总、提现申请、公示期异议与作者申诉。
+
+    挂载路径：/api/creator/*
+
+paths:
+  /api/creator/earnings/summary:
+    get:
+      summary: 收益汇总
+      description: 返回当前登录创作者的可用余额、历史收入、历史提现汇总。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 收益汇总对象
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EarningsSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/creator/earnings/sales:
+    get:
+      summary: 销售明细列表
+      description: 按时间倒序返回当前创作者的模组销售流水（分页）。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: 分页销售明细
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleSalePagedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/creator/earnings/withdrawals:
+    get:
+      summary: 提现申请列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: 分页提现申请
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalPagedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: 提交提现申请
+      description: |
+        提交提现申请。最低提现金额 100 元（10000 分）。
+        申请成功后，对应金额从可用余额中冻结，状态流转为 pending。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WithdrawalCreateRequest'
+      responses:
+        '201':
+          description: 提现申请已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalRequest'
+        '400':
+          description: 参数校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: 余额不足或低于最低提现门槛
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                insufficient:
+                  value: { error: 'insufficient_balance' }
+                minimum:
+                  value: { error: 'minimum_withdrawal_100_yuan' }
+
+  /api/creator/modules/{moduleId}/objections:
+    post:
+      summary: 提交公示期异议
+      description: 任意已登录用户均可在模组公示期内提交异议，由运营人员审核。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/moduleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectionRequest'
+      responses:
+        '201':
+          description: 异议已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleObjection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/creator/modules/{moduleId}/appeal:
+    post:
+      summary: 提交作者申诉
+      description: |
+        模组作者在模组处于 reviewing / public_notice / suspended 状态时，
+        可提交申诉请求运营复核。同一模组同一作者不得有两条 pending 状态的申诉。
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/moduleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectionRequest'
+      responses:
+        '201':
+          description: 申诉已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleObjection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: 非模组作者
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 模组不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: 状态不可申诉，或已有 pending 申诉
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    moduleId:
+      name: moduleId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: 未认证
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 权限不足（非创作者）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadRequest:
+      description: 请求参数不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    EarningsSummary:
+      type: object
+      required:
+        - user_id
+        - available_cents
+        - total_earned_cents
+        - total_withdrawn_cents
+        - updated_at
+      properties:
+        user_id:
+          type: string
+        available_cents:
+          type: integer
+          minimum: 0
+          description: 当前可提现余额（人民币分）
+        total_earned_cents:
+          type: integer
+          minimum: 0
+          description: 历史累计收入（人民币分）
+        total_withdrawn_cents:
+          type: integer
+          minimum: 0
+          description: 历史累计提现（人民币分）
+        updated_at:
+          type: string
+          format: date-time
+
+    ModuleSaleRecord:
+      type: object
+      required:
+        - id
+        - module_id
+        - buyer_user_id
+        - author_user_id
+        - price_cents
+        - platform_fee_pct
+        - author_amount_cents
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+        module_id:
+          type: string
+        module_name:
+          type: string
+        buyer_user_id:
+          type: string
+        author_user_id:
+          type: string
+        price_cents:
+          type: integer
+          minimum: 0
+        platform_fee_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        author_amount_cents:
+          type: integer
+          minimum: 0
+        payment_order_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, settled, refunded]
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ModuleSalePagedResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleSaleRecord'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    WithdrawalRequest:
+      type: object
+      required:
+        - id
+        - user_id
+        - amount_cents
+        - channel
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        amount_cents:
+          type: integer
+          minimum: 10000
+          description: 提现金额（人民币分），最低 10000（100 元）
+        channel:
+          type: string
+          enum: [alipay, wechat, bank]
+        account_info:
+          type: string
+          description: 收款账号（脱敏后）
+        status:
+          type: string
+          enum: [pending, processing, paid, rejected]
+        admin_note:
+          type: string
+          nullable: true
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    WithdrawalPagedResponse:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawalRequest'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    WithdrawalCreateRequest:
+      type: object
+      required: [amount_cents, channel, account_info]
+      properties:
+        amount_cents:
+          type: integer
+          minimum: 10000
+          description: 提现金额（人民币分）
+        channel:
+          type: string
+          enum: [alipay, wechat, bank]
+        account_info:
+          type: string
+          minLength: 2
+          maxLength: 256
+
+    ModuleObjection:
+      type: object
+      required:
+        - id
+        - module_id
+        - user_id
+        - type
+        - reason
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+        module_id:
+          type: string
+        user_id:
+          type: string
+        type:
+          type: string
+          enum: [objection, appeal]
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [pending, resolved, dismissed]
+        admin_reply:
+          type: string
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ObjectionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+          maxLength: 2000

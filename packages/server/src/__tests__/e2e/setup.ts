@@ -33,6 +33,7 @@ vi.mock('../../db/redis', () => ({
     hdel: vi.fn().mockResolvedValue(1),
     publish: vi.fn().mockResolvedValue(1),
     subscribe: vi.fn(),
+    ping: vi.fn().mockResolvedValue('PONG'),
     on: vi.fn(),
   },
   redisPub: { publish: vi.fn().mockResolvedValue(1) },
@@ -63,6 +64,18 @@ export const rows: Record<string, any[]> = {
   character_sheets: [],
   scene_participations: [],
   position_history: [],
+  // 模组 & 创作者经济系统
+  modules: [],
+  module_status_logs: [],
+  module_reports: [],
+  module_objections: [],
+  module_sales: [],
+  creator_earnings: [],
+  withdrawal_requests: [],
+  user_module_purchases: [],
+  // 规则集
+  rulesets: [],
+  ruleset_versions: [],
 };
 
 function makeBuilder(tableName: string): any {
@@ -91,8 +104,13 @@ function makeBuilder(tableName: string): any {
   builder.whereNull = () => builder;
   builder.whereNotNull = () => builder;
   builder.whereNot = () => builder;
+  builder.andWhere = () => builder;
   builder.orWhere = () => builder;
   builder.orWhereNull = () => builder;
+  builder.whereILike = () => builder;
+  builder.orWhereILike = () => builder;
+  builder.whereLike = () => builder;
+  builder.orWhereLike = () => builder;
   builder.having = () => builder;
   builder.distinct = () => builder;
   builder.groupBy = () => builder;

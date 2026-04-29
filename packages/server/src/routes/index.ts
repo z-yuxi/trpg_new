@@ -18,6 +18,7 @@ import membershipRoutes from './membership';
 import experimentRoutes from './experiments';
 import reviewRoutes from './reviews';
 import adminReputationRoutes from './admin-reputation';
+import creatorEarningsRoutes from './creator-earnings';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -74,5 +75,6 @@ router.use('/campaigns', gmNotesRoutes);
 router.use('/metrics', metricsRoutes);
 router.use('/membership', membershipRoutes);
 router.use('/experiments', experimentRoutes);
+router.use('/creator', creatorEarningsRoutes);
 
 export default router;
