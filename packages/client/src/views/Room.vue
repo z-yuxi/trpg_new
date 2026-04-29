@@ -431,6 +431,14 @@ onMounted(async () => {
 
     await loadRoomCharacters();
     if (!isGm.value) await fetchMyVirtualScenes();
+
+    // GM: 初始加载待审批移动申请数量（badge 徽章）
+    if (isGm.value) {
+      try {
+        const moves = await api.get<any[]>(`/campaigns/${campaignId}/moves?status=pending`);
+        pendingMoves.value = moves ?? [];
+      } catch { /* ignore */ }
+    }
   } catch {
     // ignore bootstrap errors
   }
@@ -458,7 +466,23 @@ onMounted(async () => {
     if (data.character_id === characterId.value) {
       switchScene(data.to_scene_id);
     }
+
+    // 移动执行后，从 pendingMoves 中移除（已被审批/执行）
+    if (isGm.value && data.move_id) {
+      pendingMoves.value = pendingMoves.value.filter((m) => m.id !== data.move_id);
+    }
   });
+
+  // GM: 监听新移动申请到达，更新 badge
+  if (isGm.value) {
+    const roomSocket = socketClient.getRoomSocket() as any;
+    roomSocket?.on?.('move_requested', (data: any) => {
+      if (data?.move) pendingMoves.value.push(data.move);
+    });
+    roomSocket?.on?.('move_cancelled', (data: any) => {
+      if (data?.move_id) pendingMoves.value = pendingMoves.value.filter((m) => m.id !== data.move_id);
+    });
+  }
 
   // 角色状态同步（HP/MP/SAN 等）
   (socketClient as any).on?.('character_state_sync', (data: {
