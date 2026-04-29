@@ -198,7 +198,7 @@ async function handleCardAction(event: Event, post: RecruitmentPostVM) {
     case 'viewReason':
     default:
       // 其余操作跳转详情页完成
-      router.push(`/community/${post.id}`);
+      router.push(`/recruit/${post.id}`);
   }
 }
 
