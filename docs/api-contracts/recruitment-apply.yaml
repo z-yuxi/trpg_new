@@ -1,0 +1,178 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 招募模块
+  version: 1.1.0
+  description: 申请加入招募帖、确认入团邀请。
+
+paths:
+  /api/v1/recruitment/{post_id}/apply:
+    post:
+      summary: 申请加入招募帖
+      operationId: applyRecruitment
+      tags:
+        - 招募
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyRecruitmentRequest'
+      responses:
+        '200':
+          description: 申请成功（含幂等重放）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyRecruitmentResponse'
+        '400':
+          description: 参数错误或业务校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授权
+        '403':
+          description: 权限不足
+        '409':
+          description: 状态冲突（重复申请、招募已结束、满员且未开启候补）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                recruitment_full_no_waiting:
+                  value:
+                    error_code: RECRUITMENT_FULL_NO_WAITING
+                    message: 招募已满员，且未开启候补
+                already_applied:
+                  value:
+                    error_code: ALREADY_APPLIED
+                    message: 你已申请过该招募帖
+        '429':
+          description: 频率限制
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/applications/{application_id}/confirm:
+    post:
+      summary: 确认入团邀请
+      operationId: confirmApplication
+      tags:
+        - 招募
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: application_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotent_key
+              properties:
+                idempotent_key:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: 确认成功（含幂等重放）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [confirmed]
+                  campaign_id:
+                    type: string
+                    description: 已关联房间时返回
+        '401':
+          description: 未授权
+        '403':
+          description: 非邀请目标用户或无权限
+        '409':
+          description: 状态冲突（已取消、已拒绝、已确认）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '410':
+          description: 邀请已过期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: INVITATION_EXPIRED
+                message: 邀请已超过24小时，请重新申请
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApplyRecruitmentRequest:
+      type: object
+      required:
+        - idempotent_key
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+        character_id:
+          type: string
+          description: 使用的角色卡 ID，求组帖可为空。
+        apply_type:
+          type: string
+          enum: [normal, waiting]
+          default: normal
+          description: waiting 仅在席位已满且允许候补时可用。
+    ApplyRecruitmentResponse:
+      type: object
+      required:
+        - application_id
+        - status
+      properties:
+        application_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, waiting]
+        waiting_position:
+          type: integer
+          minimum: 1
+          description: status=waiting 时返回。
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

@@ -113,6 +113,18 @@ pnpm --filter @trpg/shared build
 ---
 
 ## 6. 执行数据库迁移（最新修复版）
+步骤 1：重启正常的 MySQL 服务
+在管理员 PowerShell 里执行：
+powershell
+net start MySQL80
+✅ 成功提示：MySQL80 服务已成功启动。
+步骤 2：用 trpg 用户连接 MySQL（代替 root）
+打开普通 PowerShell（不用管理员），执行：
+powershell
+& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u trpg -h 127.0.0.1 -P 3306 -pTrpg@2024! trpg_platform
+✅ 成功：直接进入 MySQL 命令行（提示符变成 mysql>）；
+
+
 
 ```powershell
 pnpm --filter @trpg/server migrate

@@ -1,0 +1,191 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 招募模块
+  version: 1.1.0
+  description: 发布招募帖接口（GM 招募 / 玩家求组）。
+
+paths:
+  /api/v1/recruitment:
+    post:
+      summary: 发布招募帖
+      operationId: publishRecruitment
+      tags:
+        - 招募
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRecruitmentRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishRecruitmentResponse'
+        '200':
+          description: 幂等重放，返回首次成功结果
+          headers:
+            X-Idempotent-Replay:
+              description: 是否命中幂等重放
+              schema:
+                type: string
+                enum: ['true']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishRecruitmentResponse'
+        '400':
+          description: 参数错误或业务校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                module_required:
+                  value:
+                    error_code: MODULE_REQUIRED
+                    message: 当 module_status = 'selected' 时必须提供 module_id
+                    details:
+                      field: module_id
+                invalid_custom_field:
+                  value:
+                    error_code: INVALID_CUSTOM_FIELD
+                    message: 规则包专属字段 credit_rating_max 应为整数类型
+        '401':
+          description: 未登录或 Token 无效
+        '403':
+          description: 权限不足（如禁言、未完成实名）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 业务状态冲突（如标题重复策略触发）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 触发频率限制
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: RATE_LIMIT_EXCEEDED
+                message: 每小时最多发布 5 个招募帖，请稍后再试
+                retry_after: 1800
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PublishRecruitmentRequest:
+      type: object
+      required:
+        - idempotent_key
+        - title
+        - type
+        - ruleset_id
+        - player_count_max
+        - schedule_time
+        - frequency
+        - total_duration
+        - difficulty
+        - module_status
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+          description: 前端生成 UUID v4，24 小时内用于幂等重放。
+        title:
+          type: string
+          minLength: 1
+          maxLength: 128
+        type:
+          type: string
+          enum: [gm_recruit, player_seek]
+        ruleset_id:
+          type: string
+          pattern: '^[a-zA-Z0-9\-]+$'
+        module_id:
+          type: string
+          pattern: '^[a-zA-Z0-9\-]+$'
+          description: 仅当 module_status=selected 时必填。
+        player_count_max:
+          type: integer
+          minimum: 1
+          maximum: 20
+        schedule_time:
+          type: string
+          maxLength: 200
+        frequency:
+          type: string
+          enum: [weekly1, weekly2_3, flexible]
+        total_duration:
+          type: string
+          enum: [short, medium, long]
+        difficulty:
+          type: string
+          enum: [beginner, normal, hardcore]
+        allow_spectate:
+          type: boolean
+          default: false
+        has_secret_ho:
+          type: boolean
+          default: false
+        module_status:
+          type: string
+          enum: [selected, pending, none]
+        custom_rules:
+          type: object
+          additionalProperties: true
+          description: 规则包专属字段，按 recruitment-fields 定义校验。
+        description:
+          type: string
+          maxLength: 5000
+        publish_now:
+          type: boolean
+          default: true
+          description: 是否立即发布。false 时保存为草稿。
+    PublishRecruitmentResponse:
+      type: object
+      required:
+        - post_id
+        - status
+        - created_at
+      properties:
+        post_id:
+          type: string
+        status:
+          type: string
+          enum: [draft, open]
+        created_at:
+          type: string
+          format: date-time
+        module_name:
+          type: string
+          description: 服务端回填，仅用于展示。
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer
+          description: 建议重试秒数（仅限频控场景）。

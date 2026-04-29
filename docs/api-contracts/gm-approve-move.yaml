@@ -1,0 +1,184 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间
+  version: 1.1.0
+  description: GM 审批或拒绝移动申请（支持立即执行与预约执行）。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/moves/{move_id}/approve:
+    post:
+      summary: GM 审批移动申请
+      operationId: gmApproveMove
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: move_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveMoveRequest'
+      responses:
+        '200':
+          description: 审批成功（含幂等重放）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveMoveResponse'
+        '400':
+          description: 预约时间无效或目标场景不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                scene_not_active:
+                  value:
+                    error_code: SCENE_NOT_ACTIVE
+                    message: 目标场景已归档或隐藏，无法移动
+                invalid_story_time:
+                  value:
+                    error_code: INVALID_STORY_TIME
+                    message: 预约时间必须晚于当前全局剧情时间
+        '401':
+          description: 未授权
+        '403':
+          description: 非 GM 无权限审批
+        '409':
+          description: 状态冲突（申请已处理或不存在）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/campaigns/{campaign_id}/moves/{move_id}/reject:
+    post:
+      summary: GM 拒绝移动申请
+      operationId: gmRejectMove
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: move_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - idempotent_key
+              properties:
+                idempotent_key:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+                  maxLength: 200
+      responses:
+        '200':
+          description: 已拒绝（含幂等重放）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+        '401':
+          description: 未授权
+        '403':
+          description: 非 GM 无权限拒绝
+        '409':
+          description: 状态冲突（申请已处理或不存在）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      required: [day, hour, minute]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+    ApproveMoveRequest:
+      type: object
+      required: [idempotent_key]
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+        arrival_story_time:
+          allOf:
+            - $ref: '#/components/schemas/StoryTime'
+          nullable: true
+          description: 不传或为 null 表示立即执行。
+        notify_player:
+          type: boolean
+          default: true
+    ApproveMoveResponse:
+      type: object
+      required: [success, executed_immediately]
+      properties:
+        success:
+          type: boolean
+        executed_immediately:
+          type: boolean
+        scheduled_at:
+          allOf:
+            - $ref: '#/components/schemas/StoryTime'
+          nullable: true
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

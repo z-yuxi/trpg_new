@@ -1,0 +1,151 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间
+  version: 1.1.0
+  description: 拉取场景历史消息（按用户可见性裁剪）。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/scenes/{scene_id}/messages:
+    get:
+      summary: 拉取历史消息
+      operationId: listMessages
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: scene_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: before_id
+          in: query
+          required: false
+          description: 雪花 ID，用于向前翻页（获取 ID 小于此值的消息）。
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: message_types
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [narrative, dice, ooc, clue_card, scene_event, time_tag, announcement, system]
+          description: 不传则返回所有可见类型。
+      responses:
+        '200':
+          description: 消息列表（已按权限和时序可见性过滤）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMessagesResponse'
+        '401':
+          description: 未授权
+        '403':
+          description: 用户无权查看该场历史消息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: NO_PERMISSION_TO_SCENE_HISTORY
+                message: 你不在该私密场的参与者列表中，无法查看历史消息
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      properties:
+        day:
+          type: integer
+        hour:
+          type: integer
+        minute:
+          type: integer
+    Message:
+      type: object
+      required:
+        - id
+        - scene_id
+        - campaign_id
+        - sender_user_id
+        - content
+        - message_type
+        - created_at
+      properties:
+        id:
+          type: string
+          description: 雪花 ID。
+        scene_id:
+          type: string
+        campaign_id:
+          type: string
+        sender_user_id:
+          type: string
+        sender_character_id:
+          type: string
+        content:
+          type: string
+        message_type:
+          type: string
+          enum: [narrative, dice, ooc, clue_card, scene_event, time_tag, announcement, system]
+        story_time:
+          allOf:
+            - $ref: '#/components/schemas/StoryTime'
+          nullable: true
+        client_timestamp:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+    ListMessagesResponse:
+      type: object
+      required: [messages, has_more]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        has_more:
+          type: boolean
+        next_before_id:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

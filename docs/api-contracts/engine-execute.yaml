@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 规则引擎
+  version: 1.1.0
+  description: 执行规则检定（支持 runtime_modifiers 注入）。
+
+paths:
+  /api/v1/engine/execute:
+    post:
+      summary: 执行规则检定
+      operationId: executeRule
+      tags:
+        - 规则引擎
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRuleRequest'
+      responses:
+        '200':
+          description: 执行完成（成功或失败均返回结构化结果）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteRuleResponse'
+        '400':
+          description: 请求参数错误或规则包不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授权
+        '403':
+          description: 无执行权限
+        '422':
+          description: 指令语义错误（无法解析或参数不合法）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 频率限制
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ExecuteRuleRequest:
+      type: object
+      required:
+        - ruleset_id
+        - command
+        - params
+        - context
+      properties:
+        request_id:
+          type: string
+          format: uuid
+          description: 可选追踪 ID，用于链路排障。
+        ruleset_id:
+          type: string
+        command:
+          type: string
+          description: 指令名，如 ra。
+        raw_text:
+          type: string
+          description: 原始输入，用于日志溯源。
+        params:
+          type: object
+          additionalProperties: true
+          description: 解析后的参数，例如 {"skill":"侦查"}。
+        runtime_modifiers:
+          type: object
+          properties:
+            bonus_dice:
+              type: integer
+              minimum: 1
+              maximum: 9
+            penalty_dice:
+              type: integer
+              minimum: 1
+              maximum: 9
+            difficulty_level:
+              type: integer
+              minimum: 0
+            dc_override:
+              type: integer
+            target_bonus:
+              type: integer
+            advantage:
+              type: boolean
+            disadvantage:
+              type: boolean
+        context:
+          type: object
+          required: [character_id, campaign_id]
+          properties:
+            character_id:
+              type: string
+            campaign_id:
+              type: string
+            scene_id:
+              type: string
+            caller_role:
+              type: string
+              enum: [gm, player, system]
+    ExecuteRuleResponse:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+        output:
+          type: object
+          additionalProperties: true
+        logs:
+          type: array
+          items:
+            type: object
+            properties:
+              node_id:
+                type: string
+              node_type:
+                type: string
+              input:
+                type: object
+                additionalProperties: true
+              output:
+                type: object
+                additionalProperties: true
+              duration_ms:
+                type: integer
+              status:
+                type: string
+                enum: [success, skipped, failed]
+              error_code:
+                type: string
+              error_message:
+                type: string
+        warnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        failed_stage:
+          type: string
+        error_code:
+          type: string
+        error_message:
+          type: string
+        failed_node_id:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

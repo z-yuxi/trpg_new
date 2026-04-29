@@ -1,0 +1,195 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 房间模块
+  version: 1.1.0
+  description: 创建房间，支持可选自动发布招募帖。
+
+paths:
+  /api/v1/campaigns:
+    post:
+      summary: 创建房间
+      operationId: createCampaign
+      tags:
+        - 房间
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCampaignResponse'
+        '200':
+          description: 幂等重放，返回首次成功结果
+          headers:
+            X-Idempotent-Replay:
+              schema:
+                type: string
+                enum: ['true']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCampaignResponse'
+        '400':
+          description: 参数错误或业务校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                recruitment_data_required:
+                  value:
+                    error_code: RECRUITMENT_DATA_REQUIRED
+                    message: publish_to_recruitment=true 时必须提供 recruitment_data
+        '401':
+          description: 未授权
+        '403':
+          description: 权限不足（例如非会员启用高级模块）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: ADVANCED_MODULE_NOT_ALLOWED
+                message: 启用轨迹矩阵需要专业版或创作者版会员
+        '409':
+          description: 名称冲突或状态冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CreateCampaignRequest:
+      type: object
+      required:
+        - idempotent_key
+        - name
+        - ruleset_id
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+          maxLength: 32
+        ruleset_id:
+          type: string
+        module_id:
+          type: string
+          description: 可选绑定模组 ID。
+        publish_to_recruitment:
+          type: boolean
+          default: false
+        recruitment_data:
+          $ref: '#/components/schemas/RecruitmentDataForCampaign'
+        advanced_modules:
+          type: object
+          properties:
+            enable_trajectory_matrix:
+              type: boolean
+              default: false
+            enable_grid_map:
+              type: boolean
+              default: false
+            enable_scene_connections:
+              type: boolean
+              default: false
+        initial_scene_name:
+          type: string
+          default: 起始地点
+          description: 未绑定模组时创建的首个剧情场名称。
+    RecruitmentDataForCampaign:
+      type: object
+      description: 自动发布招募帖时使用（结构对齐发布招募帖，不包含 idempotent_key）。
+      required:
+        - title
+        - type
+        - player_count_max
+        - schedule_time
+        - frequency
+        - total_duration
+        - difficulty
+        - module_status
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 128
+        type:
+          type: string
+          enum: [gm_recruit, player_seek]
+        player_count_max:
+          type: integer
+          minimum: 1
+          maximum: 20
+        schedule_time:
+          type: string
+        frequency:
+          type: string
+          enum: [weekly1, weekly2_3, flexible]
+        total_duration:
+          type: string
+          enum: [short, medium, long]
+        difficulty:
+          type: string
+          enum: [beginner, normal, hardcore]
+        allow_spectate:
+          type: boolean
+          default: false
+        has_secret_ho:
+          type: boolean
+          default: false
+        module_status:
+          type: string
+          enum: [selected, pending, none]
+        custom_rules:
+          type: object
+          additionalProperties: true
+        description:
+          type: string
+          maxLength: 5000
+        publish_now:
+          type: boolean
+          default: true
+    CreateCampaignResponse:
+      type: object
+      required: [campaign_id, room_code, is_creator_gm]
+      properties:
+        campaign_id:
+          type: string
+        room_code:
+          type: string
+          pattern: '^[A-HJ-NP-Z2-9]{6}$'
+        is_creator_gm:
+          type: boolean
+        recruitment_post_id:
+          type: string
+          description: publish_to_recruitment=true 时返回。
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer
