@@ -43,6 +43,7 @@ const routes = [
       { path: 'mine/notification-list', name: 'MineNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
       { path: 'mine/privacy', name: 'MinePrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
       { path: 'mine/about', name: 'MineAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
+      { path: 'mine/assets', name: 'MineAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '我的资产', requiresAuth: true } },
       { path: 'getting-started', name: 'GettingStarted', component: () => import('../views/GettingStarted.vue'), meta: { title: '新手指南' } },
       { path: 'u/:uid', name: 'UserProfile', component: () => import('../views/UserProfile.vue'), meta: { title: '个人主页' } },
     ],

@@ -367,7 +367,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <SvgIcon name="icon-user" :size="20" />
         <span>角色卡</span>
       </div>
-      <div class="menu-item" @click="router.push('/explore')">
+      <div class="menu-item" @click="router.push('/mine/assets')">
         <SvgIcon name="icon-market" :size="20" />
         <span>资产</span>
       </div>

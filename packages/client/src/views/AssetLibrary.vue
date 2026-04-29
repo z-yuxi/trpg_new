@@ -51,7 +51,7 @@ function openQuickCreate(moduleId?: string | null, rulesetId?: string | null) {
 
 function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId: string | null }) {
   if (payload.recruitmentPostId) {
-    router.push(`/community/${payload.recruitmentPostId}`);
+    router.push(`/recruit/${payload.recruitmentPostId}`);
   } else {
     router.push(`/room/${payload.campaignId}`);
   }
@@ -235,6 +235,9 @@ function ratingLabel(r?: number) {
                 <span v-if="m.rating">★ {{ ratingLabel(m.rating) }}</span>
                 <span v-if="m.download_count">↓ {{ m.download_count }}</span>
               </div>
+            </div>
+            <div class="module-actions">
+              <TButton type="primary" size="sm" @click.stop="openQuickCreate(m.id, null)">创建房间</TButton>
             </div>
           </div>
         </div>
@@ -429,6 +432,7 @@ function ratingLabel(r?: number) {
 }
 .module-price { font-weight: var(--font-semibold); font-size: var(--text-sm); color: var(--text-primary); }
 .module-stats { display: flex; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
+.module-actions { margin-top: var(--space-2); display: flex; justify-content: flex-end; }
 
 .meta-item { font-size: var(--text-xs); color: var(--text-secondary); }
 
