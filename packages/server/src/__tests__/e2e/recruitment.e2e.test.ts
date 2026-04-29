@@ -452,5 +452,3 @@ describe('E2E - 冒烟：基础端点', () => {
     expect(res.body).toHaveProperty('items');
   });
 });
-</content>
-</invoke>

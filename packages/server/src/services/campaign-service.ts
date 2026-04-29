@@ -47,6 +47,7 @@ function rowToScene(row: Record<string, unknown>): Scene {
     description: (row['description'] as string) ?? '',
     history_visibility: row['history_visibility'] as HistoryVisibility,
     visible_history_count: row['visible_history_count'] as number,
+    access_policy: (row['access_policy'] as import('@trpg/shared').SceneAccessPolicy | undefined) ?? 'open',
     created_at: row['created_at'] as Date,
   };
 }

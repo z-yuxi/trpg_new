@@ -19,8 +19,38 @@ export interface User {
   creator_level: number;         // 1-5
   coins: number;
   subscription_type: 'free' | 'pro' | 'creator';
+  subscription_expires_at: Date | null;
   created_at: Date;
 }
+
+/** 会员档位（别名，便于业务代码引用） */
+export type MembershipTier = 'free' | 'pro' | 'creator';
+
+/**
+ * 会员权益 Key
+ * 用于 membershipService.checkBenefit(user, key) 和 payGate 中间件
+ */
+export type BenefitKey =
+  | 'log_export'           // 导出跑团日志
+  | 'export_pdf'           // 导出 PDF 版日志
+  | 'ai_summary'           // AI 剧情总结
+  | 'ai_image'             // AI 配图
+  | 'module_publish'       // 发布付费模组（需 creator）
+  | 'ruleset_publish'      // 发布规则集到广场（需 creator）
+  | 'advanced_analytics'   // 高级数据分析
+  | 'custom_avatar_frame'  // 自定义头像框
+  | 'priority_support';    // 优先客服
+
+/** 每个会员档位享有的权益集合 */
+export const MEMBERSHIP_BENEFITS: Record<MembershipTier, BenefitKey[]> = {
+  free: [],
+  pro: ['log_export', 'ai_summary', 'custom_avatar_frame', 'priority_support'],
+  creator: [
+    'log_export', 'export_pdf', 'ai_summary', 'ai_image',
+    'module_publish', 'ruleset_publish', 'advanced_analytics',
+    'custom_avatar_frame', 'priority_support',
+  ],
+};
 
 // ===== 团 =====
 export type CampaignStatus = 'preparing' | 'running' | 'paused' | 'ended';
@@ -49,6 +79,10 @@ export interface Campaign {
 // ===== 场 =====
 export type SceneType = 'spatial' | 'virtual' | 'lobby';
 export type HistoryVisibility = 'none' | 'recent' | 'all';
+/** 场景访问策略（迁移 022） */
+export type SceneAccessPolicy = 'open' | 'gm_approve' | 'locked';
+/** 进入场景的原因（迁移 022） */
+export type JoinReason = 'join' | 'scheduled' | 'force_move' | 'ob';
 
 export interface Scene {
   id: string;
@@ -58,7 +92,21 @@ export interface Scene {
   description: string;
   history_visibility: HistoryVisibility;
   visible_history_count: number;
+  /** 访问策略（默认 open） */
+  access_policy: SceneAccessPolicy;
   created_at: Date;
+}
+
+/** 位置历史记录（轨迹矩阵数据源） */
+export interface PositionHistoryEntry {
+  id: string;
+  campaign_id: string;
+  character_id: string;
+  scene_id: string;
+  story_time_entered: { hour: number; minute: number } | null;
+  story_time_left: { hour: number; minute: number } | null;
+  move_type: JoinReason;
+  created_at?: Date;
 }
 
 // ===== 角色卡 =====

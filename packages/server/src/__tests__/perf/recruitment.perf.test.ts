@@ -188,5 +188,3 @@ describe('性能基准 - 招募帖创建写入', () => {
     expect(p99).toBeLessThan(800);
   }, 30_000);
 });
-</content>
-</invoke>

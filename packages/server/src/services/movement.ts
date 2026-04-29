@@ -9,7 +9,7 @@
  */
 import { generateId } from '@trpg/shared';
 import { db } from '../db';
-import { joinScene } from './scene-participation';
+import { joinScene, canJoinScene } from './scene-participation';
 
 export interface ScheduledMoveRecord {
   id: string;
@@ -25,12 +25,32 @@ export interface ScheduledMoveRecord {
 
 /**
  * 玩家申请移动（创建 pending 记录）
+ * 自动校验目标场景策略：
+ *   - open → 抛错（直接进入，不需要申请）
+ *   - locked → 拒绝（不允许申请）
+ *   - gm_approve → 创建 pending 记录（正常流程）
  */
 export async function requestMove(
   characterId: string,
   campaignId: string,
   toSceneId: string,
-): Promise<ScheduledMoveRecord> {
+): Promise<{ record: ScheduledMoveRecord; policy: 'open' | 'gm_approve' }> {
+  const check = await canJoinScene(characterId, campaignId, toSceneId);
+
+  // open 场景：玩家应直接进入，无需申请
+  if (check.allowed) {
+    throw new Error('该场景无需申请，请直接进入（open 策略）');
+  }
+  if (check.reason === 'locked') {
+    throw new Error('该场景已锁定，无法申请进入');
+  }
+  if (check.reason === 'already_in_scene') {
+    throw new Error('已在该场景中');
+  }
+  if (check.reason === 'not_a_member') {
+    throw new Error('非团成员，无权申请');
+  }
+
   const id = generateId();
   await db('scheduled_moves').insert({
     id,
@@ -40,7 +60,7 @@ export async function requestMove(
     execute_at_story: null,
     status: 'pending',
   });
-  return getMoveById(id) as Promise<ScheduledMoveRecord>;
+  return { record: await getMoveById(id) as ScheduledMoveRecord, policy: 'gm_approve' };
 }
 
 /**
@@ -93,7 +113,7 @@ export async function rejectMove(moveId: string, _gmUserId: string): Promise<Sch
 }
 
 /**
- * GM 强制立即移动角色（不需审批，立即执行）
+ * GM 强制立即移动角色（不需审批，立即执行，绕过 access_policy）
  */
 export async function forceMove(
   characterId: string,
@@ -108,6 +128,7 @@ export async function forceMove(
     .catch(() => null);
   const fromSceneId: string | null = state?.current_spatial_scene_id ?? null;
 
+  // isGmForce=true 绕过场景锁定检查
   await joinScene(characterId, campaignId, toSceneId, 'force_move');
 
   return { from_scene_id: fromSceneId, to_scene_id: toSceneId };

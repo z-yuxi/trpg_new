@@ -4,8 +4,10 @@ import TTag from '../components/base/TTag.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import EmptyState from '../components/base/EmptyState.vue';
+import QuickCreateCampaignDialog from '../components/campaign/QuickCreateCampaignDialog.vue';
 import { api } from '../utils/api';
 import { useAuthStore } from '../stores/auth-store';
+import { useRouter } from 'vue-router';
 
 /* ========== 类型 ========== */
 interface Ruleset {
@@ -36,6 +38,24 @@ interface Module {
 
 /* ========== 状态 ========== */
 const authStore = useAuthStore();
+const router = useRouter();
+
+const showQuickCreate = ref(false);
+const quickCreatePrefill = ref<{ moduleId: string | null; rulesetId: string | null }>({ moduleId: null, rulesetId: null });
+
+function openQuickCreate(moduleId?: string | null, rulesetId?: string | null) {
+  if (!authStore.token) { router.push('/login'); return; }
+  quickCreatePrefill.value = { moduleId: moduleId ?? null, rulesetId: rulesetId ?? null };
+  showQuickCreate.value = true;
+}
+
+function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId: string | null }) {
+  if (payload.recruitmentPostId) {
+    router.push(`/community/${payload.recruitmentPostId}`);
+  } else {
+    router.push(`/room/${payload.campaignId}`);
+  }
+}
 
 const activeTab = ref<'modules' | 'rulesets' | 'assets'>('modules');
 const search = ref('');
@@ -243,7 +263,10 @@ function ratingLabel(r?: number) {
             衍生自：{{ rs.base_ruleset }}
           </div>
           <p class="ruleset-desc">{{ rs.description || '暂无描述' }}</p>
-          <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
+          <div class="ruleset-actions">
+            <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
+            <TButton type="primary" size="sm" style="margin-top: var(--space-3)" @click.stop="openQuickCreate(null, rs.id)">开团</TButton>
+          </div>
         </div>
       </div>
     </template>
@@ -284,6 +307,15 @@ function ratingLabel(r?: number) {
         </div>
       </div>
     </template>
+
+    <QuickCreateCampaignDialog
+      v-model:visible="showQuickCreate"
+      :prefill-module-id="quickCreatePrefill.moduleId"
+      :prefill-ruleset-id="quickCreatePrefill.rulesetId"
+      :rulesets="rulesets"
+      :modules="modules"
+      @created="handleCampaignCreated"
+    />
   </div>
 </template>
 

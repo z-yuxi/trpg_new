@@ -5,6 +5,7 @@ import { moduleService } from './services/module-service';
 import { recruitmentService } from './services/recruitment-service';
 import { recruitmentMetricsService } from './services/recruitment-metrics-service';
 import { runDailyDataCheck } from './services/daily-check-service';
+import { repairOpenPositionHistory } from './services/scene-participation';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 
@@ -87,6 +88,12 @@ cron.schedule('0 2 * * *', async () => {
 
     // 数据治理巡检
     await runDailyDataCheck();
+
+    // 位置历史修复：回写未关闭的 position_history 记录
+    const fixedCount = await repairOpenPositionHistory();
+    if (fixedCount > 0) {
+      console.log(`[Cron] Repaired ${fixedCount} open position_history record(s)`);
+    }
   } catch (err: any) {
     console.error('[Cron] Error in daily metrics check:', err?.message ?? err);
   }

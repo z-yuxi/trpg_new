@@ -124,3 +124,113 @@ export async function getParticipants(sceneId: string): Promise<ParticipantInfo[
     user_id: r.user_id,
   }));
 }
+
+// ─── 跨场权限规则 ──────────────────────────────────────────────────────────────
+
+export interface CanJoinSceneResult {
+  allowed: boolean;
+  /** 拦截原因（allowed=false 时） */
+  reason?: 'locked' | 'requires_approval' | 'already_in_scene' | 'not_a_member';
+  /** 是否需要走移动申请流程（allowed=false, reason=requires_approval） */
+  needsApproval?: boolean;
+}
+
+/**
+ * 检查角色是否可以进入指定场景（跨场权限规则，附录 M）
+ *
+ * 规则优先级（由高到低）：
+ *   1. GM 强制移动 → 始终允许（isGmForce=true 时跳过所有检查）
+ *   2. 'locked' 策略 → 拒绝（非 GM 强制）
+ *   3. 'gm_approve' 策略 → 需要申请（返回 needsApproval=true）
+ *   4. 'open' 策略 → 允许（需确认是团成员）
+ */
+export async function canJoinScene(
+  characterId: string,
+  campaignId: string,
+  targetSceneId: string,
+  options?: { isGmForce?: boolean },
+): Promise<CanJoinSceneResult> {
+  const isGmForce = options?.isGmForce ?? false;
+
+  // GM 强制移动绕过策略
+  if (isGmForce) return { allowed: true };
+
+  // 确认角色是团成员
+  const state = await db('character_scene_states')
+    .where({ character_id: characterId, campaign_id: campaignId })
+    .first()
+    .catch(() => null);
+  if (!state) return { allowed: false, reason: 'not_a_member' };
+
+  // 已在目标场景
+  if (state.current_spatial_scene_id === targetSceneId) {
+    return { allowed: false, reason: 'already_in_scene' };
+  }
+
+  // 查场景策略
+  const scene = await db('scenes')
+    .where({ id: targetSceneId, campaign_id: campaignId })
+    .select('access_policy')
+    .first()
+    .catch(() => null);
+
+  const policy: string = scene?.access_policy ?? 'open';
+
+  if (policy === 'locked') {
+    return { allowed: false, reason: 'locked' };
+  }
+  if (policy === 'gm_approve') {
+    return { allowed: false, reason: 'requires_approval', needsApproval: true };
+  }
+  // 'open'
+  return { allowed: true };
+}
+
+/**
+ * 修复历史数据：补齐 position_history.story_time_left = NULL 的开放记录
+ *
+ * 通常在服务重启或日常 cron 中调用，避免轨迹矩阵出现"未离开"的幽灵记录。
+ * 策略：用当前该角色所在场景的 global_story_time 回写（近似值）。
+ *
+ * 返回修复的记录数。
+ */
+export async function repairOpenPositionHistory(): Promise<number> {
+  // 查找所有 story_time_left IS NULL 且 scene_id ≠ 当前所在场景 的记录
+  const openRows = await db('position_history as ph')
+    .join('character_scene_states as css', function () {
+      this.on('css.character_id', '=', 'ph.character_id')
+          .andOn('css.campaign_id', '=', 'ph.campaign_id');
+    })
+    .whereNull('ph.story_time_left')
+    .whereRaw('ph.scene_id != COALESCE(css.current_spatial_scene_id, \'\')')
+    .select('ph.id', 'ph.campaign_id')
+    .catch(() => [] as Array<{ id: string; campaign_id: string }>);
+
+  if (openRows.length === 0) return 0;
+
+  // 批量按 campaign 分组，用 global_story_time 回写
+  const campaignIds = [...new Set((openRows as Array<{ id: string; campaign_id: string }>).map((r) => r.campaign_id))];
+  const campaigns = await db('campaigns')
+    .whereIn('id', campaignIds)
+    .select('id', 'global_story_time')
+    .catch(() => []);
+
+  const storyTimeMap = new Map<string, string>(
+    (campaigns as Array<{ id: string; global_story_time: unknown }>).map((c) => [
+      c.id,
+      typeof c.global_story_time === 'string' ? c.global_story_time : JSON.stringify(c.global_story_time),
+    ]),
+  );
+
+  let fixed = 0;
+  for (const row of openRows as Array<{ id: string; campaign_id: string }>) {
+    const st = storyTimeMap.get(row.campaign_id) ?? null;
+    await db('position_history')
+      .where({ id: row.id })
+      .update({ story_time_left: st })
+      .catch(() => null);
+    fixed++;
+  }
+  return fixed;
+}
+

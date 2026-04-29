@@ -202,6 +202,7 @@ export class UserService {
       creator_level: row['creator_level'] as number,
       coins: Number(row['coins']),
       subscription_type: row['subscription_type'] as User['subscription_type'],
+      subscription_expires_at: (row['subscription_expires_at'] as Date | null) ?? null,
       created_at: row['created_at'] as Date,
     };
   }

@@ -13,6 +13,7 @@ import {
   listSceneActiveObPermissions,
   getSceneActiveObPermissionMap,
 } from '../services/scene-ob-permission-service';
+import { recruitmentService } from '../services/recruitment-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { generateId, snowflake } from '@trpg/shared';
@@ -147,6 +148,83 @@ router.get('/', async (req, res) => {
     res.json(campaigns);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+/**
+ * POST /api/campaigns/quick-create
+ *
+ * 原子化"一键开团"接口：
+ *   1. 创建战役（is_listed_publicly / allow_ob 由请求决定）
+ *   2. 若 recruit=true，立即创建并发布招募帖（draft → open）
+ *   返回 { campaign, recruitment_post? }
+ */
+const quickCreateSchema = z.object({
+  name: z.string().min(1).max(128),
+  ruleset_id: z.string().min(1),
+  module_id: z.string().optional().nullable(),
+  allow_ob: z.boolean().optional(),
+  /** true = 公开团，自动关联招募帖；false = 私密团（默认） */
+  is_listed_publicly: z.boolean().optional(),
+  /** 是否同时创建并发布招募帖（仅 is_listed_publicly=true 时生效） */
+  recruit: z.boolean().optional(),
+  /** 招募帖附加字段（简化版，标题/描述/人数上限/标签） */
+  recruitment: z
+    .object({
+      title: z.string().min(1).max(50).optional(),
+      description: z.string().max(2000).optional(),
+      player_count_max: z.number().int().min(1).max(20).optional(),
+      schedule_text: z.string().max(255).optional(),
+      tags: z.array(z.string()).max(10).optional(),
+    })
+    .optional(),
+});
+
+router.post('/quick-create', async (req, res) => {
+  const parsed = quickCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  const { name, ruleset_id, module_id, allow_ob, is_listed_publicly, recruit, recruitment } = parsed.data;
+  const gmUserId = req.user!.id;
+
+  try {
+    const campaign = await campaignService.create({
+      name,
+      ruleset_id,
+      module_id: module_id ?? null,
+      gm_user_id: gmUserId,
+      is_listed_publicly: is_listed_publicly ?? false,
+      allow_ob: allow_ob ?? false,
+    });
+
+    let recruitmentPost = null;
+    if (is_listed_publicly && recruit) {
+      // 创建招募帖
+      const postTitle = recruitment?.title ?? name;
+      const created = await recruitmentService.create({
+        poster_id: gmUserId,
+        type: 'gm_recruit',
+        title: postTitle,
+        ruleset_id,
+        player_count_max: recruitment?.player_count_max ?? 4,
+        schedule_text: recruitment?.schedule_text ?? null,
+        description: recruitment?.description ?? null,
+        tags: recruitment?.tags ?? [],
+        metadata: {},
+      });
+      // 立即发布（draft → open）
+      try {
+        recruitmentPost = await recruitmentService.publish(created.id, gmUserId);
+      } catch {
+        recruitmentPost = created; // 发布失败仍返回草稿
+      }
+    }
+
+    res.status(201).json({ campaign, recruitment_post: recruitmentPost });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Quick create failed' });
   }
 });
 
@@ -1142,9 +1220,16 @@ router.post('/:id/moves/request', async (req, res) => {
     }
 
     const { requestMove } = await import('../services/movement.js');
-    const move = await requestMove(character_id, req.params.id, to_scene_id);
+    let moveRecord;
+    try {
+      const result = await requestMove(character_id, req.params.id, to_scene_id);
+      moveRecord = result.record;
+    } catch (moveErr: any) {
+      res.status(400).json({ error: moveErr?.message ?? 'Move request denied' });
+      return;
+    }
     res.status(201).json({
-      ...move,
+      ...moveRecord,
       from_scene_id: fromSceneId,
       transport_mode: transportMode,
       travel_duration: travelDuration,

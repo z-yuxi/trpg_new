@@ -5,6 +5,7 @@ import TTag from '../components/base/TTag.vue';
 import TCard from '../components/base/TCard.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import SvgIcon from '../components/SvgIcon.vue';
+import QuickCreateCampaignDialog from '../components/campaign/QuickCreateCampaignDialog.vue';
 import { useAuthStore } from '../stores/auth-store';
 import { api } from '../utils/api';
 
@@ -16,11 +17,29 @@ const rulesets = ref<any[]>([]);
 const modules = ref<any[]>([]);
 const recruitments = ref<any[]>([]);
 const loading = ref(false);
+const showQuickCreate = ref(false);
+
+/** "当KP"快速入口：已登录弹向导，未登录跳登录 */
+function handleCreateCampaign() {
+  if (!authStore.isLoggedIn) {
+    router.push('/login');
+    return;
+  }
+  showQuickCreate.value = true;
+}
+
+function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId: string | null }) {
+  if (payload.recruitmentPostId) {
+    router.push(`/community/${payload.recruitmentPostId}`);
+  } else {
+    router.push(`/room/${payload.campaignId}`);
+  }
+}
 
 const quickActions = [
-  { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
-  { icon: 'icon-dice',     title: '当 KP', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
-  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit?action=post' },
+  { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit', action: null },
+  { icon: 'icon-dice',     title: '当 KP', desc: '创建团并开始组织你的队伍', path: null, action: handleCreateCampaign },
+  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit?action=post', action: null },
 ];
 
 const mixedRecommendations = computed(() => [
@@ -115,7 +134,12 @@ onMounted(async () => {
             <h2 class="section-title">快速组队入口</h2>
           </div>
           <div class="quick-grid">
-            <button v-for="item in quickActions" :key="item.title" class="quick-action-card" @click="router.push(item.path)">
+            <button
+              v-for="item in quickActions"
+              :key="item.title"
+              class="quick-action-card"
+              @click="item.action ? item.action() : router.push(item.path!)"
+            >
               <SvgIcon :name="item.icon" :size="24" class="quick-icon" />
               <strong>{{ item.title }}</strong>
               <span class="quick-desc">{{ item.desc }}</span>
@@ -177,6 +201,13 @@ onMounted(async () => {
         </div>
       </aside>
     </div>
+
+    <QuickCreateCampaignDialog
+      v-model:visible="showQuickCreate"
+      :rulesets="rulesets as any[]"
+      :modules="modules as any[]"
+      @created="handleCampaignCreated"
+    />
   </div>
 </template>
 

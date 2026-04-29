@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { payGate } from '../middleware/pay-gate';
 import { exportCampaignLog } from '../services/log-export-service';
 import { db } from '../db';
 
@@ -43,7 +44,7 @@ function sendExportFile(res: any, result: Awaited<ReturnType<typeof exportCampai
   res.send(result.body);
 }
 
-router.get('/:campaignId/export', authMiddleware, async (req, res) => {
+router.get('/:campaignId/export', authMiddleware, payGate('log_export'), async (req, res) => {
   const parsed = querySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -91,7 +92,7 @@ router.get('/:campaignId/export', authMiddleware, async (req, res) => {
 });
 
 // POST /api/logs/export 兼容旧调用
-router.post('/export', authMiddleware, async (req, res) => {
+router.post('/export', authMiddleware, payGate('log_export'), async (req, res) => {
   const parsed = legacyBodySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
