@@ -237,6 +237,9 @@ export type RecruitmentType = 'gm_recruit' | 'player_seek';
  */
 export type RecruitmentStatus = 'draft' | 'open' | 'full' | 'grouped' | 'closed' | 'dissolved' | 'archived';
 
+export type ScheduleWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export type ScheduleTimeSlot = 'morning' | 'afternoon' | 'evening' | 'night';
+
 export interface RecruitmentPost {
   id: string;
   poster_id: string;
@@ -248,6 +251,12 @@ export interface RecruitmentPost {
   player_count_max: number;
   player_count_joined?: number;
   schedule_text?: string | null;
+  /** 结构化游戏时间：可选多天，用于筛选 */
+  schedule_weekday?: ScheduleWeekday[] | null;
+  /** 结构化时间段：上午/下午/晚上/深夜，用于筛选 */
+  schedule_time_slot?: ScheduleTimeSlot | null;
+  /** 成团后对应战役是否允许旁观 */
+  allow_ob?: boolean;
   description?: string | null;
   tags?: string[];
   metadata?: Record<string, unknown> | null;

@@ -34,6 +34,8 @@ export class RecruitmentService {
     module_name?: string | null;
     player_count_max: number;
     schedule_text?: string | null;
+    schedule_weekday?: string[] | null;
+    schedule_time_slot?: string | null;
     description?: string | null;
     tags?: string[];
     metadata?: Record<string, unknown> | null;
@@ -49,6 +51,8 @@ export class RecruitmentService {
       player_count_max: params.player_count_max,
       player_count_joined: 0,
       schedule_text: params.schedule_text ?? null,
+      schedule_weekday: params.schedule_weekday ? JSON.stringify(params.schedule_weekday) : null,
+      schedule_time_slot: params.schedule_time_slot ?? null,
       description: params.description ?? null,
       tags: JSON.stringify(params.tags ?? []),
       metadata: params.metadata ? JSON.stringify(params.metadata) : null,
@@ -133,23 +137,37 @@ export class RecruitmentService {
     tag?: string;
     sort?: 'latest' | 'oldest' | 'hottest';
     poster_id?: string;
+    /** 仅过滤该用户的申请（my=applied 模式） */
     applicant_user_id?: string;
+    /** 已登录用户 ID：仅用于查询每帖的申请状态，不过滤结果 */
+    viewer_id?: string;
+    /** 结构化时间筛选：星期（如 'sat'） */
+    schedule_weekday?: string;
+    /** 结构化时间筛选：时间段 */
+    schedule_time_slot?: string;
+    /** 最少剩余席位（1 = 至少1席，2 = 至少2席） */
+    min_seats_available?: number;
     page?: number;
     limit?: number;
   }): Promise<{ data: Array<Record<string, unknown>>; total: number; page: number; limit: number }> {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(50, Math.max(1, params.limit ?? 10));
 
+    // 决定用哪个 userId 查申请状态
+    const lookupUserId = params.applicant_user_id ?? params.viewer_id;
+
     let query = db('recruitment_posts as rp')
       .leftJoin('users as u', 'rp.poster_id', 'u.id')
-      .leftJoin('rulesets as r', 'rp.ruleset_id', 'r.id');
+      .leftJoin('rulesets as r', 'rp.ruleset_id', 'r.id')
+      // 成团后关联 campaign 以获取 allow_ob 字段
+      .leftJoin('campaigns as c', 'rp.campaign_id', 'c.id');
 
-    if (params.applicant_user_id) {
+    if (lookupUserId) {
       query = query.leftJoin('recruitment_applications as ra', function joinApplications() {
         this.on('ra.post_id', '=', 'rp.id').andOn(
           'ra.applicant_user_id',
           '=',
-          db.raw('?', [params.applicant_user_id!]),
+          db.raw('?', [lookupUserId]),
         );
       });
     }
@@ -165,6 +183,8 @@ export class RecruitmentService {
     }
     if (params.tag)
       query = query.where('rp.tags', 'like', `%${params.tag.replace(/[%_\\]/g, '\\$&')}%`);
+
+    // 仅 applicant_user_id 模式才过滤（viewer_id 只查状态不过滤）
     if (params.applicant_user_id) query = query.whereNotNull('ra.id');
 
     if (params.status) {
@@ -172,6 +192,23 @@ export class RecruitmentService {
     } else {
       // 默认不展示草稿
       query = query.whereNot('rp.status', 'draft');
+    }
+
+    // 结构化时间段筛选
+    if (params.schedule_weekday) {
+      const wd = params.schedule_weekday.replace(/[%_\\]/g, '\\$&');
+      query = query.whereRaw(`JSON_CONTAINS(rp.schedule_weekday, JSON_ARRAY(?))`, [wd]);
+    }
+    if (params.schedule_time_slot) {
+      query = query.where('rp.schedule_time_slot', params.schedule_time_slot);
+    }
+
+    // 剩余席位筛选：(player_count_max - player_count_joined) >= N
+    if (params.min_seats_available && params.min_seats_available > 0) {
+      query = query.whereRaw(
+        '(rp.player_count_max - rp.player_count_joined) >= ?',
+        [params.min_seats_available],
+      );
     }
 
     const countRow = await query.clone().count<{ total: number }[]>({ total: '*' }).first();
@@ -182,9 +219,16 @@ export class RecruitmentService {
         'rp.*',
         'u.nickname as poster_nickname',
         'r.name as ruleset_name',
-        params.applicant_user_id
+        'c.allow_ob as campaign_allow_ob',
+        lookupUserId
           ? 'ra.status as my_application_status'
           : db.raw('null as my_application_status'),
+        lookupUserId
+          ? 'ra.id as my_application_id'
+          : db.raw('null as my_application_id'),
+        lookupUserId
+          ? 'ra.invited_expires_at as my_application_expires_at'
+          : db.raw('null as my_application_expires_at'),
       )
       .orderBy(
         params.sort === 'hottest' ? 'rp.player_count_joined' : 'rp.created_at',
@@ -199,6 +243,8 @@ export class RecruitmentService {
       poster_nickname: row['poster_nickname'] ?? '匿名玩家',
       ruleset_name: row['ruleset_name'] ?? (row['ruleset_id'] as string),
       my_application_status: row['my_application_status'] ?? null,
+      my_application_id: row['my_application_id'] ?? null,
+      my_application_expires_at: row['my_application_expires_at'] ?? null,
     }));
 
     return { data, total, page, limit };
@@ -208,8 +254,9 @@ export class RecruitmentService {
     const row = await db('recruitment_posts as rp')
       .leftJoin('users as u', 'rp.poster_id', 'u.id')
       .leftJoin('rulesets as r', 'rp.ruleset_id', 'r.id')
+      .leftJoin('campaigns as c', 'rp.campaign_id', 'c.id')
       .where('rp.id', postId)
-      .select('rp.*', 'u.nickname as poster_nickname', 'r.name as ruleset_name')
+      .select('rp.*', 'u.nickname as poster_nickname', 'r.name as ruleset_name', 'c.allow_ob as campaign_allow_ob')
       .first() as Record<string, unknown> | null;
 
     if (!row) return null;

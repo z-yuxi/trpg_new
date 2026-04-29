@@ -7,6 +7,8 @@ import TTag from '../../components/base/TTag.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
+import { useAuthStore } from '../../stores/auth-store';
+import { getApplyButtonState } from '../../composables/useApplyButtonState';
 
 interface RulesetOption {
   id: string;
@@ -15,6 +17,7 @@ interface RulesetOption {
 
 interface RecruitmentPostVM {
   id: string;
+  poster_id: string;
   title: string;
   type: 'gm_recruit' | 'player_seek';
   status: 'draft' | 'open' | 'full' | 'grouped' | 'closed' | 'dissolved' | 'archived';
@@ -24,11 +27,10 @@ interface RecruitmentPostVM {
   module_name?: string | null;
   player_count_max: number;
   player_count_joined: number;
+  allow_ob?: boolean;
   tags?: string[];
   description?: string | null;
-  /** 当前用户在该帖上的申请状态（我的申请模式） */
   my_application_status?: 'pending' | 'invited' | 'confirmed' | 'waiting' | 'rejected' | null;
-  /** 邀请过期时间（invited 状态时有值） */
   my_application_id?: string | null;
   my_application_expires_at?: string | null;
   created_at: string;
@@ -43,6 +45,7 @@ const props = withDefaults(defineProps<{
 });
 
 const router = useRouter();
+const authStore = useAuthStore();
 const loading = ref(false);
 const posts = ref<RecruitmentPostVM[]>([]);
 const total = ref(0);
@@ -53,8 +56,36 @@ const filterStatus = ref<'all' | 'open' | 'full' | 'grouped' | 'closed'>('all');
 const filterRuleset = ref('all');
 const filterType = ref<'all' | 'gm_recruit' | 'player_seek'>(props.fixedType ?? 'all');
 const filterTag = ref('all');
+const filterWeekday = ref<string>('all');
+const filterTimeSlot = ref<string>('all');
+const filterMinSeats = ref<'all' | '1' | '2'>('all');
 const sort = ref<'latest' | 'oldest' | 'hottest'>('latest');
 const keyword = ref('');
+
+const weekdayOptions = [
+  { value: 'all', label: '星期不限' },
+  { value: 'mon', label: '周一' },
+  { value: 'tue', label: '周二' },
+  { value: 'wed', label: '周三' },
+  { value: 'thu', label: '周四' },
+  { value: 'fri', label: '周五' },
+  { value: 'sat', label: '周六' },
+  { value: 'sun', label: '周日' },
+];
+
+const timeSlotOptions = [
+  { value: 'all', label: '时段不限' },
+  { value: 'morning', label: '上午（6-12时）' },
+  { value: 'afternoon', label: '下午（12-18时）' },
+  { value: 'evening', label: '晚上（18-23时）' },
+  { value: 'night', label: '深夜（23时以后）' },
+];
+
+const seatsOptions = [
+  { value: 'all', label: '席位不限' },
+  { value: '1', label: '≥1 席' },
+  { value: '2', label: '≥2 席' },
+];
 
 const statusMap: Record<string, { label: string; color: 'info' | 'warning' | 'danger' | 'default' }> = {
   draft: { label: '草稿', color: 'default' },
@@ -64,15 +95,6 @@ const statusMap: Record<string, { label: string; color: 'info' | 'warning' | 'da
   closed: { label: '已关闭', color: 'default' },
   dissolved: { label: '已解散', color: 'default' },
   archived: { label: '已归档', color: 'default' },
-};
-
-/** 申请状态展示 */
-const appStatusMap: Record<string, { label: string; color: 'info' | 'warning' | 'success' | 'danger' | 'default' }> = {
-  pending: { label: '审核中', color: 'warning' },
-  invited: { label: '已邀请', color: 'info' },
-  confirmed: { label: '已确认', color: 'success' },
-  waiting: { label: '候补中', color: 'default' },
-  rejected: { label: '已拒绝', color: 'danger' },
 };
 
 const rulesetOptions = computed(() => [{ id: 'all', name: '全部规则包' }, ...props.rulesets]);
@@ -95,6 +117,18 @@ function formatDate(value: string) {
   return date.toLocaleString();
 }
 
+/** 计算每张卡片的操作按钮状态（使用 useApplyButtonState 附录02 §3.1） */
+function cardButtonState(p: RecruitmentPostVM) {
+  return getApplyButtonState({
+    applicationStatus: (p.my_application_status as any) ?? 'none',
+    recruitmentStatus: p.status,
+    isGM: authStore.isLoggedIn && authStore.userId === p.poster_id,
+    isFull: p.player_count_joined >= p.player_count_max,
+    allowSpectate: !!p.allow_ob,
+    isLoggedIn: authStore.isLoggedIn,
+  });
+}
+
 async function loadPosts() {
   loading.value = true;
   try {
@@ -109,6 +143,9 @@ async function loadPosts() {
     if (filterStatus.value !== 'all') query.set('status', filterStatus.value);
     if (filterRuleset.value !== 'all') query.set('ruleset_id', filterRuleset.value);
     if (filterTag.value !== 'all') query.set('tag', filterTag.value);
+    if (filterWeekday.value !== 'all') query.set('schedule_weekday', filterWeekday.value);
+    if (filterTimeSlot.value !== 'all') query.set('schedule_time_slot', filterTimeSlot.value);
+    if (filterMinSeats.value !== 'all') query.set('min_seats', filterMinSeats.value);
     if (keyword.value.trim()) query.set('keyword', keyword.value.trim());
     if (props.mine) query.set('mine', props.mine);
 
@@ -131,33 +168,48 @@ function resetPageAndReload() {
   loadPosts();
 }
 
+/** 按钮点击分发 */
+const confirmingId = ref<string | null>(null);
+async function handleCardAction(event: Event, post: RecruitmentPostVM) {
+  event.stopPropagation();
+  const state = cardButtonState(post);
+  switch (state.action) {
+    case 'showLogin':
+      router.push('/login');
+      break;
+    case 'confirm': {
+      if (!post.my_application_id) break;
+      confirmingId.value = post.id;
+      try {
+        await api.post(`/recruitment/applications/${post.my_application_id}/confirm`, {});
+        ElMessage.success('已确认入团！');
+        await loadPosts();
+      } catch (err: any) {
+        ElMessage.error(err?.message ?? '确认失败');
+      } finally {
+        confirmingId.value = null;
+      }
+      break;
+    }
+    case 'apply':
+    case 'applyWaitlist':
+    case 'manage':
+    case 'spectate':
+    case 'viewReason':
+    default:
+      // 其余操作跳转详情页完成
+      router.push(`/community/${post.id}`);
+  }
+}
+
 watch(() => props.fixedType, () => {
   filterType.value = props.fixedType ?? 'all';
   resetPageAndReload();
 });
-watch([filterStatus, filterRuleset, filterType, filterTag, sort], resetPageAndReload);
-watch(keyword, () => {
-  page.value = 1;
-});
+watch([filterStatus, filterRuleset, filterType, filterTag, filterWeekday, filterTimeSlot, filterMinSeats, sort], resetPageAndReload);
+watch(keyword, () => { page.value = 1; });
 
 onMounted(loadPosts);
-
-/** 行内确认入团（invited 状态直接操作，无需进入详情页） */
-const confirmingId = ref<string | null>(null);
-async function confirmInvite(event: Event, post: RecruitmentPostVM) {
-  event.stopPropagation(); // 阻止冒泡进入详情页
-  if (!post.my_application_id) return;
-  confirmingId.value = post.id;
-  try {
-    await api.post(`/recruitment/applications/${post.my_application_id}/confirm`, {});
-    ElMessage.success('已确认入团！');
-    await loadPosts();
-  } catch (err: any) {
-    ElMessage.error(err?.message ?? '确认失败');
-  } finally {
-    confirmingId.value = null;
-  }
-}
 </script>
 
 <template>
@@ -186,6 +238,17 @@ async function confirmInvite(event: Event, post: RecruitmentPostVM) {
         <ElOption label="已满员" value="full" />
         <ElOption label="已成团" value="grouped" />
         <ElOption label="已关闭" value="closed" />
+      </ElSelect>
+      <!-- 时间筛选（附录 B 2.2：星期 + 时间段） -->
+      <ElSelect v-model="filterWeekday" @change="resetPageAndReload">
+        <ElOption v-for="opt in weekdayOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+      </ElSelect>
+      <ElSelect v-model="filterTimeSlot" @change="resetPageAndReload">
+        <ElOption v-for="opt in timeSlotOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+      </ElSelect>
+      <!-- 剩余席位筛选（附录 B 2.2：≥1 / ≥2 / 不限） -->
+      <ElSelect v-model="filterMinSeats" @change="resetPageAndReload">
+        <ElOption v-for="opt in seatsOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
       </ElSelect>
       <ElSelect v-model="sort" @change="resetPageAndReload">
         <ElOption label="最新发布" value="latest" />
@@ -256,21 +319,20 @@ async function confirmInvite(event: Event, post: RecruitmentPostVM) {
           </div>
         </div>
 
-        <!-- 申请状态（仅"我的申请"模式） -->
-        <div v-if="p.my_application_status" class="apply-row">
-          <TTag
-            :color="appStatusMap[p.my_application_status]?.color ?? 'default'"
-            size="sm"
-          >
-            申请{{ appStatusMap[p.my_application_status]?.label ?? p.my_application_status }}
-          </TTag>
-          <!-- 收到邀请时可以直接在列表页确认，无需进入详情 -->
+        <!-- 操作按钮区（由 useApplyButtonState 驱动，附录02 §3.1） -->
+        <div class="action-row">
           <button
-            v-if="p.my_application_status === 'invited'"
-            class="confirm-btn"
-            :disabled="confirmingId === p.id"
-            @click="confirmInvite($event, p)"
-          >{{ confirmingId === p.id ? '确认中…' : '确认入团' }}</button>
+            class="action-btn"
+            :class="{
+              'action-btn--primary': !cardButtonState(p).disabled,
+              'action-btn--disabled': cardButtonState(p).disabled,
+              'action-btn--loading': confirmingId === p.id,
+            }"
+            :disabled="cardButtonState(p).disabled || confirmingId === p.id"
+            @click="handleCardAction($event, p)"
+          >
+            {{ confirmingId === p.id ? '确认中…' : cardButtonState(p).text }}
+          </button>
         </div>
 
         <div class="recruit-footer">
@@ -300,8 +362,18 @@ async function confirmInvite(event: Event, post: RecruitmentPostVM) {
 .board-title-row span { color: var(--color-text-muted); font-size: var(--text-sm); }
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) repeat(4, minmax(120px, 180px));
+  grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(110px, 160px));
   gap: var(--space-2);
+  flex-wrap: wrap;
+}
+/* 时间/席位筛选折行 */
+.toolbar > *:nth-child(n+5) {
+  grid-column: auto;
+}
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 .post-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .post-card { cursor: pointer; }
@@ -343,6 +415,37 @@ async function confirmInvite(event: Event, post: RecruitmentPostVM) {
   background: color-mix(in srgb, var(--color-primary, #5B8DB8) 22%, transparent);
 }
 .confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.action-row {
+  margin-top: var(--space-3);
+}
+.action-btn {
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-default, #E8ECF0);
+  font-size: var(--text-sm, 14px);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  background: transparent;
+  color: var(--color-text-secondary, #667085);
+}
+.action-btn--primary {
+  border-color: var(--color-primary, #5B8DB8);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
+  color: var(--color-primary, #5B8DB8);
+}
+.action-btn--primary:hover {
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 20%, transparent);
+}
+.action-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.action-btn--loading {
+  opacity: 0.7;
+  cursor: wait;
+}
 .pager { display: flex; justify-content: center; margin-top: var(--space-2); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6); }
 .sk-list { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) 0; }

@@ -19,7 +19,7 @@ const recruitments = ref<any[]>([]);
 const loading = ref(false);
 const showQuickCreate = ref(false);
 
-/** "当KP"快速入口：已登录弹向导，未登录跳登录 */
+/** "当GM"快速入口：已登录弹向导，未登录跳登录 */
 function handleCreateCampaign() {
   if (!authStore.isLoggedIn) {
     router.push('/login');
@@ -38,14 +38,14 @@ function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId:
 
 const quickActions = [
   { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit', action: null },
-  { icon: 'icon-dice',     title: '当 KP', desc: '创建团并开始组织你的队伍', path: null, action: handleCreateCampaign },
+  { icon: 'icon-dice',     title: '当 GM', desc: '创建房间并开始组织你的队伍', path: null, action: handleCreateCampaign },
   { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit?action=post', action: null },
 ];
 
 const mixedRecommendations = computed(() => [
   ...modules.value.slice(0, 2).map((item) => ({ id: `m-${item.id}`, type: 'module', title: item.name, subtitle: item.ruleset_name || '模组', desc: item.description })),
   ...rulesets.value.slice(0, 2).map((item) => ({ id: `r-${item.id}`, type: 'ruleset', title: item.name, subtitle: `v${item.version ?? '1.0'}`, desc: item.description })),
-  ...recruitments.value.slice(0, 2).map((item) => ({ id: `q-${item.id}`, type: 'recruitment', title: item.title ?? item.campaign_name, subtitle: '组队动态', desc: item.description ?? '新的招募动态' })),
+  ...recruitments.value.slice(0, 2).map((item) => ({ id: `q-${item.id}`, type: 'recruitment', title: item.title ?? item.campaign_name, subtitle: '招募动态', desc: item.description ?? '新的招募动态' })),
 ]);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
@@ -131,7 +131,7 @@ onMounted(async () => {
 
         <section class="section quick-section">
           <div class="section-header">
-            <h2 class="section-title">快速组队入口</h2>
+            <h2 class="section-title">快速招募入口</h2>
           </div>
           <div class="quick-grid">
             <button

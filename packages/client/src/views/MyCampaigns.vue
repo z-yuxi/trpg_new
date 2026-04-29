@@ -117,10 +117,10 @@ function copyCode(code: string) {
 <template>
   <div class="my-campaigns">
     <div class="page-header">
-      <h1 class="page-title">我的团</h1>
+      <h1 class="page-title">我的房间</h1>
       <div class="header-actions">
-        <TButton type="secondary" @click="showJoinDialog = true">加入团</TButton>
-        <TButton type="primary" @click="openCreateDialog">创建团</TButton>
+        <TButton type="secondary" @click="showJoinDialog = true">加入房间</TButton>
+        <TButton type="primary" @click="openCreateDialog">创建房间</TButton>
       </div>
     </div>
 
@@ -131,9 +131,9 @@ function copyCode(code: string) {
       v-else-if="campaigns.length === 0"
       icon-name=""
       illustration-name="illust-empty"
-      title="还没有团"
-      description="创建或加入一个团，开始一段属于你的共同叙事。"
-      action-text="创建团"
+      title="还没有房间"
+      description="创建或加入一个房间，开始一段属于你的共同叙事。"
+      action-text="创建房间"
       @action="openCreateDialog"
     />
     <div v-else class="campaigns-grid">
@@ -152,10 +152,10 @@ function copyCode(code: string) {
       </TCard>
     </div>
 
-    <!-- 创建团弹窗 -->
-    <ElDialog v-model="showCreateDialog" title="创建新团" width="420px">
+    <!-- 创建房间弹窗 -->
+    <ElDialog v-model="showCreateDialog" title="创建新房间" width="420px">
       <ElForm :model="createForm" label-position="top">
-        <ElFormItem label="团名" required>
+        <ElFormItem label="房间名" required>
           <ElInput v-model="createForm.name" maxlength="128" show-word-limit />
         </ElFormItem>
         <ElFormItem label="规则集" required>

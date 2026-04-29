@@ -59,6 +59,11 @@ export function rowToPost(row: Record<string, unknown>): RecruitmentPost {
     player_count_max: Number(row['player_count_max'] ?? 0),
     player_count_joined: Number(row['player_count_joined'] ?? 0),
     schedule_text: (row['schedule_text'] as string | null) ?? null,
+    schedule_weekday: parseJsonArray(row['schedule_weekday']).length
+      ? parseJsonArray(row['schedule_weekday']) as RecruitmentPost['schedule_weekday']
+      : null,
+    schedule_time_slot: (row['schedule_time_slot'] as RecruitmentPost['schedule_time_slot']) ?? null,
+    allow_ob: Boolean(row['campaign_allow_ob'] ?? false),
     description: (row['description'] as string | null) ?? null,
     tags: parseJsonArray(row['tags']),
     metadata: parseJsonObject(row['metadata']),

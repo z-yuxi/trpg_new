@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * 一键开团向导对话框
+ * 一键创建房间向导对话框
  *
- * 步骤 1：基础信息（团名、规则包/模组、私密/公开）
- * 步骤 2（可选，公开团）：招募帖配置
+ * 步骤 1：基础信息（房间名、规则包/模组、私密/公开）
+ * 步骤 2（可选，公开房间）：招募帖配置
  *
- * 调用后端 POST /api/campaigns/quick-create，原子化创建团 + 可选招募帖。
+ * 调用后端 POST /api/campaigns/quick-create，原子化创建房间 + 可选招募帖。
  * 完成后发出 @created({ campaignId, recruitmentPostId? }) 事件，由父组件决定跳转。
  */
 import { computed, ref, watch } from 'vue';
@@ -78,6 +78,8 @@ const form = ref({
     description: '',
     player_count_max: 4,
     schedule_text: '',
+    schedule_weekday: [] as string[],
+    schedule_time_slot: '' as string,
     tags: [] as string[],
   },
 });
@@ -123,7 +125,7 @@ function handleClose() {
     allow_ob: false,
     is_listed_publicly: false,
     recruit: false,
-    recruitment: { title: '', description: '', player_count_max: 4, schedule_text: '', tags: [] },
+    recruitment: { title: '', description: '', player_count_max: 4, schedule_text: '', schedule_weekday: [], schedule_time_slot: '', tags: [] },
   };
 }
 
@@ -152,6 +154,10 @@ async function submit() {
         description: form.value.recruitment.description.trim() || null,
         player_count_max: form.value.recruitment.player_count_max,
         schedule_text: form.value.recruitment.schedule_text.trim() || null,
+        schedule_weekday: form.value.recruitment.schedule_weekday.length
+          ? form.value.recruitment.schedule_weekday
+          : null,
+        schedule_time_slot: form.value.recruitment.schedule_time_slot || null,
         tags: form.value.recruitment.tags,
       };
     }
@@ -161,7 +167,7 @@ async function submit() {
       recruitment_post: { id: string } | null;
     }>('/campaigns/quick-create', payload);
 
-    ElMessage.success(form.value.recruit ? '团已创建，招募帖已发布！' : '团已创建！');
+    ElMessage.success(form.value.recruit ? '房间已创建，招募帖已发布！' : '房间已创建！');
     emit('created', {
       campaignId: result.campaign.id,
       recruitmentPostId: result.recruitment_post?.id ?? null,
@@ -178,7 +184,7 @@ async function submit() {
 <template>
   <ElDialog
     :model-value="props.visible"
-    title="一键开团"
+    title="一键创建房间"
     width="520px"
     destroy-on-close
     @update:model-value="handleClose"
@@ -214,7 +220,7 @@ async function submit() {
         </label>
         <label class="switch-label">
           <ElCheckbox v-model="form.is_listed_publicly" />
-          公开团（对外可见）
+          公开房间（对外可见）
         </label>
       </div>
 
@@ -236,8 +242,42 @@ async function submit() {
         <ElFormItem label="需求人数">
           <ElInputNumber v-model="form.recruitment.player_count_max" :min="1" :max="20" controls-position="right" />
         </ElFormItem>
-        <ElFormItem label="时间安排">
+        <ElFormItem label="时间安排（文字描述）">
           <ElInput v-model="form.recruitment.schedule_text" maxlength="255" placeholder="每周六晚 8 点" />
+        </ElFormItem>
+      </div>
+
+      <!-- 结构化时间（用于筛选） -->
+      <div class="grid-2">
+        <ElFormItem label="适合游戏的星期">
+          <ElSelect
+            v-model="form.recruitment.schedule_weekday"
+            multiple
+            collapse-tags
+            placeholder="可选，用于筛选"
+            style="width:100%"
+          >
+            <ElOption label="周一" value="mon" />
+            <ElOption label="周二" value="tue" />
+            <ElOption label="周三" value="wed" />
+            <ElOption label="周四" value="thu" />
+            <ElOption label="周五" value="fri" />
+            <ElOption label="周六" value="sat" />
+            <ElOption label="周日" value="sun" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="时间段">
+          <ElSelect
+            v-model="form.recruitment.schedule_time_slot"
+            clearable
+            placeholder="可选，用于筛选"
+            style="width:100%"
+          >
+            <ElOption label="上午（6-12时）" value="morning" />
+            <ElOption label="下午（12-18时）" value="afternoon" />
+            <ElOption label="晚上（18-23时）" value="evening" />
+            <ElOption label="深夜（23时以后）" value="night" />
+          </ElSelect>
         </ElFormItem>
       </div>
 
@@ -280,7 +320,7 @@ async function submit() {
         :disabled="!canNext"
         @click="submit"
       >
-        {{ form.recruit ? '创建团 + 发布招募' : '创建团' }}
+        {{ form.recruit ? '创建房间 + 发布招募' : '创建房间' }}
       </TButton>
     </template>
   </ElDialog>

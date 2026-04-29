@@ -46,6 +46,8 @@ const createSchema = z.object({
   module_name: z.string().max(100).optional().nullable(),
   player_count_max: z.number().int().min(1).max(20),
   schedule_text: z.string().max(255).optional().nullable(),
+  schedule_weekday: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])).max(7).optional().nullable(),
+  schedule_time_slot: z.enum(['morning', 'afternoon', 'evening', 'night']).optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
   tags: z.array(z.string().min(1).max(20)).max(10).optional(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -102,6 +104,11 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       status: typeof req.query.status === 'string' ? (req.query.status as any) : undefined,
       poster_id: mine === 'posted' ? req.user!.id : undefined,
       applicant_user_id: mine === 'applied' ? req.user!.id : undefined,
+      // 已登录的普通浏览：传 viewer_id 查每帖申请状态，不过滤结果
+      viewer_id: !mine && req.user ? req.user.id : undefined,
+      schedule_weekday: typeof req.query.schedule_weekday === 'string' ? req.query.schedule_weekday : undefined,
+      schedule_time_slot: typeof req.query.schedule_time_slot === 'string' ? req.query.schedule_time_slot : undefined,
+      min_seats_available: typeof req.query.min_seats === 'string' ? Number(req.query.min_seats) : undefined,
     });
 
     res.json(result);

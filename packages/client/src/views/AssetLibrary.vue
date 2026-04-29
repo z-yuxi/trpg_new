@@ -265,7 +265,7 @@ function ratingLabel(r?: number) {
           <p class="ruleset-desc">{{ rs.description || '暂无描述' }}</p>
           <div class="ruleset-actions">
             <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
-            <TButton type="primary" size="sm" style="margin-top: var(--space-3)" @click.stop="openQuickCreate(null, rs.id)">开团</TButton>
+            <TButton type="primary" size="sm" style="margin-top: var(--space-3)" @click.stop="openQuickCreate(null, rs.id)">创建房间</TButton>
           </div>
         </div>
       </div>

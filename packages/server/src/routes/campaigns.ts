@@ -154,7 +154,7 @@ router.get('/', async (req, res) => {
 /**
  * POST /api/campaigns/quick-create
  *
- * 原子化"一键开团"接口：
+ * 原子化"一键创建房间"接口：
  *   1. 创建战役（is_listed_publicly / allow_ob 由请求决定）
  *   2. 若 recruit=true，立即创建并发布招募帖（draft → open）
  *   返回 { campaign, recruitment_post? }
@@ -164,17 +164,19 @@ const quickCreateSchema = z.object({
   ruleset_id: z.string().min(1),
   module_id: z.string().optional().nullable(),
   allow_ob: z.boolean().optional(),
-  /** true = 公开团，自动关联招募帖；false = 私密团（默认） */
+  /** true = 公开房间，自动关联招募帖；false = 私密房间（默认） */
   is_listed_publicly: z.boolean().optional(),
   /** 是否同时创建并发布招募帖（仅 is_listed_publicly=true 时生效） */
   recruit: z.boolean().optional(),
-  /** 招募帖附加字段（简化版，标题/描述/人数上限/标签） */
+  /** 招募帖附加字段（简化版，标题/描述/人数上限/标签/时间） */
   recruitment: z
     .object({
       title: z.string().min(1).max(50).optional(),
       description: z.string().max(2000).optional(),
       player_count_max: z.number().int().min(1).max(20).optional(),
       schedule_text: z.string().max(255).optional(),
+      schedule_weekday: z.array(z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])).max(7).optional().nullable(),
+      schedule_time_slot: z.enum(['morning', 'afternoon', 'evening', 'night']).optional().nullable(),
       tags: z.array(z.string()).max(10).optional(),
     })
     .optional(),
@@ -210,6 +212,8 @@ router.post('/quick-create', async (req, res) => {
         ruleset_id,
         player_count_max: recruitment?.player_count_max ?? 4,
         schedule_text: recruitment?.schedule_text ?? null,
+        schedule_weekday: recruitment?.schedule_weekday ?? null,
+        schedule_time_slot: recruitment?.schedule_time_slot ?? null,
         description: recruitment?.description ?? null,
         tags: recruitment?.tags ?? [],
         metadata: {},
@@ -825,17 +829,22 @@ router.get('/:id/messages', async (req, res) => {
       if (!isGm && sceneId) {
         const scene = await db('scenes').where({ id: sceneId }).select('history_visibility', 'visible_history_count').first().catch(() => null);
         if (scene && scene.history_visibility !== 'all') {
-          // 查询用户角色进入该场景的时间（scene_participations）
           if (scene.history_visibility === 'none') {
-            // 只返回用户加入后产生的消息
-            const joinRecord = await db('scene_participations')
-              .whereIn('character_id', userCharIds.length ? userCharIds : ['__none__'])
-              .where({ scene_id: sceneId })
-              .orderBy('joined_at', 'asc')
-              .first()
-              .catch(() => null);
-            if (joinRecord?.joined_at) {
-              query = query.where('created_at', '>=', joinRecord.joined_at);
+            // 按角色参与时间段过滤（任务 1.2）：EXISTS 子查询覆盖多次进出的所有区间
+            // 条件：joined_at <= message.created_at AND (left_at IS NULL OR left_at >= message.created_at)
+            if (userCharIds.length > 0) {
+              query = query.whereExists(function (this: any) {
+                this.from('scene_participations as sp2')
+                  .whereIn('sp2.character_id', userCharIds)
+                  .where('sp2.scene_id', sceneId)
+                  .whereRaw('sp2.joined_at <= cm.created_at')
+                  .andWhere(function (this: any) {
+                    this.whereNull('sp2.left_at').orWhereRaw('sp2.left_at >= cm.created_at');
+                  });
+              });
+            } else {
+              // 无角色 → 无权查看历史消息
+              query = query.whereRaw('1 = 0');
             }
           } else if (scene.history_visibility === 'recent') {
             const limit = scene.visible_history_count ?? 20;
