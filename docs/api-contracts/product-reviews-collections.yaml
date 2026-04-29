@@ -1,0 +1,245 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API — 作品评价与收藏
+  version: 1.0.0
+  description: |
+    模组/规则包的轻量评价与收藏接口。
+
+    **业务约束**：
+    - 评价资格与“拥有/获取/购买”挂钩，不与支付金额直接挂钩
+    - 作品评价文字必填，长度 10-500 字；星级可选
+    - 用户可修改和删除自己的评价
+    - 同一用户对同一商品最多保留一条有效评价、一条收藏记录
+
+servers:
+  - url: /api
+
+tags:
+  - name: 作品评价
+    description: 模组/规则包评价
+  - name: 作品收藏
+    description: 模组/规则包收藏
+
+paths:
+  /products/{productId}/reviews:
+    post:
+      summary: 创建作品评价
+      operationId: createProductReview
+      tags: [作品评价]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductReviewRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReview' }
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                content_too_short:
+                  value: { error: REVIEW_CONTENT_TOO_SHORT }
+        '403':
+          description: 未拥有作品，无评价资格
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                not_owned:
+                  value: { error: PRODUCT_NOT_OWNED }
+        '409':
+          description: 已存在评价
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                exists:
+                  value: { error: PRODUCT_REVIEW_ALREADY_EXISTS }
+
+    get:
+      summary: 获取作品评价列表
+      operationId: listProductReviews
+      tags: [作品评价]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: 评价列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, limit, offset]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProductReview' }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /products/{productId}/reviews/{reviewId}:
+    patch:
+      summary: 修改作品评价
+      operationId: updateProductReview
+      tags: [作品评价]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+        - { name: reviewId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductReviewRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductReview' }
+        '403':
+          description: 非评价创建者不能修改
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+    delete:
+      summary: 删除作品评价
+      operationId: deleteProductReview
+      tags: [作品评价]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+        - { name: reviewId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: 删除成功
+        '403':
+          description: 非评价创建者不能删除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /products/{productId}/collections:
+    post:
+      summary: 收藏作品
+      operationId: createProductCollection
+      tags: [作品收藏]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: 收藏成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductCollection' }
+        '409':
+          description: 已收藏
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+              examples:
+                exists:
+                  value: { error: PRODUCT_ALREADY_COLLECTED }
+
+    delete:
+      summary: 取消收藏作品
+      operationId: deleteProductCollection
+      tags: [作品收藏]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204':
+          description: 取消收藏成功
+
+  /users/me/collections:
+    get:
+      summary: 获取当前用户收藏列表
+      operationId: listMyCollections
+      tags: [作品收藏]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: product_type, in: query, schema: { type: string, enum: [module, ruleset] } }
+        - { name: limit,  in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: 收藏列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, limit, offset]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProductCollection' }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ProductReview:
+      type: object
+      required: [id, product_id, reviewer_id, review_type, content, is_edited, is_pinned, created_at]
+      properties:
+        id:         { type: string }
+        product_id: { type: string }
+        reviewer_id:{ type: string }
+        review_type:{ type: string, enum: [product] }
+        rating:     { type: integer, minimum: 1, maximum: 5, nullable: true }
+        content:    { type: string, minLength: 10, maxLength: 500 }
+        is_edited:  { type: boolean }
+        edited_at:  { type: string, format: date-time, nullable: true }
+        is_pinned:  { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    CreateProductReviewRequest:
+      type: object
+      required: [content]
+      properties:
+        rating:  { type: integer, minimum: 1, maximum: 5, nullable: true }
+        content: { type: string, minLength: 10, maxLength: 500 }
+
+    UpdateProductReviewRequest:
+      type: object
+      properties:
+        rating:  { type: integer, minimum: 1, maximum: 5, nullable: true }
+        content: { type: string, minLength: 10, maxLength: 500 }
+
+    ProductCollection:
+      type: object
+      required: [id, user_id, product_id, product_type, created_at]
+      properties:
+        id:           { type: string }
+        user_id:      { type: string }
+        product_id:   { type: string }
+        product_type: { type: string, enum: [module, ruleset] }
+        created_at:   { type: string, format: date-time }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }

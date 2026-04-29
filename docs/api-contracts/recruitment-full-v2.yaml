@@ -230,10 +230,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [action]
+              required: [action, reject_reason]
               properties:
                 action:        { type: string, enum: [approve, reject] }
-                reject_reason: { type: string, maxLength: 500, nullable: true }
+                reject_reason: { type: string, maxLength: 200, nullable: false, description: GM 拒绝申请时必填；批准时应传空字符串或省略该字段由服务端忽略 }
       responses:
         '200':
           description: 审批成功

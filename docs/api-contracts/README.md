@@ -19,6 +19,8 @@
 |---|---|
 | 发布招募帖 | [recruitment-publish.yaml](recruitment-publish.yaml) |
 | 申请加入招募帖 / 确认入团 | [recruitment-apply.yaml](recruitment-apply.yaml) |
+| 跑团反馈（Stars and Wishes） | [campaign-feedback.yaml](campaign-feedback.yaml) |
+| 作品评价与收藏 | [product-reviews-collections.yaml](product-reviews-collections.yaml) |
 | 创建房间 | [campaign-create.yaml](campaign-create.yaml) |
 | 规则引擎执行检定 | [engine-execute.yaml](engine-execute.yaml) |
 | GM 审批/拒绝移动 | [gm-approve-move.yaml](gm-approve-move.yaml) |

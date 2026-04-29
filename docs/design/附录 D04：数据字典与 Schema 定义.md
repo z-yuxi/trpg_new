@@ -2,7 +2,7 @@
 # 附录D04：全局数据字典与 Schema 定义（原附录 E）
 
 ## 文档信息
-- 版本：V1.6（2026-04-27 创作者权限字段补充）
+- 版本：V1.7（2026-04-29 反馈/评价/收藏与申请拒绝字段补充）
 - 上一版本：v1.5（2026-04-25）
 - 变更：新增"创作者权限字段约定"节，明确 `subscription_type`/`user_type` 的创作者判定逻辑与前端缓存键名
 
@@ -114,7 +114,7 @@
 | resources              | Record<string, ResourceState>     | 资源池状态（当前值/最大值），如 `{"hp":{"current":10,"max":10}}` |
 | statuses               | StatusInstance[]                  | 当前生效的状态列表（含剩余时间/层数）                               |
 | **avatar_custom_data** | **AvatarCustomData \| undefined** | **拼拼乐捏人配置，见下方接口定义**                               |
-| **initial_snapshot**   | **object \| undefined**           | **创建时初始快照，用于重置功能**                                |
+| **initial_snapshot**   | **object \| undefined**           | **创建时初始快照，V1.0 不做重置功能，字段保留供迭代**                                |
 
 
 // [REVISED] 角色立绘捏人数据结构 - 技术规范版
@@ -396,6 +396,74 @@ interface StoryTime {
 type SnowflakeId = string;  // 如 "1234567890123456789"
 ```
 
+### 2.7 社区反馈与作品互动结构
+
+```typescript
+interface CampaignFeedback {
+  id: string;
+  campaign_id: string;
+  reviewer_id: string;
+  review_type: 'campaign';
+  feedback_type: 'star' | 'wish';
+  visibility: 'gm_only' | 'party';
+  content: string;
+  is_edited: boolean;
+  edited_at?: Timestamp;
+  created_at: Timestamp;
+}
+
+interface ProductReview {
+  id: string;
+  product_id: string;
+  reviewer_id: string;
+  review_type: 'product';
+  rating?: 1 | 2 | 3 | 4 | 5;
+  content: string;
+  is_edited: boolean;
+  edited_at?: Timestamp;
+  is_pinned: boolean;
+  created_at: Timestamp;
+}
+
+interface ProductCollection {
+  id: string;
+  user_id: string;
+  product_id: string;
+  product_type: 'module' | 'ruleset';
+  created_at: Timestamp;
+}
+
+interface RecruitmentApplicationMeta {
+  id: string;
+  recruitment_id: string;
+  user_id: string;
+  character_id?: string;
+  status: 'pending' | 'invited' | 'confirmed' | 'rejected' | 'waiting' | 'dispute';
+  reject_reason?: string;
+  rejected_at?: Timestamp;
+  retry_after?: Timestamp;
+  invite_revoked_by_gm?: boolean;
+  invited_expire_at?: Timestamp;
+  waiting_position?: number;
+}
+
+interface DisputeTicket {
+  id: string;
+  recruitment_id: string;
+  application_id: string;
+  applicant_id: string;
+  gm_id: string;
+  status: 'open' | 'processing' | 'resolved' | 'closed';
+  summary: {
+    reject_count: number;
+    latest_reject_reason?: string;
+    latest_reject_at?: Timestamp;
+  };
+  created_at: Timestamp;
+  resolved_at?: Timestamp;
+}
+```
+
 
 
 ---
@@ -589,3 +657,65 @@ CREATE TABLE comment_likes (
 |------|------|:---:|------|
 | status | SceneStatus | 是 | 场景状态，默认 `active` |
 | group_id | string | 否 | 所属分组 ID，NULL 表示未分组 |
+
+### 5.5 社区反馈与作品互动持久化字段
+
+#### 5.5.1 `reviews` 表扩展字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| review_type | ENUM('campaign','product') | 是 | 区分跑团反馈与作品评价 |
+| feedback_type | ENUM('star','wish') | 否 | 仅 `review_type='campaign'` 时使用 |
+| visibility | ENUM('gm_only','party') | 否 | 跑团反馈可见范围，默认 `gm_only` |
+| product_id | string | 否 | 仅 `review_type='product'` 时必填 |
+| rating | int | 否 | 1-5 星，仅 `review_type='product'` 时有效 |
+| is_edited | boolean | 是 | 是否编辑过，默认 `false` |
+| edited_at | timestamp | 否 | 最后编辑时间 |
+| is_pinned | boolean | 是 | 作品评价是否被创作者置顶，默认 `false` |
+
+约束：
+
+1. `review_type='campaign'` 时，`rating` 必须为 `NULL`，`feedback_type` 必填。
+2. `review_type='product'` 时，`product_id` 必填，`content` 必填且最少 10 字，`rating` 可为空。
+3. 跑团反馈不参与信誉分、排序和推荐算法。
+
+#### 5.5.2 `applications` 表补充字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| reject_reason | varchar(200) | 否 | GM 拒绝理由；当状态流转为 `rejected` 时必填 |
+| rejected_at | timestamp | 否 | 最近一次被拒时间 |
+| retry_after | timestamp | 否 | 再次申请冷却截止时间 |
+| invite_revoked_by_gm | boolean | 是 | 是否由 GM 主动撤回邀请导致拒绝，默认 `false` |
+
+约束：
+
+1. `action=reject` 时必须写入 `reject_reason`。
+2. `invited -> rejected` 且由 GM 撤回时，`invite_revoked_by_gm=true`，`reject_reason='GM 撤回邀请'`。
+3. 同一用户对同一招募帖在冷却期内最多允许 1 次再次申请。
+
+#### 5.5.3 `dispute_tickets` 表
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| id | string | 是 | 工单 ID |
+| recruitment_id | string | 是 | 关联招募帖 |
+| application_id | string | 是 | 关联申请记录 |
+| applicant_id | string | 是 | 申请人 |
+| gm_id | string | 是 | 对应 GM |
+| status | ENUM('open','processing','resolved','closed') | 是 | 工单状态 |
+| summary_json | json | 是 | 历史申请摘要、拒绝次数、最新理由 |
+| created_at | timestamp | 是 | 创建时间 |
+| resolved_at | timestamp | 否 | 处理完成时间 |
+
+#### 5.5.4 `product_collections` 表
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| id | string | 是 | 收藏记录 ID |
+| user_id | string | 是 | 收藏用户 |
+| product_id | string | 是 | 商品 ID |
+| product_type | ENUM('module','ruleset') | 是 | 商品类型 |
+| created_at | timestamp | 是 | 收藏时间 |
+
+约束：`UNIQUE(user_id, product_id)`，同一用户对同一商品只能收藏一次。
