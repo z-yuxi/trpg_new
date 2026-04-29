@@ -1,0 +1,437 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API — 招募模块（完整契约 v2.0）
+  version: 2.0.0
+  description: |
+    招募系统完整 API 契约，覆盖状态机全流程：
+    草稿 → 发布 → 申请 → 审批 → 确认 → 成团 → 解散/归档。
+
+    **统一错误格式**：
+    ```json
+    { "error": "用户可读消息", "error_code": "MACHINE_READABLE_CODE" }
+    ```
+
+    **幂等策略**：
+    `apply / confirm / group` 三个 POST 接口支持 `X-Idempotency-Key` 请求头（4–128 位字母数字）。
+    相同 key 在 24 小时内重放返回原始响应，不产生副作用。
+
+    **限流策略**：
+    - `POST /:id/apply`          — 每 IP 5 分钟 ≤ 10 次
+    - `POST /:id/applications/:id/review` — 每 IP 1 分钟 ≤ 60 次
+    - `POST /:id/group`          — 每 IP 10 分钟 ≤ 5 次
+
+servers:
+  - url: /api
+
+tags:
+  - name: 招募帖
+    description: 招募帖子的 CRUD 与状态变更
+  - name: 申请
+    description: 玩家申请 / GM 审批 / 确认入团
+
+paths:
+  # ─── 招募帖列表 ───────────────────────────────────────────────────────────
+  /recruitment:
+    get:
+      summary: 获取招募帖列表（分页）
+      operationId: listRecruitmentPosts
+      tags: [招募帖]
+      parameters:
+        - { name: page,       in: query, schema: { type: integer, default: 1 } }
+        - { name: limit,      in: query, schema: { type: integer, default: 10, maximum: 50 } }
+        - { name: sort,       in: query, schema: { type: string, enum: [latest, oldest, hottest] } }
+        - { name: keyword,    in: query, schema: { type: string } }
+        - { name: tag,        in: query, schema: { type: string } }
+        - { name: type,       in: query, schema: { type: string, enum: [gm_recruit, player_seek] } }
+        - { name: ruleset_id, in: query, schema: { type: string } }
+        - { name: status,     in: query, schema: { type: string, enum: [draft,open,full,grouped,closed,dissolved,archived] } }
+        - { name: mine,       in: query, schema: { type: string, enum: [posted, applied] }, description: "需要认证" }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecruitmentListResponse' }
+
+    post:
+      summary: 创建招募草稿
+      operationId: createRecruitmentPost
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePostRequest' }
+      responses:
+        '201':
+          description: 草稿创建成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecruitmentPost' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ─── 招募帖详情 ───────────────────────────────────────────────────────────
+  /recruitment/{id}:
+    get:
+      summary: 获取招募帖详情
+      operationId: getRecruitmentPost
+      tags: [招募帖]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecruitmentPostDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+    put:
+      summary: 编辑招募帖内容（草稿/open 状态，帖主操作）
+      operationId: updateRecruitmentPost
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePostRequest' }
+      responses:
+        '200': { description: 更新成功, content: { application/json: { schema: { $ref: '#/components/schemas/RecruitmentPost' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ─── 帖子状态变更 ─────────────────────────────────────────────────────────
+  /recruitment/{id}/publish:
+    post:
+      summary: 发布草稿（draft → open）
+      operationId: publishRecruitmentPost
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 发布成功, content: { application/json: { schema: { $ref: '#/components/schemas/RecruitmentPost' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /recruitment/{id}/close:
+    post:
+      summary: 手动关闭招募（open/full → closed）
+      operationId: closeRecruitmentPost
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 关闭成功, content: { application/json: { schema: { $ref: '#/components/schemas/RecruitmentPost' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /recruitment/{id}/dissolve:
+    post:
+      summary: 解散团（grouped → dissolved）
+      operationId: dissolveGroup
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 解散成功, content: { application/json: { schema: { $ref: '#/components/schemas/RecruitmentPost' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /recruitment/{id}/group:
+    post:
+      summary: 发起成团（confirmed 玩家 → 创建战役房间）
+      operationId: formGroup
+      tags: [招募帖]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: X-Idempotency-Key, in: header, schema: { type: string, minLength: 4, maxLength: 128 } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                module_name: { type: string, maxLength: 100, nullable: true }
+      responses:
+        '200':
+          description: 成团成功，返回战役 ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  campaign_id: { type: string }
+                  post_id:     { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  # ─── 申请相关 ─────────────────────────────────────────────────────────────
+  /recruitment/{id}/apply:
+    post:
+      summary: 申请加入招募帖（?type=waiting 为候补申请）
+      operationId: applyRecruitment
+      tags: [申请]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id,   in: path,  required: true, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [normal, waiting] } }
+        - { name: X-Idempotency-Key, in: header, schema: { type: string, minLength: 4, maxLength: 128 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                character_id: { type: string, nullable: true }
+                message:      { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '201':
+          description: 申请成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400':
+          description: 参数错误或业务冲突
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /recruitment/{id}/applications/{applicationId}/review:
+    post:
+      summary: GM 审批申请（approve → invited，reject → rejected）
+      operationId: reviewApplication
+      tags: [申请]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id,            in: path, required: true, schema: { type: string } }
+        - { name: applicationId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:        { type: string, enum: [approve, reject] }
+                reject_reason: { type: string, maxLength: 500, nullable: true }
+      responses:
+        '200':
+          description: 审批成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /recruitment/applications/{applicationId}/confirm:
+    post:
+      summary: 玩家确认入团（invited → confirmed）
+      operationId: confirmApplication
+      tags: [申请]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: applicationId, in: path, required: true, schema: { type: string } }
+        - { name: X-Idempotency-Key, in: header, schema: { type: string, minLength: 4, maxLength: 128 } }
+      responses:
+        '200':
+          description: 确认成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Application' }
+        '400':
+          description: 邀请已过期或状态错误
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ─── 健康检查 ─────────────────────────────────────────────────────────────
+  /health:
+    get:
+      summary: 服务健康检查（DB + Redis 探针）
+      operationId: healthCheck
+      tags: [运维]
+      responses:
+        '200':
+          description: 全部健康
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+        '503':
+          description: 部分服务不可用
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthResponse' }
+
+# ─── 公共组件 ──────────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: 未登录或 Token 无效
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: 权限不足（非帖主/非GM）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    RateLimited:
+      description: 请求频率超限
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:      { type: string, description: 用户可读错误消息 }
+        error_code:
+          type: string
+          description: 机器可读错误代码
+          enum:
+            - VALIDATION_FAILED
+            - NOT_FOUND
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - CONFLICT
+            - RATE_LIMITED
+            - RECRUITMENT_NOT_FOUND
+            - RECRUITMENT_CLOSED
+            - RECRUITMENT_ALREADY_APPLIED
+            - RECRUITMENT_SELF_APPLY
+            - RECRUITMENT_INVITE_EXPIRED
+            - RECRUITMENT_WRONG_STATE
+            - IDEMPOTENCY_CONFLICT
+
+    RecruitmentPost:
+      type: object
+      required: [id, poster_id, title, type, status, ruleset_id, player_count_max, created_at, updated_at]
+      properties:
+        id:                  { type: string }
+        poster_id:           { type: string }
+        title:               { type: string }
+        type:                { type: string, enum: [gm_recruit, player_seek] }
+        status:
+          type: string
+          enum: [draft, open, full, grouped, closed, dissolved, archived]
+        ruleset_id:          { type: string }
+        module_name:         { type: string, nullable: true }
+        player_count_max:    { type: integer }
+        player_count_joined: { type: integer }
+        schedule_text:       { type: string, nullable: true }
+        description:         { type: string, nullable: true }
+        tags:                { type: array, items: { type: string } }
+        campaign_id:         { type: string, nullable: true }
+        created_at:          { type: string, format: date-time }
+        updated_at:          { type: string, format: date-time }
+
+    RecruitmentPostDetail:
+      allOf:
+        - $ref: '#/components/schemas/RecruitmentPost'
+        - type: object
+          properties:
+            my_application_id:         { type: string, nullable: true }
+            my_application_status:     { type: string, nullable: true }
+            my_application_expires_at: { type: string, format: date-time, nullable: true }
+
+    Application:
+      type: object
+      required: [id, post_id, applicant_user_id, status, created_at, updated_at]
+      properties:
+        id:                  { type: string }
+        post_id:             { type: string }
+        applicant_user_id:   { type: string }
+        character_id:        { type: string, nullable: true }
+        message:             { type: string }
+        status:
+          type: string
+          enum: [pending, invited, confirmed, waiting, rejected]
+        reject_reason:       { type: string, nullable: true }
+        invited_expires_at:  { type: string, format: date-time, nullable: true }
+        waiting_position:    { type: integer, nullable: true }
+        created_at:          { type: string, format: date-time }
+        updated_at:          { type: string, format: date-time }
+
+    CreatePostRequest:
+      type: object
+      required: [title, type, ruleset_id, player_count_max]
+      properties:
+        title:            { type: string, minLength: 1, maxLength: 50 }
+        type:             { type: string, enum: [gm_recruit, player_seek] }
+        ruleset_id:       { type: string, minLength: 1 }
+        module_name:      { type: string, maxLength: 100, nullable: true }
+        player_count_max: { type: integer, minimum: 1, maximum: 20 }
+        schedule_text:    { type: string, maxLength: 255, nullable: true }
+        description:      { type: string, maxLength: 2000, nullable: true }
+        tags:             { type: array, items: { type: string }, maxItems: 10 }
+
+    UpdatePostRequest:
+      type: object
+      properties:
+        title:            { type: string, minLength: 1, maxLength: 50 }
+        module_name:      { type: string, maxLength: 100, nullable: true }
+        player_count_max: { type: integer, minimum: 1, maximum: 20 }
+        schedule_text:    { type: string, maxLength: 255, nullable: true }
+        description:      { type: string, maxLength: 2000, nullable: true }
+        tags:             { type: array, items: { type: string }, maxItems: 10 }
+
+    RecruitmentListResponse:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/RecruitmentPost' } }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+    HealthResponse:
+      type: object
+      required: [status, uptime, checks]
+      properties:
+        status:  { type: string, enum: [ok, degraded] }
+        uptime:  { type: integer, description: 进程运行时间（秒） }
+        version: { type: string }
+        checks:
+          type: object
+          properties:
+            db:    { type: string, enum: [ok, error] }
+            redis: { type: string, enum: [ok, error] }
+</content>
+</invoke>

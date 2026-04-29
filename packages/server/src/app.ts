@@ -7,6 +7,7 @@ import routes from './routes/index';
 import { createSocketServer } from './socket';
 import { globalErrorHandler } from './utils/error-response';
 import { requestLogger } from './middleware/request-logger';
+import { auditLogger } from './middleware/audit-log';
 
 const app: Application = express();
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
@@ -17,6 +18,7 @@ app.use(helmet());
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
 app.use(requestLogger);
+app.use(auditLogger);
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');

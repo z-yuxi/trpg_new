@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { recruitmentService } from '../services/recruitment-service';
@@ -7,6 +8,34 @@ import { notificationService } from '../services/notification-service';
 import { postCommentService } from '../services/post-comment-service';
 import { ErrorCode } from '../utils/app-error';
 import { db } from '../db';
+
+// ── 限流策略 ───────────────────────────────────────────────────────────────────
+// 防止申请刷量：每用户 IP 每 5 分钟最多申请 10 次
+const applyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '申请过于频繁，请 5 分钟后再试', error_code: 'RATE_LIMITED' },
+});
+
+// 防止审批接口滥用：每 GM 每分钟最多 60 次（正常操作足够）
+const reviewLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '操作过于频繁，请稍后再试', error_code: 'RATE_LIMITED' },
+});
+
+// 成团操作：每 IP 每 10 分钟最多 5 次（防误触/重复提交）
+const groupLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '成团操作过于频繁，请稍后再试', error_code: 'RATE_LIMITED' },
+});
 
 const router: IRouter = Router();
 
@@ -147,7 +176,7 @@ router.post('/applications/:applicationId/confirm', authMiddleware, idempotencyM
 });
 
 // POST /:id/apply — 申请加入；?type=waiting 进入候补队列
-router.post('/:id/apply', authMiddleware, idempotencyMiddleware, async (req, res) => {
+router.post('/:id/apply', authMiddleware, applyLimiter, idempotencyMiddleware, async (req, res) => {
   const schema = z.object({
     character_id: z.string().optional().nullable(),
     message: z.string().min(1).max(500),
@@ -224,7 +253,7 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
 });
 
 // POST /:id/applications/:applicationId/review — GM 审批申请
-router.post('/:id/applications/:applicationId/review', authMiddleware, async (req, res) => {
+router.post('/:id/applications/:applicationId/review', authMiddleware, reviewLimiter, async (req, res) => {
   const schema = z.object({
     action: z.enum(['approve', 'reject']),
     reject_reason: z.string().max(500).optional().nullable(),
@@ -260,7 +289,7 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, async (re
 });
 
 // POST /:id/group — GM 发起成团（confirmed 玩家 → 创建房间）
-router.post('/:id/group', authMiddleware, idempotencyMiddleware, async (req, res) => {
+router.post('/:id/group', authMiddleware, groupLimiter, idempotencyMiddleware, async (req, res) => {
   const schema = z.object({
     module_name: z.string().max(100).optional().nullable(),
   });
