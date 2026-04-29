@@ -3,6 +3,8 @@ import { httpServer } from './app';
 import cron from 'node-cron';
 import { moduleService } from './services/module-service';
 import { recruitmentService } from './services/recruitment-service';
+import { recruitmentMetricsService } from './services/recruitment-metrics-service';
+import { runDailyDataCheck } from './services/daily-check-service';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 
@@ -64,6 +66,29 @@ cron.schedule('*/5 * * * *', async () => {
     }
   } catch (err: any) {
     console.error('[Cron] Error expiring recruitment invites:', err?.message ?? err);
+  }
+});
+
+// ── 定时任务：每日 02:00 生成运营日报 + 异常告警巡检 ─────────────────────────
+cron.schedule('0 2 * * *', async () => {
+  try {
+    // 失效前日缓存，确保日报数据是最新的
+    await recruitmentMetricsService.invalidateCache();
+
+    // 巡检告警
+    const alerts = await recruitmentMetricsService.detectAlerts(7);
+    if (alerts.length > 0) {
+      for (const alert of alerts) {
+        console.warn(`[Metrics Alert] ${alert.type}: ${alert.message}`);
+      }
+    } else {
+      console.log(`[Metrics] 巡检完成，无异常告警 ${new Date().toISOString()}`);
+    }
+
+    // 数据治理巡检
+    await runDailyDataCheck();
+  } catch (err: any) {
+    console.error('[Cron] Error in daily metrics check:', err?.message ?? err);
   }
 });
 

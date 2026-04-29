@@ -238,6 +238,36 @@ export interface RecruitmentComment {
   created_at: Date;
 }
 
+/** 所有合法的招募帖状态（用于运行时校验） */
+export const RECRUITMENT_STATUSES = [
+  'draft', 'open', 'full', 'grouped', 'closed', 'dissolved', 'archived',
+] as const satisfies ReadonlyArray<RecruitmentStatus>;
+
+/** 所有合法的申请状态（用于运行时校验） */
+export const RECRUITMENT_APP_STATUSES = [
+  'pending', 'invited', 'confirmed', 'waiting', 'rejected',
+] as const satisfies ReadonlyArray<RecruitmentApplicationStatus>;
+
+/** 类型守卫：判断是否为合法 RecruitmentStatus */
+export function isRecruitmentStatus(v: unknown): v is RecruitmentStatus {
+  return typeof v === 'string' && (RECRUITMENT_STATUSES as readonly string[]).includes(v);
+}
+
+/** 类型守卫：判断是否为合法 RecruitmentApplicationStatus */
+export function isRecruitmentAppStatus(v: unknown): v is RecruitmentApplicationStatus {
+  return typeof v === 'string' && (RECRUITMENT_APP_STATUSES as readonly string[]).includes(v);
+}
+
+/** 判断招募帖是否处于"活跃接受申请"状态 */
+export function isActiveRecruitment(status: RecruitmentStatus): boolean {
+  return status === 'open' || status === 'full';
+}
+
+/** 判断申请是否处于"可操作"状态（非终态） */
+export function isActiveApplication(status: RecruitmentApplicationStatus): boolean {
+  return status === 'pending' || status === 'invited' || status === 'waiting';
+}
+
 // ===== 规则集 =====
 export type RulesetStatus = 'draft' | 'reviewing' | 'published' | 'deprecated';
 

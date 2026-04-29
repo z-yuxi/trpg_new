@@ -13,6 +13,7 @@ import uploadRoutes from './upload';
 import occupationRoutes from './occupations';
 import reportsRoutes from './reports';
 import gmNotesRoutes from './gm-notes';
+import metricsRoutes from './metrics';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -63,5 +64,6 @@ router.use('/upload', uploadRoutes);
 router.use('/occupations', occupationRoutes);
 router.use('/reports', reportsRoutes);
 router.use('/campaigns', gmNotesRoutes);
+router.use('/metrics', metricsRoutes);
 
 export default router;

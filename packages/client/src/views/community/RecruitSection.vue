@@ -16,6 +16,7 @@ import {
   ElSwitch,
 } from 'element-plus';
 import RecruitmentBoard from './RecruitmentBoard.vue';
+import MyRecruitments from './MyRecruitments.vue';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { useRoute, useRouter } from 'vue-router';
@@ -191,22 +192,7 @@ onMounted(async () => {
         <RecruitmentBoard :key="`player-${boardVersion}`" fixed-type="player_seek" :rulesets="rulesets" />
       </ElTabPane>
       <ElTabPane label="我的" name="mine">
-        <div class="mine-grid">
-          <div class="mine-section">
-            <div class="mine-head">
-              <h3>我发布的招募</h3>
-              <span>集中管理自己开的帖</span>
-            </div>
-            <RecruitmentBoard :key="`mine-posted-${boardVersion}`" mine="posted" :rulesets="rulesets" />
-          </div>
-          <div class="mine-section">
-            <div class="mine-head">
-              <h3>我的申请</h3>
-              <span>跟踪 pending / invited / confirmed / waiting / rejected 状态</span>
-            </div>
-            <RecruitmentBoard :key="`mine-applied-${boardVersion}`" mine="applied" :rulesets="rulesets" />
-          </div>
-        </div>
+        <MyRecruitments :rulesets="rulesets" :board-version="boardVersion" />
       </ElTabPane>
     </ElTabs>
 
@@ -314,23 +300,6 @@ onMounted(async () => {
 .recruit-section { display: flex; flex-direction: column; gap: var(--space-4); }
 .section-header { display: flex; align-items: center; justify-content: space-between; }
 .section-title { margin: 0; font-size: var(--text-xl); font-weight: 700; color: var(--color-text-primary); }
-.mine-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-.mine-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--color-bg-secondary) 88%, transparent);
-}
-.mine-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.mine-head h3 { margin: 0; font-size: var(--text-lg); }
-.mine-head span { color: var(--text-muted); font-size: var(--text-sm); }
 .hint { margin-top: 4px; font-size: var(--text-xs); color: var(--text-muted); }
 .field-panel {
   display: flex;
@@ -348,8 +317,6 @@ onMounted(async () => {
 .grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 @media (max-width: 640px) {
   .grid-row,
-  .field-grid,
-  .mine-grid { grid-template-columns: 1fr; }
-  .mine-head { flex-direction: column; align-items: flex-start; }
+  .field-grid { grid-template-columns: 1fr; }
 }
 </style>
