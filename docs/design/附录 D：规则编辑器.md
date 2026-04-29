@@ -275,7 +275,7 @@ interface CharacterCard {
 ## 7. 执行器 API
 
 ### 7.1 检定接口
-`POST /api/v1/engine/execute`
+`POST /api/engine/execute`
 
 **请求体**：
 ```json
@@ -568,7 +568,7 @@ platform_command_defaults:
 ### 11.4 前端助理台指令速查接口
 
 ```typescript
-// GET /api/v1/rulesets/{ruleset_id}/commands
+// GET /api/rulesets/{ruleset_id}/commands
 // 返回当前规则包可用的所有指令（合并后）
 interface AvailableCommand {
   name: string;               // "ra"
@@ -588,7 +588,7 @@ interface AvailableCommand {
 
 前端在 GM 选择规则包后，调用此接口获取动态表单配置。
 
-**接口**：`GET /api/v1/rulesets/{ruleset_id}/recruitment-fields`
+**接口**：`GET /api/rulesets/{ruleset_id}/recruitment-fields`
 
 **响应**：
 ```json
@@ -631,10 +631,10 @@ interface AvailableCommand {
 
 ### 11.8 角色卡编辑器集成
 
-前端在用户修改基础属性后，调用引擎执行 `formula_eval` 节点（通过 `/api/v1/engine/evaluate` 接口），实时刷新派生值显示。
+前端在用户修改基础属性后，调用引擎执行 `formula_eval` 节点（通过 `/api/engine/evaluate` 接口），实时刷新派生值显示。
 
 ```json
-POST /api/v1/engine/evaluate
+POST /api/engine/evaluate
 {
   "ruleset_id": "coc7",
   "node_id": "formula_eval",
@@ -829,7 +829,7 @@ error_handling:
 ### 11.19 接口定义
 
 ```http
-POST /api/v1/rulesets/{ruleset_id}/reload
+POST /api/rulesets/{ruleset_id}/reload
 Authorization: Bearer <token>
 Content-Type: application/json
 

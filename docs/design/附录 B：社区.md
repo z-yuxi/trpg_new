@@ -988,14 +988,14 @@ decay(t) = floor( (当前时间戳 - 发布时间戳) / 86400 ) × 10
 
 ## 19. API 接口规范（核心示例）
 
-所有接口前缀：`/api/v1/community`  
+所有接口前缀：`/api`  
 认证方式：`Authorization: Bearer {token}`  
 幂等键：非幂等写操作必须携带 `idempotent_key`（前端生成 UUID）。
 
 ### 19.1 招募帖
 
 #### 发布招募帖
-`POST /recruitment`  
+`POST /api/recruitment`  
 请求体：
 ```json
 {
@@ -1013,16 +1013,16 @@ decay(t) = floor( (当前时间戳 - 发布时间戳) / 86400 ) × 10
 成功响应 `201`：`{ "post_id": "uuid", "status": "draft" }`
 
 #### 发布帖子（从草稿到 open）
-`POST /recruitment/{post_id}/publish` → `200`
+`POST /api/recruitment/{post_id}/publish` → `200`
 
 #### 获取招募列表
-`GET /recruitment/list?rulesets=coc,dnd&status=open&page=1&limit=20`  
+`GET /api/recruitment/list?rulesets=coc,dnd&status=open&page=1&limit=20`  
 支持筛选：`rulesets`, `post_type`, `status`, `time_slot`（如 `2_21:00`）
 
 ### 19.2 申请与确认
 
 #### 申请加入
-`POST /recruitment/{post_id}/apply`  
+`POST /api/recruitment/{post_id}/apply`  
 请求体：
 ```json
 {
@@ -1037,29 +1037,29 @@ decay(t) = floor( (当前时间戳 - 发布时间戳) / 86400 ) × 10
 ```
 
 #### 审批申请（GM）
-`PUT /applications/{application_id}/approve` → 状态变为 `invited`
+`PUT /api/applications/{application_id}/approve` → 状态变为 `invited`
 
 #### 确认入团（玩家）
-`POST /applications/{application_id}/confirm` → 状态变为 `confirmed`
+`POST /api/applications/{application_id}/confirm` → 状态变为 `confirmed`
 
 ### 19.3 评论系统
 
 #### 回复主题帖（生成主楼层）
-`POST /posts/{post_id}/replies`  
+`POST /api/posts/{post_id}/replies`  
 请求体：`{ "content": "string", "idempotent_key": "uuid" }`  
 响应：`{ "reply_id": "uuid", "floor_number": 12, "created_at": "..." }`
 
 #### 回复主楼层（生成楼中楼）
-`POST /replies/{parent_floor_id}/comments`  
+`POST /api/replies/{parent_floor_id}/comments`  
 请求体：`{ "content": "string", "reply_to_user_id": "uuid?", "idempotent_key": "uuid" }`
 
 #### 删除评论（软删除）
-`DELETE /comments/{comment_id}`（需权限） → `204`
+`DELETE /api/comments/{comment_id}`（需权限） → `204`
 
 ### 19.4 成团操作
 
 #### GM 成团
-`POST /recruitment/{post_id}/finalize`  
+`POST /api/recruitment/{post_id}/finalize`  
 请求体：
 ```json
 {

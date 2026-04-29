@@ -116,7 +116,7 @@
 
 ### 五、前端交互示例
 
-- **加入房间**：用户输入 `A3B9K2` → 前端请求 `POST /api/v1/campaigns/join`，body `{ roomCode: "A3B9K2" }` → 后端根据 `campaigns` 表的 `room_code` 查找内部 `id`。
+- **加入房间**：用户输入 `A3B9K2` → 前端请求 `POST /api/campaigns/join`，body `{ roomCode: "A3B9K2" }` → 后端根据 `campaigns` 表的 `room_code` 查找内部 `id`。
     
 - **分享角色卡**：用户复制链接 `https://trpg.com/character/A3F9C2E1` → 后端根据 `character_code` 返回角色卡公开信息（仅所有者可编辑）。
     

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElDialog, ElForm, ElFormItem, ElInput, ElButton as ElBtn } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
+import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
@@ -180,9 +181,13 @@ onMounted(fetchThreads);
         </div>
       </div>
 
-      <div v-if="!loading && threads.length === 0" class="empty-state">
-        暂无帖子，来发布第一篇吧！
-      </div>
+      <EmptyState
+        v-if="!loading && threads.length === 0"
+        title="暂无帖子"
+        description="还没有人发帖，来发布第一篇吧！"
+        :action-text="authStore.isLoggedIn ? '+ 发帖' : undefined"
+        @action="showPostDialog = true"
+      />
     </div>
 
     <!-- 分页 -->
@@ -318,13 +323,6 @@ onMounted(fetchThreads);
   gap: 2px;
 }
 .last-user { color: var(--text-muted); }
-
-.empty-state {
-  text-align: center;
-  padding: var(--space-8);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
 
 /* 分页 */
 .pager {

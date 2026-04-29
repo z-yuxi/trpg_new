@@ -113,17 +113,26 @@ pnpm --filter @trpg/shared build
 ---
 
 ## 6. 执行数据库迁移（最新修复版）
-步骤 1：重启正常的 MySQL 服务
-在管理员 PowerShell 里执行：
-powershell
-net start MySQL80
-✅ 成功提示：MySQL80 服务已成功启动。
-步骤 2：用 trpg 用户连接 MySQL（代替 root）
-打开普通 PowerShell（不用管理员），执行：
-powershell
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u trpg -h 127.0.0.1 -P 3306 -pTrpg@2024! trpg_platform
-✅ 成功：直接进入 MySQL 命令行（提示符变成 mysql>）；
 
+步骤 1：重启正常的 MySQL 服务
+
+在管理员 PowerShell 里执行：
+
+```powershell
+net start MySQL80
+```
+
+成功提示：MySQL80 服务已成功启动。
+
+步骤 2：用 `trpg` 用户连接 MySQL（代替 `root`）
+
+打开普通 PowerShell（不用管理员），执行：
+
+```powershell
+& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u trpg -h 127.0.0.1 -P 3306 -pTrpg@2024! trpg_platform
+```
+
+成功表现：直接进入 MySQL 命令行（提示符变成 `mysql>`）。
 
 
 ```powershell
@@ -179,8 +188,8 @@ pnpm --filter @trpg/client dev
 
 1. 首页可访问（http://localhost:5173）。
 2. 注册/登录可用。
-3. 我的战役可加载并可创建战役。
-4. 社区招募列表可加载。
+3. 房间列表可加载并可创建房间。
+4. 招募列表可加载。
 5. 角色编辑页可保存角色卡。
 
 ---
