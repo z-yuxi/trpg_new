@@ -44,8 +44,11 @@ paths:
         - { name: tag,        in: query, schema: { type: string } }
         - { name: type,       in: query, schema: { type: string, enum: [gm_recruit, player_seek] } }
         - { name: ruleset_id, in: query, schema: { type: string } }
-        - { name: status,     in: query, schema: { type: string, enum: [draft,open,full,grouped,closed,dissolved,archived] } }
-        - { name: mine,       in: query, schema: { type: string, enum: [posted, applied] }, description: "需要认证" }
+        - { name: status,            in: query, schema: { type: string, enum: [draft,open,full,grouped,closed,dissolved,archived] } }
+        - { name: mine,              in: query, schema: { type: string, enum: [posted, applied] }, description: "需要认证" }
+        - { name: schedule_weekday,  in: query, schema: { type: string, enum: [mon,tue,wed,thu,fri,sat,sun] }, description: "时段筛选：星期" }
+        - { name: schedule_time_slot,in: query, schema: { type: string, enum: [morning,afternoon,evening,night] }, description: "时段筛选：时间段" }
+        - { name: min_seats,         in: query, schema: { type: integer, minimum: 1 }, description: "最少剩余席位" }
       responses:
         '200':
           description: 成功
@@ -356,6 +359,9 @@ components:
         player_count_max:    { type: integer }
         player_count_joined: { type: integer }
         schedule_text:       { type: string, nullable: true }
+        schedule_weekday:    { type: array, items: { type: string, enum: [mon,tue,wed,thu,fri,sat,sun] }, nullable: true }
+        schedule_time_slot:  { type: string, enum: [morning,afternoon,evening,night], nullable: true }
+        allow_ob:            { type: boolean, description: 成团后是否允许旁观 }
         description:         { type: string, nullable: true }
         tags:                { type: array, items: { type: string } }
         campaign_id:         { type: string, nullable: true }
@@ -399,6 +405,8 @@ components:
         module_name:      { type: string, maxLength: 100, nullable: true }
         player_count_max: { type: integer, minimum: 1, maximum: 20 }
         schedule_text:    { type: string, maxLength: 255, nullable: true }
+        schedule_weekday: { type: array, items: { type: string, enum: [mon,tue,wed,thu,fri,sat,sun] }, maxItems: 7, nullable: true }
+        schedule_time_slot: { type: string, enum: [morning,afternoon,evening,night], nullable: true }
         description:      { type: string, maxLength: 2000, nullable: true }
         tags:             { type: array, items: { type: string }, maxItems: 10 }
 
@@ -414,9 +422,9 @@ components:
 
     RecruitmentListResponse:
       type: object
-      required: [items, total, page, limit]
+      required: [data, total, page, limit]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/RecruitmentPost' } }
+        data:  { type: array, items: { $ref: '#/components/schemas/RecruitmentPost' } }
         total: { type: integer }
         page:  { type: integer }
         limit: { type: integer }

@@ -8,6 +8,7 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "lint:terms": "tsx scripts/lint-terminology.ts",
+    "verify:migrations": "pnpm --filter @trpg/server exec npx tsx ../../scripts/verify-migrations.ts",
     "test:accept": "pnpm --filter @trpg/server test:accept"
   },
   "devDependencies": {

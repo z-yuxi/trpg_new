@@ -108,9 +108,12 @@ function makeBuilder(tableName: string): any {
 
   builder.insert = async (data: any) => {
     if (!rows[table]) rows[table] = [];
+    const now = new Date().toISOString();
     const record = {
       id: table + '-' + Date.now() + '-' + Math.random().toString(36).slice(2),
       uid: rows[table].length + 1000000,
+      created_at: now,
+      updated_at: now,
       ...data,
     };
     rows[table].push(record);

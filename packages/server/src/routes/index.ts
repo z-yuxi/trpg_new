@@ -55,6 +55,8 @@ router.get('/health', async (_req, res) => {
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
+// reviewRoutes 必须在 campaignRoutes 之前注册，避免被 campaignRoutes 的 authMiddleware 拦截
+router.use('/', reviewRoutes);
 router.use('/campaigns', campaignRoutes);
 router.use('/characters', characterRoutes);
 router.use('/rulesets', rulesetRoutes);
@@ -70,6 +72,5 @@ router.use('/campaigns', gmNotesRoutes);
 router.use('/metrics', metricsRoutes);
 router.use('/membership', membershipRoutes);
 router.use('/experiments', experimentRoutes);
-router.use('/', reviewRoutes);
 
 export default router;

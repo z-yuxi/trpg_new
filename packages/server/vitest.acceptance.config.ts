@@ -21,6 +21,7 @@ export default defineConfig({
       'src/__tests__/e2e/auth.e2e.test.ts',
       'src/__tests__/e2e/recruitment*.e2e.test.ts',
       'src/__tests__/message-visibility.test.ts',
+      'src/__tests__/contract/api-contract.test.ts',
     ],
     env: {
       JWT_SECRET: 'test_jwt_secret_for_acceptance_gate',

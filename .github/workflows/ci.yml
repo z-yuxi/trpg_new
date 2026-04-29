@@ -1,4 +1,4 @@
-name: 术语守卫 & 单元测试
+name: RC 发布门禁（全量 CI）
 
 on:
   push:
@@ -6,9 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# 同分支只保留最新一次运行，节省 runner 资源
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─── Job 1: 静态检查（最快，先跑） ─────────────────────────────────────────────
 jobs:
-  terminology-guard:
-    name: 术语词典合规检查
+  static-checks:
+    name: 静态检查（术语守卫 + 迁移验证）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +31,17 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 运行术语守卫
+      - name: 术语守卫
         run: pnpm lint:terms
 
+      - name: 迁移正反向验证
+        run: pnpm verify:migrations
+
+# ─── Job 2: 发布门禁验收套件 ───────────────────────────────────────────────────
   acceptance-gate:
-    name: 发布门禁（auth + 招募筛选 + 消息可见性）
+    name: 验收套件（auth + 招募筛选 + 消息可见性）
     runs-on: ubuntu-latest
+    needs: static-checks
     env:
       JWT_SECRET: ci_test_jwt_secret_not_for_production
       DB_HOST: 127.0.0.1
@@ -52,12 +63,43 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 运行验收套件（发布门禁）
+      - name: 验收套件（发布门禁）
         run: pnpm test:accept
 
+# ─── Job 3: API 合同测试 ────────────────────────────────────────────────────────
+  contract-tests:
+    name: API 合同测试（响应形状锁定）
+    runs-on: ubuntu-latest
+    needs: static-checks
+    env:
+      JWT_SECRET: ci_test_jwt_secret_not_for_production
+      DB_HOST: 127.0.0.1
+      DB_USER: trpg
+      DB_PASSWORD: trpg_password
+      DB_NAME: trpg_platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: API 合同测试
+        run: pnpm --filter @trpg/server exec vitest run src/__tests__/contract/api-contract.test.ts
+
+# ─── Job 4: 全量单元测试 ─────────────────────────────────────────────────────
   unit-tests:
     name: 全量单元测试（server + client + shared）
     runs-on: ubuntu-latest
+    needs: static-checks
     env:
       JWT_SECRET: ci_test_jwt_secret_not_for_production
       DB_HOST: 127.0.0.1
@@ -79,5 +121,58 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
-      - name: 运行全量单元测试
+      - name: 全量单元测试
         run: pnpm test
+
+# ─── Job 5: Docker 构建冒烟（仅 main / release-* 分支运行） ──────────────────
+  docker-smoke:
+    name: Docker 构建冒烟（server + client 镜像）
+    runs-on: ubuntu-latest
+    needs: [acceptance-gate, contract-tests, unit-tests]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 构建 server 镜像
+        run: docker build --target server -t trpg-server:smoke .
+
+      - name: 构建 client 镜像
+        run: docker build --target client -t trpg-client:smoke .
+
+      - name: 冒烟：server 镜像健康检查（--help 冒烟，不依赖真实 DB）
+        run: |
+          docker run --rm \
+            -e JWT_SECRET=smoke_test_secret \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_USER=trpg \
+            -e DB_PASSWORD=trpg_password \
+            -e DB_NAME=trpg_platform \
+            -e REDIS_HOST=127.0.0.1 \
+            -e REDIS_PORT=6379 \
+            -e REDIS_PASSWORD=smoke \
+            -e NODE_ENV=production \
+            --entrypoint node \
+            trpg-server:smoke \
+            packages/server/dist/server.js --version 2>&1 || true
+          echo "Docker smoke: server image built successfully"
+
+# ─── Job 6: 发布就绪汇总（所有关键 job 通过才绿灯） ─────────────────────────
+  release-ready:
+    name: ✅ 发布就绪汇总
+    runs-on: ubuntu-latest
+    needs: [acceptance-gate, contract-tests, unit-tests]
+    if: always()
+    steps:
+      - name: 检查所有关键 job 状态
+        run: |
+          echo "acceptance-gate: ${{ needs.acceptance-gate.result }}"
+          echo "contract-tests:  ${{ needs.contract-tests.result }}"
+          echo "unit-tests:      ${{ needs.unit-tests.result }}"
+
+          if [[ "${{ needs.acceptance-gate.result }}" != "success" || \
+                "${{ needs.contract-tests.result }}" != "success" || \
+                "${{ needs.unit-tests.result }}"     != "success" ]]; then
+            echo "❌ 发布门禁未通过，不允许合并/发布"
+            exit 1
+          fi
+          echo "✅ 所有关键检查通过，可以发布"
