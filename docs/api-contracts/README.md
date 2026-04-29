@@ -24,6 +24,17 @@
 | GM 审批/拒绝移动 | [gm-approve-move.yaml](gm-approve-move.yaml) |
 | 拉取历史消息 | [messages-list.yaml](messages-list.yaml) |
 
+### 补充接口（导演台与轨迹矩阵）
+
+| 接口 | 文件 |
+|---|---|
+| 获取规则包的招募字段 | [recruitment-fields-get.yaml](recruitment-fields-get.yaml) |
+| GM 导演台 - 待审批移动列表 | [gm-pending-moves-get.yaml](gm-pending-moves-get.yaml) |
+| GM 导演台 - 即将自动执行预约 | [gm-upcoming-moves-get.yaml](gm-upcoming-moves-get.yaml) |
+| 玩家申请移动 | [move-apply-post.yaml](move-apply-post.yaml) |
+| GM 强制移动 | [gm-force-move-post.yaml](gm-force-move-post.yaml) |
+| 拉取轨迹矩阵数据 | [trajectory-matrix-get.yaml](trajectory-matrix-get.yaml) |
+
 ## 版本建议
 
 - 采用语义化版本（`info.version`）。

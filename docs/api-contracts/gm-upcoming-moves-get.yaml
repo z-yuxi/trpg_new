@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间（GM 导演台）
+  version: 1.1.0
+  description: 获取即将自动执行的预约移动。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/gm/upcoming-moves:
+    get:
+      summary: 获取即将自动执行的预约移动列表
+      description: |
+        返回 status=approved 且 execute_at_story 晚于当前全局剧情时间的预约。
+        默认返回最近 5 条，按 execute_at_story 升序。
+      operationId: getUpcomingMoves
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+        - name: threshold_minutes
+          in: query
+          required: false
+          description: 仅返回未来 N 分钟内将触发的预约，默认 180。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+            default: 180
+      responses:
+        '200':
+          description: 成功返回列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetUpcomingMovesResponse'
+              example:
+                moves:
+                  - move_id: move_003
+                    character_name: 王五
+                    to_scene_name: 码头
+                    execute_at_story:
+                      day: 1
+                      hour: 14
+                      minute: 30
+                  - move_id: move_004
+                    character_name: 赵六
+                    to_scene_name: 图书馆
+                    execute_at_story:
+                      day: 1
+                      hour: 15
+                      minute: 0
+        '401':
+          description: 未授权
+        '403':
+          description: 非 GM 无权访问
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      required: [day, hour, minute]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+    UpcomingMove:
+      type: object
+      required: [move_id, character_name, to_scene_name, execute_at_story]
+      properties:
+        move_id:
+          type: string
+        character_name:
+          type: string
+        to_scene_name:
+          type: string
+        execute_at_story:
+          $ref: '#/components/schemas/StoryTime'
+    GetUpcomingMovesResponse:
+      type: object
+      required: [moves]
+      properties:
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingMove'
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

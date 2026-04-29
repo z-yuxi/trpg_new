@@ -868,7 +868,7 @@ decay(t) = floor( (当前时间戳 - 发布时间戳) / 86400 ) × 10
 | `difficulty` | 枚举 | `beginner` / `normal` / `hardcore` | 难度（新手友好 / 普通 / 硬核） |
 | `play_frequency` | 枚举 | `weekly1` / `weekly2_3` / `flexible` | 开团频率（每周1次 / 每周2-3次 / 人齐后定） |
 | `total_duration` | 枚举 | `short` / `medium` / `long` | 总时长（短团<10h / 中团10-30h / 长团>30h） |
-| `module_status` | 枚举 | `selected` / `pending` / `improvisation` | 模组状态（已选定 / 待定商议 / 无模组即兴） |
+| `module_status` | 枚举 | `selected` / `pending` / `none` | 模组状态（已选定 / 待定商议 / 无模组即兴） |
 | `allow_spectate` | 布尔 | 默认 `false` | 是否允许观战（若房间支持 OB） |
 | `has_secret_ho` | 布尔 | 默认 `false` | 是否包含秘密HO（隐藏线索/角色） |
 
@@ -881,6 +881,7 @@ decay(t) = floor( (当前时间戳 - 发布时间戳) / 86400 ) × 10
 - 详情页展示所有扩展字段的友好标签。
 
 > **注意**：`module_status` 与成团时的模组选择逻辑一致：若发帖时已选定模组，成团时直接使用；若为待定，成团时弹出模态框要求选择；若为即兴，则创建空白团。**此逻辑已在第 6 章成团流程中覆盖**，此处仅明确字段来源。
+> 存储口径统一为 `selected` / `pending` / `none`。其中“即兴开团”仅作为 UI 文案映射，不作为独立枚举值存库。
 
 ### 20.2 可观战标识与观看直播（🔵 纳入，需配合房间能力）
 
@@ -999,6 +1000,7 @@ CREATE TABLE invitations (
 
 | 接口 | 文件 |
 |---|---|
+| 获取规则包的招募字段 | [recruitment-fields-get.yaml](../api-contracts/recruitment-fields-get.yaml) |
 | 发布招募帖 | [recruitment-publish.yaml](../api-contracts/recruitment-publish.yaml) |
 | 申请加入招募帖 / 确认入团 | [recruitment-apply.yaml](../api-contracts/recruitment-apply.yaml) |
 | 创建房间（含可选自动发布） | [campaign-create.yaml](../api-contracts/campaign-create.yaml) |

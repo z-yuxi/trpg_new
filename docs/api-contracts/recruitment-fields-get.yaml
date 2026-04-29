@@ -1,0 +1,120 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 规则工坊
+  version: 1.1.0
+  description: 获取规则包的招募帖专属字段定义。
+
+paths:
+  /api/v1/rulesets/{ruleset_id}/recruitment-fields:
+    get:
+      summary: 获取规则包的招募字段
+      description: |
+        用于发布招募帖页面的动态表单渲染。
+        若规则包未配置 recruitment_fields，返回空数组。
+      operationId: getRecruitmentFields
+      tags:
+        - 规则工坊
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          description: 规则包 ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功返回字段定义数组
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetRecruitmentFieldsResponse'
+              example:
+                fields:
+                  - name: credit_rating_max
+                    label: 信誉限制
+                    type: number
+                    required: false
+                    placeholder: "≤30"
+                    default: 30
+                  - name: age_education
+                    label: 年龄/教育限制
+                    type: text
+                  - name: allow_mixed_orphan
+                    label: 是否允许混孤
+                    type: boolean
+                    default: false
+        '401':
+          description: 未授权
+        '403':
+          description: 无权访问该规则包字段定义
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 规则包不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RecruitmentField:
+      type: object
+      required: [name, label, type]
+      properties:
+        name:
+          type: string
+          description: 字段标识，用于 custom_rules 的 key。
+        label:
+          type: string
+          description: 显示标签。
+        type:
+          type: string
+          enum: [number, range, text, boolean, select]
+        required:
+          type: boolean
+          default: false
+        placeholder:
+          type: string
+        options:
+          type: array
+          description: type=select 时可用。
+          items:
+            type: string
+        min:
+          type: number
+        max:
+          type: number
+        default:
+          nullable: true
+          description: 默认值（类型与 type 匹配）。
+    GetRecruitmentFieldsResponse:
+      type: object
+      required: [fields]
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecruitmentField'
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

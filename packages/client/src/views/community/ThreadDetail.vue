@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
-import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
@@ -200,13 +199,7 @@ onMounted(fetchThread);
     </template>
 
     <div v-else-if="loading" class="loading-state">加载中...</div>
-    <EmptyState
-      v-else
-      icon-name=""
-      illustration-name="illust-404"
-      title="帖子不存在"
-      description="该帖子可能已被删除或你没有访问权限。"
-    />
+    <div v-else class="empty-state">帖子不存在</div>
   </div>
 </template>
 

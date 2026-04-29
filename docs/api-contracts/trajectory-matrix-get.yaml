@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间（GM 轨迹矩阵）
+  version: 1.1.0
+  description: 获取轨迹矩阵渲染数据（仅 GM，会员功能）。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/trajectory-matrix:
+    get:
+      summary: 获取轨迹矩阵数据
+      description: |
+        返回时间切片、场景列表与单元格角色数据。
+        仅当房间启用轨迹矩阵且当前用户为 GM 时可访问。
+      operationId: getTrajectoryMatrix
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: start_story_time
+          in: query
+          required: false
+          style: deepObject
+          explode: true
+          description: 起始剧情时间对象。
+          schema:
+            $ref: '#/components/schemas/StoryTime'
+        - name: end_story_time
+          in: query
+          required: false
+          style: deepObject
+          explode: true
+          description: 结束剧情时间对象。
+          schema:
+            $ref: '#/components/schemas/StoryTime'
+        - name: slice_minutes
+          in: query
+          required: false
+          description: 时间切片粒度（分钟）。
+          schema:
+            type: integer
+            enum: [15, 30, 60]
+            default: 30
+      responses:
+        '200':
+          description: 成功返回矩阵数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrajectoryMatrixResponse'
+              example:
+                scenes:
+                  - scene_id: scene_001
+                    scene_name: 酒馆
+                  - scene_id: scene_002
+                    scene_name: 教堂
+                time_slices:
+                  - story_time: { day: 1, hour: 14, minute: 0 }
+                    is_current: false
+                  - story_time: { day: 1, hour: 14, minute: 30 }
+                    is_current: true
+                cells:
+                  - time_index: 0
+                    scene_index: 0
+                    characters:
+                      - character_id: char_001
+                        character_name: 张三
+                        avatar_url: https://example.com/avatar1.png
+                    scheduled_move: null
+                  - time_index: 1
+                    scene_index: 1
+                    characters: []
+                    scheduled_move:
+                      character_id: char_002
+                      character_name: 李四
+                      arrive_at: { day: 1, hour: 14, minute: 30 }
+        '401':
+          description: 未授权
+        '403':
+          description: 权限不足（非 GM 或功能未启用）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: FEATURE_NOT_ENABLED
+                message: 该房间未启用轨迹矩阵，或您的账号无权限使用此功能
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      required: [day, hour, minute]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+    SceneItem:
+      type: object
+      required: [scene_id, scene_name]
+      properties:
+        scene_id:
+          type: string
+        scene_name:
+          type: string
+    TimeSliceItem:
+      type: object
+      required: [story_time, is_current]
+      properties:
+        story_time:
+          $ref: '#/components/schemas/StoryTime'
+        is_current:
+          type: boolean
+    CharacterItem:
+      type: object
+      required: [character_id, character_name]
+      properties:
+        character_id:
+          type: string
+        character_name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+    ScheduledMovePreview:
+      type: object
+      required: [character_id, character_name, arrive_at]
+      properties:
+        character_id:
+          type: string
+        character_name:
+          type: string
+        arrive_at:
+          $ref: '#/components/schemas/StoryTime'
+    MatrixCell:
+      type: object
+      required: [time_index, scene_index, characters]
+      properties:
+        time_index:
+          type: integer
+          minimum: 0
+        scene_index:
+          type: integer
+          minimum: 0
+        characters:
+          type: array
+          items:
+            $ref: '#/components/schemas/CharacterItem'
+        scheduled_move:
+          allOf:
+            - $ref: '#/components/schemas/ScheduledMovePreview'
+          nullable: true
+    TrajectoryMatrixResponse:
+      type: object
+      required: [scenes, time_slices, cells]
+      properties:
+        scenes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SceneItem'
+        time_slices:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeSliceItem'
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatrixCell'
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

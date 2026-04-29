@@ -5,13 +5,11 @@ import { authService } from '../services/auth-service';
 import { setupUserHandler } from './user-handler';
 import { registerChatHandlers } from './chat-handler';
 
-const SOCKET_ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',');
-
 export type TypedIO = Server<ClientToServerEvents, ServerToClientEvents>;
 
 export function createSocketServer(httpServer: HttpServer): TypedIO {
   const io: TypedIO = new Server(httpServer, {
-    cors: { origin: SOCKET_ALLOWED_ORIGINS, credentials: true },
+    cors: { origin: '*' },
     pingInterval: 25000,
     pingTimeout: 10000,
   });

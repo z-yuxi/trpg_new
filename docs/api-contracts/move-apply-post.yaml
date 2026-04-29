@@ -1,0 +1,145 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间（玩家申请）
+  version: 1.1.0
+  description: 玩家申请移动到目标剧情场。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/moves/apply:
+    post:
+      summary: 玩家申请移动
+      description: |
+        每个角色同一时间最多 1 条 pending 申请。
+        启用场景连通时，可传 travel_method 用于计算预计耗时。
+      operationId: applyMove
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyMoveRequest'
+            example:
+              idempotent_key: '550e8400-e29b-41d4-a716-446655440001'
+              target_scene_id: scene_002
+              travel_method: walk
+      responses:
+        '201':
+          description: 申请成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyMoveResponse'
+        '200':
+          description: 幂等重放，返回首次成功结果
+          headers:
+            X-Idempotent-Replay:
+              schema:
+                type: string
+                enum: ['true']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyMoveResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                not_spatial_scene:
+                  value:
+                    error_code: INVALID_TARGET_SCENE
+                    message: 目标场不是剧情场，无法移动
+        '401':
+          description: 未授权
+        '403':
+          description: 无权限（角色不在房间内等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 状态冲突（已有待审批申请）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error_code: MOVE_CONFLICT
+                message: 该角色已有待审批的移动申请，请等待处理或取消后重试
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      required: [day, hour, minute]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+    ApplyMoveRequest:
+      type: object
+      required: [idempotent_key, target_scene_id]
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+        target_scene_id:
+          type: string
+        travel_method:
+          type: string
+          enum: [walk, bike, drive]
+          description: 启用场景连通时生效。
+    ApplyMoveResponse:
+      type: object
+      required: [move_id, status]
+      properties:
+        move_id:
+          type: string
+        status:
+          type: string
+          enum: [pending]
+        estimated_duration_minutes:
+          type: integer
+          nullable: true
+        estimated_arrival_story_time:
+          allOf:
+            - $ref: '#/components/schemas/StoryTime'
+          nullable: true
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer

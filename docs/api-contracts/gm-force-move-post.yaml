@@ -1,0 +1,138 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - 跑团房间（GM 特权）
+  version: 1.1.0
+  description: GM 强制移动角色（立即执行或定时执行）。
+
+paths:
+  /api/v1/campaigns/{campaign_id}/characters/{character_id}/force-move:
+    post:
+      summary: GM 强制移动角色
+      operationId: forceMove
+      tags:
+        - 跑团房间
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: character_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForceMoveRequest'
+            example:
+              idempotent_key: '550e8400-e29b-41d4-a716-446655440002'
+              target_scene_id: scene_003
+              execute_at_story: null
+              reason: 剧情需要
+      responses:
+        '200':
+          description: 强制移动成功（含幂等重放）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForceMoveResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_target_scene:
+                  value:
+                    error_code: INVALID_TARGET_SCENE
+                    message: 目标场景不存在或不是剧情场
+                invalid_story_time:
+                  value:
+                    error_code: INVALID_STORY_TIME
+                    message: 定时执行时间必须晚于当前全局剧情时间
+        '401':
+          description: 未授权
+        '403':
+          description: 非 GM 无权操作
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 状态冲突（角色已移除等）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoryTime:
+      type: object
+      required: [day, hour, minute]
+      properties:
+        day:
+          type: integer
+          minimum: 1
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+    ForceMoveRequest:
+      type: object
+      required: [idempotent_key, target_scene_id]
+      properties:
+        idempotent_key:
+          type: string
+          format: uuid
+        target_scene_id:
+          type: string
+        execute_at_story:
+          allOf:
+            - $ref: '#/components/schemas/StoryTime'
+          nullable: true
+          description: null/不传=立即执行；传值=定时执行。
+        reason:
+          type: string
+          maxLength: 200
+    ForceMoveResponse:
+      type: object
+      required: [success, executed_immediately]
+      properties:
+        success:
+          type: boolean
+        move_id:
+          type: string
+          nullable: true
+          description: 定时执行时返回新预约 move_id。
+        executed_immediately:
+          type: boolean
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        retry_after:
+          type: integer
