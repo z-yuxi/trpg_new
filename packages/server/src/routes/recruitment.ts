@@ -1,9 +1,11 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { idempotencyMiddleware } from '../middleware/idempotency';
 import { recruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
 import { postCommentService } from '../services/post-comment-service';
+import { ErrorCode } from '../utils/app-error';
 import { db } from '../db';
 
 const router: IRouter = Router();
@@ -127,7 +129,7 @@ router.post('/:id/dissolve', authMiddleware, async (req, res) => {
 
 // POST /applications/:applicationId/confirm — 玩家确认入团（invited → confirmed）
 // 必须注册在 /:id 之前，避免路由冲突
-router.post('/applications/:applicationId/confirm', authMiddleware, async (req, res) => {
+router.post('/applications/:applicationId/confirm', authMiddleware, idempotencyMiddleware, async (req, res) => {
   try {
     const application = await recruitmentService.confirmApplication({
       application_id: req.params.applicationId,
@@ -135,13 +137,17 @@ router.post('/applications/:applicationId/confirm', authMiddleware, async (req, 
     });
     res.json(application);
   } catch (err: any) {
+    const isExpired = err?.message?.includes('过期');
     const status = err.message === '申请不存在' ? 404 : 400;
-    res.status(status).json({ error: err?.message ?? 'Confirm failed' });
+    res.status(status).json({
+      error: err?.message ?? 'Confirm failed',
+      ...(isExpired ? { error_code: ErrorCode.RECRUITMENT_INVITE_EXPIRED } : {}),
+    });
   }
 });
 
 // POST /:id/apply — 申请加入；?type=waiting 进入候补队列
-router.post('/:id/apply', authMiddleware, async (req, res) => {
+router.post('/:id/apply', authMiddleware, idempotencyMiddleware, async (req, res) => {
   const schema = z.object({
     character_id: z.string().optional().nullable(),
     message: z.string().min(1).max(500),
@@ -176,7 +182,13 @@ router.post('/:id/apply', authMiddleware, async (req, res) => {
 
     res.status(201).json(application);
   } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Apply failed' });
+    const isAlreadyApplied = err?.message?.includes('已提交过');
+    const isClosed = err?.message?.includes('不接受申请');
+    res.status(400).json({
+      error: err?.message ?? 'Apply failed',
+      ...(isAlreadyApplied ? { error_code: ErrorCode.RECRUITMENT_ALREADY_APPLIED } : {}),
+      ...(isClosed ? { error_code: ErrorCode.RECRUITMENT_CLOSED } : {}),
+    });
   }
 });
 
@@ -248,7 +260,7 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, async (re
 });
 
 // POST /:id/group — GM 发起成团（confirmed 玩家 → 创建房间）
-router.post('/:id/group', authMiddleware, async (req, res) => {
+router.post('/:id/group', authMiddleware, idempotencyMiddleware, async (req, res) => {
   const schema = z.object({
     module_name: z.string().max(100).optional().nullable(),
   });

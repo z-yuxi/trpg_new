@@ -9,7 +9,12 @@ export function safeErrorMessage(err: unknown, fallback: string): string {
 }
 
 /**
- * Express 全局错误处理中间件类型兼容的错误响应工厂
+ * Express 全局错误处理中间件
+ *
+ * 统一响应格式：
+ *   成功: 各路由自行返回 JSON
+ *   业务错误: { error: string, error_code?: string }
+ *   系统错误: { error: string }
  */
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from './app-error';
@@ -25,7 +30,9 @@ export function globalErrorHandler(
     if (err.internalMessage) {
       console.error(`[AppError] ${req.method} ${req.path} → ${err.internalMessage}`);
     }
-    res.status(err.statusCode).json({ error: err.userMessage });
+    const body: Record<string, unknown> = { error: err.userMessage };
+    if (err.code) body['error_code'] = err.code;
+    res.status(err.statusCode).json(body);
     return;
   }
 
@@ -38,4 +45,19 @@ export function globalErrorHandler(
   }
 
   res.status(code).json({ error: message });
+}
+
+/**
+ * 快捷辅助：在路由中发送标准错误响应。
+ * 不走全局中间件，适合路由内部 try/catch 时内联返回。
+ */
+export function sendError(
+  res: Response,
+  statusCode: number,
+  message: string,
+  error_code?: string,
+): void {
+  const body: Record<string, unknown> = { error: message };
+  if (error_code) body['error_code'] = error_code;
+  res.status(statusCode).json(body);
 }

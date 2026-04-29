@@ -20,7 +20,7 @@ const loading = ref(false);
 const quickActions = [
   { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit' },
   { icon: 'icon-dice',     title: '当 KP', desc: '创建团并开始组织你的队伍', path: '/campaigns' },
-  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit' },
+  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit?action=post' },
 ];
 
 const mixedRecommendations = computed(() => [

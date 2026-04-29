@@ -84,6 +84,44 @@ services:
       # 挂载 SSL 证书（生产环境）
       - ./ssl:/etc/nginx/ssl:ro
 
+  # ── 灰度发布实例（Canary Release） ────────────────────────
+  # 使用方式：
+  #   1. 部署新版本镜像到 server-canary（不影响 server 稳定版）
+  #   2. QA/内测用户在请求头带 X-Canary: 1 即可命中此实例
+  #   3. 观察指标正常后切换 server 镜像，再停止 server-canary
+  #
+  # 启动命令：docker compose --profile canary up -d server-canary
+  server-canary:
+    profiles: [canary]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-trpg}
+      DB_USER: ${MYSQL_USER:-trpg}
+      DB_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      SNOWFLAKE_WORKER_ID: ${SNOWFLAKE_WORKER_ID:-2}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
   mysql_data:
   redis_data:

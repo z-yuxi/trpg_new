@@ -18,6 +18,7 @@ import {
 import RecruitmentBoard from './RecruitmentBoard.vue';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '../../utils/api';
 import {
   createRecruitmentMetadata,
@@ -34,6 +35,8 @@ interface RulesetOption {
 }
 
 const authStore = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 const activeTab = ref<'gm_recruit' | 'player_seek' | 'mine'>('gm_recruit');
 const boardVersion = ref(1);
 
@@ -97,7 +100,6 @@ function syncRecruitmentMetadata(forceReset = false) {
     postForm.value.metadata = {};
     return;
   }
-
   const defaults = createRecruitmentMetadata(fields);
   postForm.value.metadata = fields.reduce<Record<string, unknown>>((result, field) => {
     const currentValue = postForm.value.metadata[field.name];
@@ -116,13 +118,11 @@ async function submitPost() {
     ElMessage.warning('请先登录后再发布');
     return;
   }
-
   const title = postForm.value.title.trim();
   if (!title || title.length > 50) {
     ElMessage.warning('标题必填且不超过 50 字');
     return;
   }
-
   if (!postForm.value.ruleset_id) {
     ElMessage.warning('请选择规则包');
     return;
@@ -130,7 +130,7 @@ async function submitPost() {
 
   submitLoading.value = true;
   try {
-    await api.post('/recruitment', {
+    const created = await api.post<{ id: string }>('/recruitment', {
       title,
       type: postForm.value.type,
       ruleset_id: postForm.value.ruleset_id,
@@ -143,9 +143,16 @@ async function submitPost() {
         Object.entries(postForm.value.metadata).filter(([, value]) => hasRecruitmentValue(value))
       ),
     });
-    ElMessage.success('发布成功');
+    // 创建后立即发布（draft → open）
+    try {
+      await api.post(`/recruitment/${created.id}/publish`, {});
+      ElMessage.success('招募帖已发布');
+    } catch {
+      ElMessage.success('招募帖已创建（草稿），请在详情页发布');
+    }
     showPostDialog.value = false;
-    boardVersion.value += 1;
+    // 跳转到详情页让 GM 管理申请
+    router.push(`/community/${created.id}`);
   } catch (err: any) {
     ElMessage.error(err?.message ?? '发布失败');
   } finally {
@@ -156,12 +163,17 @@ async function submitPost() {
 watch(() => postForm.value.ruleset_id, () => {
   syncRecruitmentMetadata(true);
 });
-
 watch(currentRecruitmentFields, () => {
   syncRecruitmentMetadata(false);
 });
 
-onMounted(loadRulesets);
+onMounted(async () => {
+  await loadRulesets();
+  // 支持 ?action=post 从首页快捷入口直接打开发帖弹窗
+  if (route.query.action === 'post' && authStore.token) {
+    openPostDialog();
+  }
+});
 </script>
 
 <template>
@@ -183,14 +195,14 @@ onMounted(loadRulesets);
           <div class="mine-section">
             <div class="mine-head">
               <h3>我发布的招募</h3>
-              <span>集中查看自己开的帖</span>
+              <span>集中管理自己开的帖</span>
             </div>
             <RecruitmentBoard :key="`mine-posted-${boardVersion}`" mine="posted" :rulesets="rulesets" />
           </div>
           <div class="mine-section">
             <div class="mine-head">
               <h3>我的申请</h3>
-              <span>跟踪 pending / approved / rejected 状态</span>
+              <span>跟踪 pending / invited / confirmed / waiting / rejected 状态</span>
             </div>
             <RecruitmentBoard :key="`mine-applied-${boardVersion}`" mine="applied" :rulesets="rulesets" />
           </div>
@@ -264,49 +276,32 @@ onMounted(loadRulesets);
               />
               <ElSwitch
                 v-else-if="field.type === 'boolean'"
-                :model-value="Boolean(postForm.metadata[field.name])"
+                :model-value="!!(postForm.metadata[field.name])"
                 @update:model-value="(value) => (postForm.metadata[field.name] = value)"
-                inline-prompt
-                active-text="是"
-                inactive-text="否"
               />
-              <ElSelect
-                v-else-if="field.type === 'select'"
-                :model-value="(postForm.metadata[field.name] as string | string[] | number | boolean | Record<string, any> | null | undefined) ?? (field.multiple ? [] : '')"
-                @update:model-value="(value) => (postForm.metadata[field.name] = value)"
-                :multiple="field.multiple"
-                clearable
-                style="width:100%"
-              >
-                <ElOption
-                  v-for="option in field.options || []"
-                  :key="typeof option === 'string' ? option : option.value"
-                  :label="typeof option === 'string' ? option : option.label"
-                  :value="typeof option === 'string' ? option : option.value"
-                />
-              </ElSelect>
-              <div v-else-if="field.type === 'number_range'" class="range-row">
-                <ElInputNumber
-                  v-model="(postForm.metadata[field.name] as Record<string, number | null>).min"
-                  :min="0"
-                  controls-position="right"
-                  :placeholder="field.minLabel || '最低'"
-                  style="width:100%"
-                />
-                <span class="range-split">-</span>
-                <ElInputNumber
-                  v-model="(postForm.metadata[field.name] as Record<string, number | null>).max"
-                  :min="0"
-                  controls-position="right"
-                  :placeholder="field.maxLabel || '最高'"
-                  style="width:100%"
-                />
-              </div>
+              <template v-else-if="field.type === 'range'">
+                <div class="range-row">
+                  <ElInputNumber
+                    :model-value="(postForm.metadata[`${field.name}_min`] as number | null | undefined) ?? null"
+                    @update:model-value="(value) => (postForm.metadata[`${field.name}_min`] = value)"
+                    :min="0"
+                    controls-position="right"
+                    style="width:100%"
+                  />
+                  <span class="range-split">-</span>
+                  <ElInputNumber
+                    :model-value="(postForm.metadata[`${field.name}_max`] as number | null | undefined) ?? null"
+                    @update:model-value="(value) => (postForm.metadata[`${field.name}_max`] = value)"
+                    :min="0"
+                    controls-position="right"
+                    style="width:100%"
+                  />
+                </div>
+              </template>
             </ElFormItem>
           </div>
         </div>
       </ElForm>
-
       <template #footer>
         <TButton type="secondary" @click="showPostDialog = false">取消</TButton>
         <TButton type="primary" :loading="submitLoading" @click="submitPost">发布</TButton>
@@ -317,18 +312,13 @@ onMounted(loadRulesets);
 
 <style scoped>
 .recruit-section { display: flex; flex-direction: column; gap: var(--space-4); }
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.section-title { font-size: var(--text-xl); font-weight: var(--font-bold); color: var(--text-primary); }
-.grid-row {
+.section-header { display: flex; align-items: center; justify-content: space-between; }
+.section-title { margin: 0; font-size: var(--text-xl); font-weight: 700; color: var(--color-text-primary); }
+.mine-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-4);
 }
-.mine-grid { display: flex; flex-direction: column; gap: var(--space-4); }
 .mine-section {
   display: flex;
   flex-direction: column;
@@ -355,9 +345,11 @@ onMounted(loadRulesets);
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .range-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: var(--space-2); align-items: center; }
 .range-split { color: var(--text-muted); }
+.grid-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
 @media (max-width: 640px) {
   .grid-row,
-  .field-grid { grid-template-columns: 1fr; }
+  .field-grid,
+  .mine-grid { grid-template-columns: 1fr; }
   .mine-head { flex-direction: column; align-items: flex-start; }
 }
 </style>

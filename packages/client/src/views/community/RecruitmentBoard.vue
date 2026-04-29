@@ -28,6 +28,9 @@ interface RecruitmentPostVM {
   description?: string | null;
   /** 当前用户在该帖上的申请状态（我的申请模式） */
   my_application_status?: 'pending' | 'invited' | 'confirmed' | 'waiting' | 'rejected' | null;
+  /** 邀请过期时间（invited 状态时有值） */
+  my_application_id?: string | null;
+  my_application_expires_at?: string | null;
   created_at: string;
 }
 
@@ -138,6 +141,23 @@ watch(keyword, () => {
 });
 
 onMounted(loadPosts);
+
+/** 行内确认入团（invited 状态直接操作，无需进入详情页） */
+const confirmingId = ref<string | null>(null);
+async function confirmInvite(event: Event, post: RecruitmentPostVM) {
+  event.stopPropagation(); // 阻止冒泡进入详情页
+  if (!post.my_application_id) return;
+  confirmingId.value = post.id;
+  try {
+    await api.post(`/recruitment/applications/${post.my_application_id}/confirm`, {});
+    ElMessage.success('已确认入团！');
+    await loadPosts();
+  } catch (err: any) {
+    ElMessage.error(err?.message ?? '确认失败');
+  } finally {
+    confirmingId.value = null;
+  }
+}
 </script>
 
 <template>
@@ -244,6 +264,13 @@ onMounted(loadPosts);
           >
             申请{{ appStatusMap[p.my_application_status]?.label ?? p.my_application_status }}
           </TTag>
+          <!-- 收到邀请时可以直接在列表页确认，无需进入详情 -->
+          <button
+            v-if="p.my_application_status === 'invited'"
+            class="confirm-btn"
+            :disabled="confirmingId === p.id"
+            @click="confirmInvite($event, p)"
+          >{{ confirmingId === p.id ? '确认中…' : '确认入团' }}</button>
         </div>
 
         <div class="recruit-footer">
@@ -300,6 +327,22 @@ onMounted(loadPosts);
 }
 .tag-row { margin-top: var(--space-2); display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .apply-status { align-items: center; }
+.apply-row { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.confirm-btn {
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-primary, #5B8DB8);
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 10%, transparent);
+  color: var(--color-primary, #5B8DB8);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.confirm-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary, #5B8DB8) 22%, transparent);
+}
+.confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .pager { display: flex; justify-content: center; margin-top: var(--space-2); }
 .empty { text-align: center; color: var(--color-text-muted); font-size: var(--text-sm); padding: var(--space-6); }
 .sk-list { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-2) 0; }

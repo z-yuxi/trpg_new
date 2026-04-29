@@ -77,13 +77,17 @@ async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = res.statusText;
+    let errorCode: string | undefined;
     try {
       const body = await res.json();
       message = body.message ?? body.error ?? message;
+      errorCode = body.error_code;
     } catch {
       // ignore parse error
     }
-    throw new Error(message);
+    const err = new Error(message) as Error & { error_code?: string };
+    err.error_code = errorCode;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -94,10 +98,17 @@ export const api = {
     return fetchWithAuth(`${BASE}${path}`, {}).then((res) => handleResponse<T>(res));
   },
 
-  post<T = unknown>(path: string, body?: unknown): Promise<T> {
+  /**
+   * POST 请求。传入 idempotencyKey 时自动附加 X-Idempotency-Key 请求头，
+   * 服务端会缓存成功响应，重复提交返回相同结果（防止双击/网络重试副作用）。
+   */
+  post<T = unknown>(path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
+    const extraHeaders: Record<string, string> = {};
+    if (idempotencyKey) extraHeaders['X-Idempotency-Key'] = idempotencyKey;
     return fetchWithAuth(`${BASE}${path}`, {
       method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: extraHeaders,
     }).then((res) => handleResponse<T>(res));
   },
 
