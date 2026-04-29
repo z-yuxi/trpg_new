@@ -17,8 +17,7 @@ interface RecruitmentPostVM {
   id: string;
   title: string;
   type: 'gm_recruit' | 'player_seek';
-  status: 'open' | 'full' | 'closed';
-  status_view: 'open' | 'full' | 'grouped' | 'closed';
+  status: 'draft' | 'open' | 'full' | 'grouped' | 'closed' | 'dissolved' | 'archived';
   poster_nickname: string;
   ruleset_id: string;
   ruleset_name: string;
@@ -27,7 +26,8 @@ interface RecruitmentPostVM {
   player_count_joined: number;
   tags?: string[];
   description?: string | null;
-  my_application_status?: 'pending' | 'approved' | 'rejected' | null;
+  /** 当前用户在该帖上的申请状态（我的申请模式） */
+  my_application_status?: 'pending' | 'invited' | 'confirmed' | 'waiting' | 'rejected' | null;
   created_at: string;
 }
 
@@ -54,10 +54,22 @@ const sort = ref<'latest' | 'oldest' | 'hottest'>('latest');
 const keyword = ref('');
 
 const statusMap: Record<string, { label: string; color: 'info' | 'warning' | 'danger' | 'default' }> = {
+  draft: { label: '草稿', color: 'default' },
   open: { label: '招募中', color: 'info' },
   full: { label: '已满员', color: 'warning' },
   grouped: { label: '已成团', color: 'danger' },
   closed: { label: '已关闭', color: 'default' },
+  dissolved: { label: '已解散', color: 'default' },
+  archived: { label: '已归档', color: 'default' },
+};
+
+/** 申请状态展示 */
+const appStatusMap: Record<string, { label: string; color: 'info' | 'warning' | 'success' | 'danger' | 'default' }> = {
+  pending: { label: '审核中', color: 'warning' },
+  invited: { label: '已邀请', color: 'info' },
+  confirmed: { label: '已确认', color: 'success' },
+  waiting: { label: '候补中', color: 'default' },
+  rejected: { label: '已拒绝', color: 'danger' },
 };
 
 const rulesetOptions = computed(() => [{ id: 'all', name: '全部规则包' }, ...props.rulesets]);
@@ -177,19 +189,19 @@ onMounted(loadPosts);
         v-for="p in posts"
         :key="p.id"
         class="recruit-card"
-        :class="{ 'status-full-card': p.status_view === 'full' || p.status_view === 'closed' }"
+        :class="{ 'status-full-card': p.status === 'full' || p.status === 'closed' || p.status === 'grouped' || p.status === 'dissolved' || p.status === 'archived' }"
         @click="goDetail(p.id)"
       >
-        <!-- 头部：状态 + 规则集 -->
+        <!-- 状态徽章 -->
         <div class="recruit-header">
           <span
             class="status-badge"
             :class="{
-              'status-open': p.status_view === 'open',
-              'status-full': p.status_view === 'full' || p.status_view === 'grouped',
-              'status-closed': p.status_view === 'closed',
+              'status-open': p.status === 'open',
+              'status-full': p.status === 'full' || p.status === 'grouped',
+              'status-closed': p.status === 'closed' || p.status === 'dissolved' || p.status === 'archived',
             }"
-          >{{ statusMap[p.status_view]?.label }}</span>
+          >{{ statusMap[p.status]?.label }}</span>
           <span class="ruleset-tag">{{ p.ruleset_name || p.ruleset_id }}</span>
         </div>
 
@@ -227,10 +239,10 @@ onMounted(loadPosts);
         <!-- 申请状态（仅"我的申请"模式） -->
         <div v-if="p.my_application_status" class="apply-row">
           <TTag
-            :color="p.my_application_status === 'approved' ? 'success' : p.my_application_status === 'rejected' ? 'danger' : 'warning'"
+            :color="appStatusMap[p.my_application_status]?.color ?? 'default'"
             size="sm"
           >
-            申请{{ p.my_application_status === 'approved' ? '已通过' : p.my_application_status === 'rejected' ? '已拒绝' : '待审核' }}
+            申请{{ appStatusMap[p.my_application_status]?.label ?? p.my_application_status }}
           </TTag>
         </div>
 

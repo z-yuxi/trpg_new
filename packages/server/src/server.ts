@@ -2,6 +2,7 @@ import './utils/load-env';
 import { httpServer } from './app';
 import cron from 'node-cron';
 import { moduleService } from './services/module-service';
+import { recruitmentService } from './services/recruitment-service';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 
@@ -51,6 +52,18 @@ cron.schedule('0 * * * *', async () => {
     console.log(`[Cron] Completed expired public notices at ${new Date().toISOString()}`);
   } catch (err: any) {
     console.error('[Cron] Error completing public notices:', err?.message ?? err);
+  }
+});
+
+// ── 定时任务：每 5 分钟处理超期邀请（invited 24h 未确认 → rejected，并提升候补）
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const count = await recruitmentService.expireInvites();
+    if (count > 0) {
+      console.log(`[Cron] Expired ${count} recruitment invite(s) at ${new Date().toISOString()}`);
+    }
+  } catch (err: any) {
+    console.error('[Cron] Error expiring recruitment invites:', err?.message ?? err);
   }
 });
 
