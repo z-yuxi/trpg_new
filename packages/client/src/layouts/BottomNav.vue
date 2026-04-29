@@ -12,11 +12,11 @@ const notificationStore = useNotificationStore();
 const campaignUnread = computed(() => Object.values(messageStore.unreadCounts).reduce((sum, count) => sum + count, 0));
 
 const tabs = [
-  { name: 'Home', label: '首页', icon: 'icon-room', path: '/' },
-  { name: 'AssetLibrary', label: '资产库', icon: 'icon-ruleset', path: '/assets' },
-  { name: 'MyCampaigns', label: '我的团', icon: 'icon-list', path: '/campaigns', badge: campaignUnread },
-  { name: 'Community', label: '社区', icon: 'icon-recruit', path: '/community' },
-  { name: 'Personal', label: '我的', icon: 'icon-settings', path: '/personal', badge: computed(() => notificationStore.unreadCount) },
+  { name: 'Explore', label: '探索', icon: 'icon-ruleset', path: '/explore' },
+  { name: 'Recruit', label: '招募', icon: 'icon-recruit', path: '/recruit' },
+  { name: 'Rooms', label: '房间', icon: 'icon-list', path: '/rooms', badge: campaignUnread },
+  { name: 'Discuss', label: '讨论', icon: 'icon-message', path: '/discuss' },
+  { name: 'Mine', label: '我的', icon: 'icon-settings', path: '/mine', badge: computed(() => notificationStore.unreadCount) },
 ];
 
 function isActive(tab: { name: string; path: string }) {

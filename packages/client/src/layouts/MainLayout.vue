@@ -18,10 +18,10 @@ const showCreatorEntry = computed(() => authStore.isLoggedIn && authStore.isCrea
 const isInCreator = computed(() => currentPath.value.startsWith('/creator'));
 
 const desktopNavItems = [
-  { label: '首页', path: '/' },
-  { label: '广场', path: '/assets' },
-  { label: '我的团', path: '/campaigns' },
-  { label: '社区', path: '/community' },
+  { label: '探索', path: '/explore' },
+  { label: '招募', path: '/recruit' },
+  { label: '房间', path: '/rooms' },
+  { label: '讨论', path: '/discuss' },
 ];
 
 function isNavActive(path: string) {
@@ -85,7 +85,7 @@ function handleBack() {
           <button class="icon-btn theme-toggle" @click="toggleTheme" aria-label="切换主题">
             <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
           </button>
-          <router-link to="/personal" class="avatar-btn" aria-label="个人中心">
+          <router-link to="/mine" class="avatar-btn" aria-label="个人中心">
             <SvgIcon name="icon-settings" :size="20" />
           </router-link>
         </div>

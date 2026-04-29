@@ -8,16 +8,13 @@ const route = useRoute();
 const router = useRouter();
 
 const tabs = [
-  { key: 'recruit', label: '招募板', icon: 'icon-recruit', to: '/community/recruit' },
-  { key: 'discuss', label: '讨论区', icon: 'icon-message', to: '/community/forum/lounge' },
-  { key: 'qa', label: '规则问答', icon: 'icon-help-circle', to: '/community/forum/rules' },
+  { key: 'discuss', label: '讨论区', icon: 'icon-message', to: '/discuss/lounge' },
+  { key: 'qa', label: '规则问答', icon: 'icon-help-circle', to: '/discuss/rules' },
 ] as const;
 
 const activeTab = computed(() => {
-  if (route.path.startsWith('/community/forum/rules')) return 'qa';
-  if (route.path.startsWith('/community/forum/')) return 'discuss';
-  if (route.path.startsWith('/community/recruit')) return 'recruit';
-  return 'recruit';
+  if (route.path.startsWith('/discuss/rules')) return 'qa';
+  return 'discuss';
 });
 
 function navigateTab(target: (typeof tabs)[number]) {
@@ -31,13 +28,13 @@ function navigateTab(target: (typeof tabs)[number]) {
     <!-- 社区 Banner（背景层） -->
     <div class="community-banner">
       <div class="banner-content">
-        <h1 class="banner-title">社区</h1>
-        <p class="banner-desc">找到你的冒险伙伴，分享你的故事</p>
+        <h1 class="banner-title">讨论</h1>
+        <p class="banner-desc">分享你的观点，与天下 TRPG 玩家交流</p>
       </div>
       <div class="banner-action">
-        <TButton type="primary" @click="router.push('/community/recruit')">
+        <TButton type="primary" @click="router.push('/discuss/lounge')">
           <SvgIcon name="icon-plus" :size="16" />
-          去招募板发布
+          发帖讨论
         </TButton>
       </div>
     </div>

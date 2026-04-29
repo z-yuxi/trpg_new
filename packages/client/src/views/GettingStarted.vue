@@ -34,7 +34,7 @@ onMounted(scrollToHash);
         <h2>创建或加入团</h2>
         <p>先前往“我的团”创建自己的团，或通过社区招募帖加入正在招募的团。成团后，房间会出现在你的“我的团”中。</p>
         <div class="action-row">
-          <button class="primary-btn" @click="router.push('/campaigns')">前往我的团</button>
+          <button class="primary-btn" @click="router.push('/rooms')">前往房间</button>
           <button class="ghost-btn" @click="router.push('/login')">先登录账号</button>
         </div>
       </div>
@@ -46,8 +46,8 @@ onMounted(scrollToHash);
         <h2>浏览规则集和模组</h2>
         <p>进入广场后，你可以先看公开模组与规则集。对新玩家来说，优先挑“入门”难度的内容更容易上手。</p>
         <div class="action-row">
-          <button class="primary-btn" @click="router.push('/assets')">前往广场</button>
-          <button class="ghost-btn" @click="router.push('/personal/characters')">准备角色卡</button>
+          <button class="primary-btn" @click="router.push('/explore')">前往探索</button>
+          <button class="ghost-btn" @click="router.push('/mine/characters')">准备角色卡</button>
         </div>
       </div>
     </section>
@@ -58,8 +58,8 @@ onMounted(scrollToHash);
         <h2>去社区发起或加入招募</h2>
         <p>如果你还没有固定队伍，就去社区的招募区。看人数、规则体系、开团时间，再决定加入哪一团。</p>
         <div class="action-row">
-          <button class="primary-btn" @click="router.push('/community/recruit')">前往招募板</button>
-          <button class="ghost-btn" @click="router.push('/community/activity')">查看我的动态</button>
+          <button class="primary-btn" @click="router.push('/recruit')">前往招募</button>
+          <button class="ghost-btn" @click="router.push('/mine')">查看我的</button>
         </div>
       </div>
     </section>

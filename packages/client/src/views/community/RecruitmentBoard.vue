@@ -160,7 +160,7 @@ async function loadPosts() {
 }
 
 function goDetail(id: string) {
-  router.push(`/community/${id}`);
+  router.push(`/recruit/${id}`);
 }
 
 function resetPageAndReload() {

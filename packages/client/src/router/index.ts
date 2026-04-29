@@ -15,29 +15,34 @@ const routes = [
     path: '/',
     component: () => import('../layouts/MainLayout.vue'),
     children: [
+      // 根路径：未登录显示首页，已登录跳探索（由 beforeEach 处理）
       { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页' } },
-      { path: 'assets', name: 'AssetLibrary', component: () => import('../views/AssetLibrary.vue'), meta: { title: '广场' } },
-      { path: 'campaigns', name: 'MyCampaigns', component: () => import('../views/MyCampaigns.vue'), meta: { title: '我的团' } },
+      // 探索（原资产库）
+      { path: 'explore', name: 'Explore', component: () => import('../views/AssetLibrary.vue'), meta: { title: '探索' } },
+      // 招募
+      { path: 'recruit', name: 'Recruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募' } },
+      { path: 'recruit/:id', name: 'RecruitDetail', component: () => import('../views/community/RecruitmentDetail.vue'), meta: { title: '招募详情' } },
+      // 房间（原我的团）
+      { path: 'rooms', name: 'Rooms', component: () => import('../views/MyCampaigns.vue'), meta: { title: '房间' } },
+      // 讨论（原社区论坛）
       {
-        path: 'community',
+        path: 'discuss',
         component: () => import('../views/Community.vue'),
-        meta: { title: '社区' },
+        meta: { title: '讨论' },
         children: [
-          { path: '', redirect: { path: '/community/recruit' } },
-          { path: 'recruit', name: 'CommunityRecruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募板' } },
-          { path: 'forum/:board', name: 'ForumBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
-          { path: 'activity', name: 'CommunityActivity', component: () => import('../views/community/MyActivity.vue'), meta: { title: '我的动态' } },
+          { path: '', redirect: { path: '/discuss/lounge' } },
+          { path: ':board', name: 'DiscussBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
         ],
       },
-      { path: 'community/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
-      { path: 'community/:id', name: 'CommunityRecruitmentDetail', component: () => import('../views/community/RecruitmentDetail.vue'), meta: { title: '招募详情' } },
-      { path: 'personal', name: 'Personal', component: () => import('../views/Personal.vue'), meta: { title: '我的' } },
-      { path: 'personal/characters', name: 'PersonalCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '我的角色卡' } },
-      { path: 'personal/security', name: 'PersonalSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
-      { path: 'personal/notifications', name: 'PersonalNotifications', component: () => import('../views/personal/NotificationSettings.vue'), meta: { title: '消息通知设置' } },
-      { path: 'personal/notification-list', name: 'PersonalNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
-      { path: 'personal/privacy', name: 'PersonalPrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
-      { path: 'personal/about', name: 'PersonalAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
+      { path: 'discuss/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
+      // 我的（原个人中心）
+      { path: 'mine', name: 'Mine', component: () => import('../views/Personal.vue'), meta: { title: '我的' } },
+      { path: 'mine/characters', name: 'MineCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '我的角色卡' } },
+      { path: 'mine/security', name: 'MineSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
+      { path: 'mine/notifications', name: 'MineNotifications', component: () => import('../views/personal/NotificationSettings.vue'), meta: { title: '消息通知设置' } },
+      { path: 'mine/notification-list', name: 'MineNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
+      { path: 'mine/privacy', name: 'MinePrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
+      { path: 'mine/about', name: 'MineAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
       { path: 'getting-started', name: 'GettingStarted', component: () => import('../views/GettingStarted.vue'), meta: { title: '新手指南' } },
       { path: 'u/:uid', name: 'UserProfile', component: () => import('../views/UserProfile.vue'), meta: { title: '个人主页' } },
     ],
@@ -136,6 +141,11 @@ router.beforeEach((to, _from, next) => {
       next({ name: 'Forbidden' });
       return;
     }
+  }
+  // 已登录访问根路径 → 直接跳探索
+  if (to.name === 'Home' && authStore.isLoggedIn) {
+    next({ name: 'Explore' });
+    return;
   }
   next();
 });

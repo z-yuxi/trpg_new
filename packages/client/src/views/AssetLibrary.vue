@@ -140,17 +140,17 @@ function ratingLabel(r?: number) {
   <div class="plaza">
     <!-- 顶部标题 -->
     <div class="plaza-header">
-      <h1 class="plaza-title">广场</h1>
-      <p class="plaza-subtitle">发现模组与规则集，找到适合你的叙事起点</p>
+      <h1 class="plaza-title">探索</h1>
+      <p class="plaza-subtitle">发现模组与规则包，找到你的下一段叙事旅程</p>
     </div>
 
     <!-- 顶部二级 Tab -->
     <div class="tab-bar">
       <button class="tab-btn" :class="{ active: activeTab === 'modules' }" @click="activeTab = 'modules'">
-        模组集市
+        模组集
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'rulesets' }" @click="activeTab = 'rulesets'">
-        规则集市
+        规则包
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'assets' }" @click="activeTab = 'assets'">
         我的资产

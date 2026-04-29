@@ -363,13 +363,13 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
     </TCard>
 
     <div class="menu-list quick-entry">
-      <div class="menu-item" @click="router.push('/personal/characters')">
+      <div class="menu-item" @click="router.push('/mine/characters')">
         <SvgIcon name="icon-user" :size="20" />
         <span>我的角色卡</span>
       </div>
-      <div class="menu-item" @click="router.push('/campaigns')">
+      <div class="menu-item" @click="router.push('/rooms')">
         <SvgIcon name="icon-menu" :size="20" />
-        <span>我的团</span>
+        <span>我的房间</span>
       </div>
     </div>
 
@@ -379,19 +379,19 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         <span>{{ currentTheme === 'day' ? '切换深色模式' : '切换浅色模式' }}</span>
       </div>
-      <div class="menu-item" @click="router.push('/personal/security')">
+      <div class="menu-item" @click="router.push('/mine/security')">
         <SvgIcon name="icon-lock" :size="20" />
         <span>账号安全</span>
       </div>
-      <div class="menu-item" @click="router.push('/personal/notifications')">
+      <div class="menu-item" @click="router.push('/mine/notifications')">
         <SvgIcon name="icon-bell" :size="20" />
         <span>消息通知设置</span>
       </div>
-      <div class="menu-item" @click="router.push('/personal/privacy')">
+      <div class="menu-item" @click="router.push('/mine/privacy')">
         <SvgIcon name="icon-user" :size="20" />
         <span>隐私设置</span>
       </div>
-      <div class="menu-item" @click="router.push('/personal/about')">
+      <div class="menu-item" @click="router.push('/mine/about')">
         <SvgIcon name="icon-workshop" :size="20" />
         <span>关于我们</span>
       </div>

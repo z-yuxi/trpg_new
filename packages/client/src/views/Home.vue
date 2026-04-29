@@ -37,9 +37,9 @@ function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId:
 }
 
 const quickActions = [
-  { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/community/recruit', action: null },
+  { icon: 'icon-search',   title: '找团玩', desc: '浏览招募并加入适合你的团', path: '/recruit', action: null },
   { icon: 'icon-dice',     title: '当 GM', desc: '创建房间并开始组织你的队伍', path: null, action: handleCreateCampaign },
-  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/community/recruit?action=post', action: null },
+  { icon: 'icon-megaphone',title: '发求组帖', desc: '告诉大家你正在寻找什么团', path: '/recruit?action=post', action: null },
 ];
 
 const mixedRecommendations = computed(() => [
@@ -92,13 +92,13 @@ onMounted(async () => {
         <section class="section" v-if="authStore.isLoggedIn">
           <div class="section-header">
             <h2 class="section-title">进行中的团</h2>
-            <button class="see-all" @click="router.push('/campaigns')">查看全部 ›</button>
+            <button class="see-all" @click="router.push('/rooms')">查看全部 ›</button>
           </div>
           <div v-if="loading" class="campaign-scroll">
             <TSkeleton type="card" v-for="i in 3" :key="i" style="min-width:160px;flex-shrink:0" />
           </div>
           <div v-else-if="campaigns.length === 0" class="hint-text">
-            暂无战役，<span class="link" @click="router.push('/campaigns')">去创建</span>
+            暂无战役，<span class="link" @click="router.push('/rooms')">去创建</span>
           </div>
           <div v-else class="campaign-scroll">
             <div v-for="c in campaigns" :key="c.id" class="campaign-scroll-item" @click="router.push(`/room/${c.id}`)">
@@ -150,14 +150,14 @@ onMounted(async () => {
         <section class="section">
           <div class="section-header">
             <h2 class="section-title">为你推荐</h2>
-            <button class="see-all" @click="router.push('/assets')">查看广场 ›</button>
+            <button class="see-all" @click="router.push('/explore')">查看探索 ›</button>
           </div>
           <div v-if="loading" class="ruleset-grid">
             <TSkeleton type="card" v-for="i in 6" :key="i" />
           </div>
           <div v-else-if="mixedRecommendations.length === 0" class="hint-text">暂无推荐内容</div>
           <div v-else class="ruleset-grid">
-            <div v-for="item in mixedRecommendations" :key="item.id" class="ruleset-card" @click="router.push(item.type === 'recruitment' ? '/community/recruit' : '/assets')">
+            <div v-for="item in mixedRecommendations" :key="item.id" class="ruleset-card" @click="router.push(item.type === 'recruitment' ? '/recruit' : '/explore')">
               <div class="ruleset-icon">
                 <SvgIcon :name="item.type === 'module' ? 'icon-market' : item.type === 'ruleset' ? 'icon-ruleset' : 'icon-recruit'" :size="20" />
               </div>
@@ -175,11 +175,11 @@ onMounted(async () => {
         <div class="side-card">
           <div class="side-title">热门招募</div>
           <div v-if="recruitments.length === 0" class="hint-text">暂无招募信息</div>
-          <div v-for="r in recruitments" :key="r.id" class="recruit-item" @click="router.push(`/community/${r.id}`)">
+          <div v-for="r in recruitments" :key="r.id" class="recruit-item" @click="router.push(`/recruit/${r.id}`)">
             <div class="recruit-name">{{ r.title ?? r.campaign_name }}</div>
             <div class="recruit-meta">{{ r.current_players ?? 0 }}/{{ r.max_players ?? '?' }} 人</div>
           </div>
-          <button class="see-all-block" @click="router.push('/community/recruit')">查看全部招募 ›</button>
+          <button class="see-all-block" @click="router.push('/recruit')">查看全部招募 ›</button>
         </div>
         <div class="side-card">
           <div class="side-title">最近动态</div>

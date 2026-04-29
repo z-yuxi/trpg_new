@@ -257,7 +257,7 @@ async function formGroup() {
     showGroupDialog.value = false;
     await loadDetail();
     if (result?.campaign_id) {
-      router.push('/campaigns');
+      router.push('/rooms');
     }
   } catch (err: any) {
     ElMessage.error(err?.message ?? '成团失败');
@@ -272,7 +272,7 @@ onMounted(async () => {
 <template>
   <div class="detail-page" v-loading="loading">
     <div class="detail-shell">
-      <TButton type="secondary" class="back-btn" @click="router.push('/community')">返回社区</TButton>
+      <TButton type="secondary" class="back-btn" @click="router.push('/recruit')">返回招募</TButton>
 
       <TCard v-if="detail" padding="lg" class="main-card">
         <div class="head-row">

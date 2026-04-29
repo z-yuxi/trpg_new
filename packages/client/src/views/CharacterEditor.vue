@@ -295,7 +295,7 @@ async function save() {
     };
     if (isEditing) {
       await api.put(`/characters/${characterId}`, payload);
-      router.push('/personal/characters');
+      router.push('/mine/characters');
     } else {
       const saved = await api.post<{ character_code?: string }>('/characters', payload);
       savedCharacterCode.value = saved.character_code ?? '';
@@ -518,7 +518,7 @@ onBeforeRouteLeave(() => {
           <span class="code-tag">#{{ savedCharacterCode }}</span>
           <span class="code-hint">这是不可更改的公开分享码，其他玩家可用此码导入你的角色卡</span>
         </div>
-        <TButton type="primary" size="sm" @click="router.push('/personal/characters')">  前往角色列表</TButton>
+        <TButton type="primary" size="sm" @click="router.push('/mine/characters')">  前往角色列表</TButton>
       </div>
     </div>
 

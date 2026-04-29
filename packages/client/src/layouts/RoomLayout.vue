@@ -70,7 +70,7 @@ function handleQuickMore() {
 function handleBackToCampaigns() {
   const confirmed = window.confirm('确定离开房间？未保存的内容不会丢失，你可以随时回来。');
   if (!confirmed) return;
-  router.push('/campaigns');
+  router.push('/rooms');
 }
 
 const showNpcMenu = ref(false);

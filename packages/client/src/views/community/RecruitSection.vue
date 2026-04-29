@@ -153,7 +153,7 @@ async function submitPost() {
     }
     showPostDialog.value = false;
     // 跳转到详情页让 GM 管理申请
-    router.push(`/community/${created.id}`);
+    router.push(`/recruit/${created.id}`);
   } catch (err: any) {
     ElMessage.error(err?.message ?? '发布失败');
   } finally {
@@ -180,15 +180,15 @@ onMounted(async () => {
 <template>
   <div class="recruit-section">
     <div class="section-header">
-      <h2 class="section-title">组团招募</h2>
-      <TButton type="primary" @click="openPostDialog">+ 发布招募帖</TButton>
+      <h2 class="section-title">招募</h2>
+      <TButton type="primary" @click="openPostDialog">发布招募帖</TButton>
     </div>
 
     <ElTabs v-model="activeTab">
-      <ElTabPane label="GM 招玩家" name="gm_recruit">
+      <ElTabPane label="找团玩" name="gm_recruit">
         <RecruitmentBoard :key="`gm-${boardVersion}`" fixed-type="gm_recruit" :rulesets="rulesets" />
       </ElTabPane>
-      <ElTabPane label="玩家求组" name="player_seek">
+      <ElTabPane label="当 GM" name="player_seek">
         <RecruitmentBoard :key="`player-${boardVersion}`" fixed-type="player_seek" :rulesets="rulesets" />
       </ElTabPane>
       <ElTabPane label="我的" name="mine">
@@ -205,8 +205,8 @@ onMounted(async () => {
 
         <ElFormItem label="招募类型" required>
           <ElSelect v-model="postForm.type" style="width:100%">
-            <ElOption label="GM 招玩家" value="gm_recruit" />
-            <ElOption label="玩家求组" value="player_seek" />
+            <ElOption label="找团玩（GM 招玩家）" value="gm_recruit" />
+            <ElOption label="当 GM（玩家求组）" value="player_seek" />
           </ElSelect>
         </ElFormItem>
 

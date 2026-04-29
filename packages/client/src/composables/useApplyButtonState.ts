@@ -58,7 +58,7 @@ export function getApplyButtonState({
   // 2. 已成团 → 按 OB 权限分流
   if (recruitmentStatus === 'grouped') {
     if (allowSpectate && !isGM) {
-      return { text: '观看直播', disabled: false, action: 'spectate' };
+      return { text: '进入旁观', disabled: false, action: 'spectate' };
     }
     return { text: '已成团', disabled: true, action: null };
   }
