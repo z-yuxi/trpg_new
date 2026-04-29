@@ -365,7 +365,15 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
     <div class="menu-list quick-entry">
       <div class="menu-item" @click="router.push('/mine/characters')">
         <SvgIcon name="icon-user" :size="20" />
-        <span>我的角色卡</span>
+        <span>角色卡</span>
+      </div>
+      <div class="menu-item" @click="router.push('/explore')">
+        <SvgIcon name="icon-market" :size="20" />
+        <span>资产</span>
+      </div>
+      <div class="menu-item" @click="router.push('/mine/notification-list')">
+        <SvgIcon name="icon-bell" :size="20" />
+        <span>通知/私信</span>
       </div>
       <div class="menu-item" @click="router.push('/rooms')">
         <SvgIcon name="icon-menu" :size="20" />

@@ -57,7 +57,7 @@ function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId:
   }
 }
 
-const activeTab = ref<'modules' | 'rulesets' | 'assets'>('modules');
+const activeTab = ref<'modules' | 'rulesets' | 'stories' | 'announcements'>('modules');
 const search = ref('');
 const loading = ref(false);
 const rulesets = ref<Ruleset[]>([]);
@@ -152,8 +152,11 @@ function ratingLabel(r?: number) {
       <button class="tab-btn" :class="{ active: activeTab === 'rulesets' }" @click="activeTab = 'rulesets'">
         规则包
       </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'assets' }" @click="activeTab = 'assets'">
-        我的资产
+      <button class="tab-btn" :class="{ active: activeTab === 'stories' }" @click="activeTab = 'stories'">
+        故事坊
+      </button>
+      <button class="tab-btn" :class="{ active: activeTab === 'announcements' }" @click="activeTab = 'announcements'">
+        公示处
       </button>
     </div>
 
@@ -271,41 +274,24 @@ function ratingLabel(r?: number) {
       </div>
     </template>
 
-    <template v-else>
-      <div class="assets-section">
-        <div class="asset-column">
-          <div class="section-head">
-            <h2>我的模组</h2>
-            <span>{{ myModules.length }} 个</span>
-          </div>
-          <div v-if="myModules.length === 0" class="empty-state asset-empty">暂无模组资产</div>
-          <div v-else class="asset-list">
-            <div v-for="moduleItem in myModules" :key="moduleItem.id" class="asset-item">
-              <div>
-                <div class="asset-name">{{ moduleItem.title ?? moduleItem.name }}</div>
-                <div class="asset-meta">{{ moduleItem.ruleset_name ?? '未绑定规则集' }} · {{ priceLabel(moduleItem.price) }}</div>
-              </div>
-              <TTag size="sm" :color="moduleItem.price === 0 ? 'success' : 'default'">{{ moduleItem.price === 0 ? '免费' : '已拥有' }}</TTag>
-            </div>
-          </div>
-        </div>
-        <div class="asset-column">
-          <div class="section-head">
-            <h2>我的规则集</h2>
-            <span>{{ myRulesets.length }} 个</span>
-          </div>
-          <div v-if="myRulesets.length === 0" class="empty-state asset-empty">暂无已创建规则集</div>
-          <div v-else class="asset-list">
-            <div v-for="ruleset in myRulesets" :key="ruleset.id" class="asset-item">
-              <div>
-                <div class="asset-name">{{ ruleset.name }}</div>
-                <div class="asset-meta">v{{ ruleset.version ?? '—' }} · {{ ruleset.status ?? 'draft' }}</div>
-              </div>
-              <TButton type="secondary" size="sm">查看</TButton>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 故事坊 -->
+    <template v-else-if="activeTab === 'stories'">
+      <EmptyState
+        icon-name=""
+        illustration-name="illust-empty"
+        title="故事坊"
+        description="跑完一段故事？把它记录下来，分享给其他玩家。（功能建设中）"
+      />
+    </template>
+
+    <!-- 公示处 -->
+    <template v-else-if="activeTab === 'announcements'">
+      <EmptyState
+        icon-name=""
+        illustration-name="illust-empty"
+        title="公示处"
+        description="处于公示期的模组与规则包将在这里展示，欢迎提交异议。（功能建设中）"
+      />
     </template>
 
     <QuickCreateCampaignDialog

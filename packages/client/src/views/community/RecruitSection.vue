@@ -38,7 +38,7 @@ interface RulesetOption {
 const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
-const activeTab = ref<'gm_recruit' | 'player_seek' | 'mine'>('gm_recruit');
+const activeTab = ref<'gm_recruit' | 'player_seek'>('gm_recruit');
 const boardVersion = ref(1);
 
 const showPostDialog = ref(false);
@@ -83,7 +83,7 @@ async function loadRulesets() {
 
 function resetPostForm() {
   postForm.value = {
-    type: activeTab.value === 'mine' ? 'gm_recruit' : activeTab.value,
+    type: activeTab.value,
     title: '',
     ruleset_id: '',
     module_name: '',
@@ -190,9 +190,6 @@ onMounted(async () => {
       </ElTabPane>
       <ElTabPane label="当 GM" name="player_seek">
         <RecruitmentBoard :key="`player-${boardVersion}`" fixed-type="player_seek" :rulesets="rulesets" />
-      </ElTabPane>
-      <ElTabPane label="我的" name="mine">
-        <MyRecruitments :rulesets="rulesets" :board-version="boardVersion" />
       </ElTabPane>
     </ElTabs>
 

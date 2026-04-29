@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElMessage } from 'element-plus';
 import TCard from '../components/base/TCard.vue';
@@ -23,6 +23,23 @@ const loading = ref(false);
 const rulesetOptions = ref<Array<{ id: string; name: string }>>([]);
 const moduleOptions = ref<Array<{ id: string; name: string }>>([]);
 const createOptionsLoading = ref(false);
+
+// 房间状态 Tab
+const statusFilter = ref<'running' | 'preparing' | 'ended'>('running');
+const STATUS_TABS = [
+  { key: 'running'   as const, label: '进行中' },
+  { key: 'preparing' as const, label: '待开始' },
+  { key: 'ended'     as const, label: '已结束' },
+];
+const filteredCampaigns = computed(() =>
+  campaigns.value.filter(c =>
+    statusFilter.value === 'running'
+      ? (c.status === 'running' || c.status === 'paused')
+      : statusFilter.value === 'preparing'
+        ? c.status === 'preparing'
+        : c.status === 'ended'
+  )
+);
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
   running: { label: '进行中', color: 'success' },
@@ -124,20 +141,30 @@ function copyCode(code: string) {
       </div>
     </div>
 
+    <div class="tab-bar">
+      <button
+        v-for="tab in STATUS_TABS"
+        :key="tab.key"
+        class="tab-btn"
+        :class="{ active: statusFilter === tab.key }"
+        @click="statusFilter = tab.key"
+      >{{ tab.label }}</button>
+    </div>
+
     <div v-if="loading" class="campaigns-grid">
       <TSkeleton type="card" v-for="i in 4" :key="i" />
     </div>
     <EmptyState
-      v-else-if="campaigns.length === 0"
+      v-else-if="filteredCampaigns.length === 0"
       icon-name=""
       illustration-name="illust-empty"
-      title="还没有房间"
-      description="创建或加入一个房间，开始一段属于你的共同叙事。"
-      action-text="创建房间"
+      :title="campaigns.length === 0 ? '还没有房间' : '暂无' + STATUS_TABS.find(t => t.key === statusFilter)?.label + '房间'"
+      :description="campaigns.length === 0 ? '创建或加入一个房间，开始一段属于你的共同叙事。' : ''"
+      :action-text="campaigns.length === 0 ? '创建房间' : ''"
       @action="openCreateDialog"
     />
     <div v-else class="campaigns-grid">
-      <TCard v-for="c in campaigns" :key="c.id" padding="md" hoverable>
+      <TCard v-for="c in filteredCampaigns" :key="c.id" padding="md" hoverable>
         <div class="c-header">
           <span class="c-name">{{ c.name }}</span>
           <TTag :color="(statusMap[c.status]?.color as any)" size="sm">{{ statusMap[c.status]?.label }}</TTag>
@@ -188,9 +215,27 @@ function copyCode(code: string) {
 
 <style scoped>
 .my-campaigns { max-width: 900px; margin: 0 auto; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6); }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
 .page-title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); }
 .header-actions { display: flex; gap: var(--space-2); }
+.tab-bar {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-card-border);
+  margin-bottom: var(--space-5);
+}
+.tab-btn {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.tab-btn.active { color: var(--color-accent); border-bottom-color: var(--color-accent); font-weight: 600; }
 .campaigns-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); }
 .c-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-2); }
 .c-name { font-weight: 600; font-size: var(--text-base); }

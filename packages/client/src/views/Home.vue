@@ -125,7 +125,7 @@ onMounted(async () => {
           <div class="cta-card">
             <h3>加入一场共叙，开始你的故事</h3>
             <p>登录后可以创建或参与跑团战役</p>
-            <button class="btn-accent" @click="router.push('/login')">立即登录</button>
+            <button class="btn-accent" @click="router.push('/login')">进入叙事</button>
           </div>
         </section>
 

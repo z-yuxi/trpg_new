@@ -886,7 +886,7 @@ CREATE TABLE ruleset_reload_logs (
 
 ---
 
-## 八、移动端适配边界（迁自附录 J）
+## 八、移动端适配边界（按附录 A06 收敛）
 
 ### 11.22 Recipe 编辑器移动端策略
 

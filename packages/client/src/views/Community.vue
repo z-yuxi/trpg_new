@@ -8,13 +8,15 @@ const route = useRoute();
 const router = useRouter();
 
 const tabs = [
-  { key: 'discuss', label: '讨论区', icon: 'icon-message', to: '/discuss/lounge' },
-  { key: 'qa', label: '规则问答', icon: 'icon-help-circle', to: '/discuss/rules' },
+  { key: 'experience', label: '经验交流', icon: 'icon-ruleset',   to: '/discuss/experience' },
+  { key: 'rpg-log',    label: '跑团心得', icon: 'icon-list',      to: '/discuss/rpg-log' },
+  { key: 'lounge',     label: '闲聊',     icon: 'icon-message',   to: '/discuss/lounge' },
 ] as const;
 
 const activeTab = computed(() => {
-  if (route.path.startsWith('/discuss/rules')) return 'qa';
-  return 'discuss';
+  if (route.path.startsWith('/discuss/rpg-log')) return 'rpg-log';
+  if (route.path.startsWith('/discuss/experience')) return 'experience';
+  return 'lounge';
 });
 
 function navigateTab(target: (typeof tabs)[number]) {

@@ -95,7 +95,7 @@ function handleBack() {
     <main class="content">
       <router-view />
     </main>
-    <BottomNav />
+    <BottomNav v-if="route.name !== 'Home'" />
   </div>
 </template>
 
