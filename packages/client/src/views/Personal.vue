@@ -299,10 +299,6 @@ const membershipExpireText = computed(() => {
   const d = new Date(membershipInfo.value.expires_at);
   return `有效期至 ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 });
-
-onMounted(async () => {
-  if (authStore.isLoggedIn) await loadMembershipInfo();
-});
 </script>
 
 <template>
@@ -422,6 +418,110 @@ onMounted(async () => {
       </div>
     </TCard>
 
+    <!-- 会员卡 -->
+    <TCard v-if="authStore.isLoggedIn && !userLoading" padding="md" class="membership-card"
+      :class="{
+        'membership-card--pro': displayUser.subscription_type === 'pro',
+        'membership-card--creator': displayUser.subscription_type === 'creator',
+      }">
+      <div class="membership-inner">
+        <div class="membership-left">
+          <div class="membership-tier">
+            <SvgIcon name="icon-crown" :size="18" class="membership-icon" />
+            <span class="membership-tier-name">{{ subMap[displayUser.subscription_type] ?? '免费版' }}</span>
+          </div>
+          <div v-if="membershipExpireText" class="membership-expire">{{ membershipExpireText }}</div>
+          <div v-else-if="displayUser.subscription_type === 'free'" class="membership-hint">
+            升级解锁网格地图、轨迹矩阵与 AI 功能
+          </div>
+        </div>
+        <TButton
+          v-if="displayUser.subscription_type === 'free'"
+          type="primary"
+          size="sm"
+          @click="showUpgradeModal = true"
+        >升级会员</TButton>
+        <TButton
+          v-else
+          type="ghost"
+          size="sm"
+          @click="showUpgradeModal = true"
+        >续费/升级</TButton>
+      </div>
+    </TCard>
+
+    <!-- 升级弹窗 -->
+    <Teleport to="body">
+      <div v-if="showUpgradeModal" class="modal-overlay" @click.self="showUpgradeModal = false">
+        <div class="modal-box">
+          <div class="modal-header">
+            <span class="modal-title">升级会员</span>
+            <button class="modal-close" @click="showUpgradeModal = false">
+              <SvgIcon name="icon-close" :size="20" />
+            </button>
+          </div>
+
+          <!-- SKU 选择 -->
+          <div class="sku-grid">
+            <div
+              v-for="sku in SKU_LIST"
+              :key="sku.sku"
+              class="sku-card"
+              :class="{ 'sku-card--selected': selectedSku === sku.sku }"
+              @click="selectedSku = sku.sku"
+            >
+              <div class="sku-badge" v-if="sku.badge">{{ sku.badge }}</div>
+              <div class="sku-label">{{ sku.label }}</div>
+              <div class="sku-period">按{{ sku.period }}</div>
+              <div class="sku-price">{{ sku.price }}</div>
+              <div v-if="sku.originalPrice" class="sku-original">{{ sku.originalPrice }}</div>
+            </div>
+          </div>
+
+          <!-- 权益对比表 -->
+          <div class="benefit-table-wrap">
+            <table class="benefit-table">
+              <thead>
+                <tr>
+                  <th>权益</th>
+                  <th>免费版</th>
+                  <th class="col-pro">Pro</th>
+                  <th class="col-creator">创作者</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in BENEFIT_ROWS" :key="row.key">
+                  <td>{{ row.key }}</td>
+                  <td class="center muted">{{ row.free }}</td>
+                  <td class="center col-pro">{{ row.pro }}</td>
+                  <td class="center col-creator">{{ row.creator }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 支付渠道 -->
+          <div class="channel-row">
+            <span class="channel-label">支付方式</span>
+            <button
+              class="channel-btn"
+              :class="{ 'channel-btn--selected': selectedChannel === 'alipay' }"
+              @click="selectedChannel = 'alipay'"
+            >支付宝</button>
+            <button
+              class="channel-btn"
+              :class="{ 'channel-btn--selected': selectedChannel === 'wechat' }"
+              @click="selectedChannel = 'wechat'"
+            >微信支付</button>
+          </div>
+
+          <TButton type="primary" size="lg" :loading="orderLoading" class="confirm-btn" @click="createOrder">
+            立即支付
+          </TButton>
+          <p class="modal-tip">支付完成后会员状态将自动更新。如有问题请联系客服。</p>
+        </div>
+      </div>
+    </Teleport>
     <div class="menu-list quick-entry">
       <div class="menu-item" @click="router.push('/tuantu/characters')">
         <SvgIcon name="icon-user" :size="20" />
@@ -598,4 +698,106 @@ onMounted(async () => {
 @media (max-width: 640px) {
   .stats-card { grid-template-columns: 1fr; }
 }
+
+/* ── 会员卡 ── */
+.membership-card {
+  border: 1px solid var(--color-card-border);
+  background: var(--color-card-bg);
+  transition: border-color var(--transition-fast);
+}
+.membership-card--pro {
+  border-color: color-mix(in srgb, #6366f1 50%, transparent);
+  background: color-mix(in srgb, #6366f1 5%, var(--color-card-bg));
+}
+.membership-card--creator {
+  border-color: color-mix(in srgb, #f59e0b 50%, transparent);
+  background: color-mix(in srgb, #f59e0b 5%, var(--color-card-bg));
+}
+.membership-inner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.membership-tier { display: flex; align-items: center; gap: var(--space-2); }
+.membership-icon { color: var(--color-warning); }
+.membership-tier-name { font-size: var(--text-base); font-weight: 700; }
+.membership-expire { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px; }
+.membership-hint { font-size: var(--text-xs); color: var(--color-text-muted); margin-top: 4px; max-width: 220px; }
+
+/* ── 升级弹窗 ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,.55);
+  display: flex; align-items: flex-end;
+}
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; }
+}
+.modal-box {
+  width: 100%; max-width: 520px; margin: 0 auto;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-5);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-4);
+}
+@media (min-width: 640px) {
+  .modal-box { border-radius: var(--radius-lg); }
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: var(--text-lg); font-weight: 700; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--color-text-muted); padding: 4px; }
+
+/* SKU 卡片 */
+.sku-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+.sku-card {
+  position: relative;
+  border: 2px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.sku-card--selected {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-card-bg));
+}
+.sku-badge {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--color-accent); color: #fff;
+  white-space: nowrap;
+}
+.sku-label { font-size: var(--text-sm); font-weight: 700; }
+.sku-period { font-size: var(--text-xs); color: var(--color-text-muted); }
+.sku-price { font-size: var(--text-xl); font-weight: 800; color: var(--color-accent); margin-top: 4px; }
+.sku-original { font-size: var(--text-xs); color: var(--color-text-muted); text-decoration: line-through; }
+
+/* 权益表 */
+.benefit-table-wrap { overflow-x: auto; }
+.benefit-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.benefit-table th, .benefit-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-card-border);
+  text-align: left;
+  white-space: nowrap;
+}
+.benefit-table .center { text-align: center; }
+.benefit-table .muted { color: var(--color-text-muted); }
+.benefit-table .col-pro { color: #6366f1; font-weight: 600; }
+.benefit-table .col-creator { color: #f59e0b; font-weight: 600; }
+
+/* 支付渠道 */
+.channel-row { display: flex; align-items: center; gap: var(--space-3); }
+.channel-label { font-size: var(--text-sm); color: var(--color-text-muted); flex-shrink: 0; }
+.channel-btn {
+  padding: 6px 16px; border-radius: var(--radius-md);
+  border: 1px solid var(--color-card-border);
+  background: var(--color-card-bg); cursor: pointer; font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast);
+}
+.channel-btn--selected { border-color: var(--color-accent); color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, var(--color-card-bg)); }
+
+.confirm-btn { width: 100%; }
+.modal-tip { text-align: center; font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; }
 </style>
