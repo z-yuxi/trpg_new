@@ -32,6 +32,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'scene-created': [scene: Scene];
+  'scene-updated': [scene: Scene];
+  'scene-deleted': [sceneId: string];
   'npc-created': [npc: CampaignNpc];
   'play-as-npc': [npcId: string];
 }>();
@@ -342,7 +344,7 @@ onMounted(() => {
       <!-- Tab 2: 移动审批（已提取至 GmMoveApproval.vue） -->
       <GmMoveApproval v-else-if="activeTab==='moves'" :campaign-id="campaignId" :scenes="scenes" :characters="characters" />
       <!-- Tab 3: 场景（已提取至 GmSceneManager.vue） -->
-      <GmSceneManager v-else-if="activeTab==='scenes'" :campaign-id="campaignId" :scenes="scenes" :characters="characters" @scene-created="(s) => emit('scene-created', s)" />
+      <GmSceneManager v-else-if="activeTab==='scenes'" :campaign-id="campaignId" :scenes="scenes" :characters="characters" @scene-created="(s) => emit('scene-created', s)" @scene-updated="(s) => emit('scene-updated', s)" @scene-deleted="(id) => emit('scene-deleted', id)" />
       <!-- Tab 4: NPC -->
       <div v-else-if="activeTab==='npcs'" class="tab-pane">
         <GmNpcControl

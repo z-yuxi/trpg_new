@@ -281,6 +281,7 @@ async function toggleCommentLike(floor: FloorReply, comment: FloorComment) {
 async function deleteFloor(floor: FloorReply) {
   try {
     await apiDeleteFloor(props.postId, floor.id);
+    const idx = floors.value.findIndex((f) => f.id === floor.id);
     if (idx !== -1) {
       floors.value[idx] = { ...floors.value[idx], deleted: true, content: '[该楼层已删除]' };
     }
@@ -293,6 +294,7 @@ async function deleteFloor(floor: FloorReply) {
 async function deleteComment(floor: FloorReply, comment: FloorComment) {
   try {
     await apiDeleteComment(props.postId, floor.id, comment.id);
+    const comments = floorCommentsMap.value.get(floor.id) ?? [];
     floorCommentsMap.value.set(floor.id, comments.filter((c) => c.id !== comment.id));
     // 更新楼层 reply_count
     const floorIdx = floors.value.findIndex((f) => f.id === floor.id);

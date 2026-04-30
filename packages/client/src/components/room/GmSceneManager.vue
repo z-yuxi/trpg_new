@@ -13,6 +13,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'scene-created': [scene: Scene];
+  'scene-updated': [scene: Scene];
+  'scene-deleted': [sceneId: string];
 }>();
 
 const typeLabel: Record<string, string> = { spatial: '剧情场', virtual: '私密场', lobby: '公共场' };
@@ -61,9 +63,10 @@ async function saveSceneEdit() {
   if (!editSceneForm.value.name.trim()) { ElMessage.warning('场景名不能为空'); return; }
   sceneEditLoading.value = true;
   try {
-    await updateScene(props.campaignId, editingSceneId.value, editSceneForm.value as any);
+    const updated = await updateScene(props.campaignId, editingSceneId.value, editSceneForm.value as any);
+    emit('scene-updated', updated);
     showEditScene.value = false;
-    ElMessage.success('场景已更新，刷新页面生效');
+    ElMessage.success('场景已更新');
   } catch (e: any) { ElMessage.error(e.message ?? '更新失败'); }
   finally { sceneEditLoading.value = false; }
 }
@@ -82,7 +85,11 @@ function openDeleteScene(scene: any) {
 async function confirmDeleteScene() {
   try {
     await deleteScene(props.campaignId, deletingSceneId.value);
-    ElMessage.success('场景已删除，刷新页面生效');
+    emit('scene-deleted', deletingSceneId.value);
+    showDeleteSceneConfirm.value = false;
+    deletingSceneId.value = '';
+    deletingSceneName.value = '';
+    ElMessage.success('场景已删除');
   } catch (e: any) { ElMessage.error(e.message ?? '删除失败'); }
 }
 </script>

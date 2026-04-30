@@ -289,6 +289,20 @@ async function handleSceneCreated(s: any) {
   loadScenes();
 }
 
+function handleSceneUpdated(s: any) {
+  const idx = scenes.value.findIndex((sc) => sc.id === s.id);
+  if (idx !== -1) scenes.value[idx] = s;
+}
+
+function handleSceneDeleted(sceneId: string) {
+  scenes.value = scenes.value.filter((sc) => sc.id !== sceneId);
+  // 如果删除的是当前场，切换到第一个可用场景
+  if (currentSceneId.value === sceneId) {
+    const fallback = scenes.value.find((s) => s.type === 'spatial' || s.type === 'lobby');
+    if (fallback) switchScene(fallback.id);
+  }
+}
+
 function switchScene(sceneId: string) {
   currentSceneId.value = sceneId;
   messageStore.setCurrentScene(sceneId);
@@ -548,6 +562,8 @@ onUnmounted(() => {
             :npcs="npcs"
             :characters="roomCharacters.map(c => ({ id: c.id, name: c.name, sceneId: c.sceneId }))"
             @scene-created="handleSceneCreated"
+            @scene-updated="handleSceneUpdated"
+            @scene-deleted="handleSceneDeleted"
             @npc-created="(n) => npcs.push(n)"
             @play-as-npc="(id) => { selectedSenderIdentity = `npc:${id}`; showGMConsole = false; }"
           />

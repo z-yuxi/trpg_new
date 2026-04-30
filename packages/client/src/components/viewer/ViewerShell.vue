@@ -526,6 +526,7 @@ async function updateAnnotationNote(id: string) {
 async function deleteAnnotation(id: string) {
   try {
     await apiDeleteAnnotation(id);
+    annotations.value = annotations.value.filter(a => a.id !== id);
     await nextTick();
     applyHighlights();
   } catch { /* ignore */ }

@@ -1057,6 +1057,33 @@ router.get('/:id/my-virtual-scenes', async (req, res) => {
   }
 });
 
+// GET /api/campaigns/:id/members — 获取团成员列表（user 维度，含角色和权限）
+router.get('/:id/members', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    // GM
+    const gmUser = await db('users').where({ id: campaign.gm_user_id }).select('id', 'nickname', 'avatar_url').first();
+    // 玩家（通过 character_scene_states 关联）
+    const playerRows = await db('character_scene_states as css')
+      .join('character_sheets as cs', 'cs.id', 'css.character_id')
+      .join('users as u', 'u.id', 'cs.user_id')
+      .where('css.campaign_id', req.params.id)
+      .whereNot('cs.user_id', campaign.gm_user_id)
+      .select('u.id as user_id', 'u.nickname', 'u.avatar_url', 'cs.id as character_id', 'cs.name as character_name');
+    const members = [
+      { user_id: campaign.gm_user_id, nickname: gmUser?.nickname ?? '', avatar_url: gmUser?.avatar_url ?? null, character_id: null, character_name: null, role: 'gm' },
+      ...playerRows.map((r: Record<string, unknown>) => ({
+        user_id: r['user_id'], nickname: r['nickname'], avatar_url: r['avatar_url'] ?? null,
+        character_id: r['character_id'], character_name: r['character_name'], role: 'player',
+      })),
+    ];
+    res.json(members);
+  } catch (err: unknown) {
+    serverErr(res, err);
+  }
+});
+
 // GET /api/campaigns/:id/characters — 获取团内所有角色及其当前场景（含在线状态）
 router.get('/:id/characters', async (req, res) => {
   try {
@@ -1193,6 +1220,34 @@ router.get('/:id/moves', async (req, res) => {
     if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { listMoves } = await import('../services/movement.js');
     const moves = await listMoves(req.params.id, req.query.status as string | undefined);
+    res.json(moves);
+  } catch (err: unknown) {
+    serverErr(res, err);
+  }
+});
+
+// GET /api/campaigns/:id/moves/pending — 待 GM 审批的移动申请
+router.get('/:id/moves/pending', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { listMoves } = await import('../services/movement.js');
+    const moves = await listMoves(req.params.id, 'pending');
+    res.json(moves);
+  } catch (err: unknown) {
+    serverErr(res, err);
+  }
+});
+
+// GET /api/campaigns/:id/moves/upcoming — 已批准但尚未执行的预约移动
+router.get('/:id/moves/upcoming', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    const { listMoves } = await import('../services/movement.js');
+    const moves = await listMoves(req.params.id, 'approved');
     res.json(moves);
   } catch (err: unknown) {
     serverErr(res, err);
@@ -1457,7 +1512,29 @@ router.post('/:id/clues/:clueId/reveal', async (req, res) => {
   }
 });
 
-// PATCH /api/campaigns/:id/clues/:clueId/style
+// PATCH /api/campaigns/:id/clues/:clueId/style (POST 为别名，兼容前端调用)
+router.post('/:id/clues/:clueId/style', async (req, res) => {
+  try {
+    const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
+    if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update clue style' }); return; }
+    const validThemes = ['river', 'blur', 'fragment', 'wave', 'ancient', 'blood', 'ash', 'cyber'];
+    const { theme } = req.body;
+    if (!theme || !validThemes.includes(theme)) {
+      res.status(400).json({ error: `Invalid theme. Must be one of: ${validThemes.join(', ')}` });
+      return;
+    }
+    const updated = await db('campaign_clues')
+      .where({ id: req.params.clueId, campaign_id: req.params.id })
+      .update({ theme });
+    if (!updated) { res.status(404).json({ error: 'Clue not found' }); return; }
+    const clue = await db('campaign_clues').where({ id: req.params.clueId }).first();
+    res.json(clue);
+  } catch (err: unknown) {
+    serverErr(res, err);
+  }
+});
+
 router.patch('/:id/clues/:clueId/style', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();

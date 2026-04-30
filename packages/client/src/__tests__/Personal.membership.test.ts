@@ -65,121 +65,53 @@ vi.mock('element-plus', () => ({
 
 import Personal from '../views/Personal.vue';
 
-describe('Personal membership pending order recovery', () => {
+const defaultGetMock = async (path: string) => {
+  if (path === '/users/me') {
+    return { id: 'u-1', nickname: 'tester', avatar_url: '', intro: '', tags: [], subscription_type: 'free', creator_level: 1, coins: 0 };
+  }
+  if (path === '/membership/benefits') {
+    return { tier: 'free', expires_at: null };
+  }
+  if (path === '/users/me/stats') {
+    return { joined_campaigns: 1, created_campaigns: 0, total_hours: 2 };
+  }
+  throw new Error(`unexpected path: ${path}`);
+};
+
+const DEFAULT_STUBS = {
+  Teleport: true,
+  SvgIcon: true,
+  TCard: { template: '<div><slot /></div>' },
+  TInput: { template: '<input />' },
+  TTag: { template: '<span><slot /></span>' },
+  TButton: { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+};
+
+describe('Personal membership UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    apiGetMock.mockImplementation(defaultGetMock);
   });
 
   afterEach(() => {
     localStorage.clear();
   });
 
-  it('restores pending order and resolves paid status on first query', async () => {
-    localStorage.setItem('membership_pending_order', JSON.stringify({ orderId: 'ord_123', ts: Date.now() }));
-
-    apiGetMock.mockImplementation(async (path: string) => {
-      if (path === '/users/me') {
-        return {
-          id: 'u-1',
-          nickname: 'tester',
-          avatar_url: '',
-          intro: '',
-          tags: [],
-          subscription_type: 'free',
-          creator_level: 1,
-          coins: 0,
-        };
-      }
-      if (path === '/membership/benefits') {
-        return { tier: 'free', expires_at: null };
-      }
-      if (path === '/users/me/stats') {
-        return { joined_campaigns: 1, created_campaigns: 0, total_hours: 2 };
-      }
-      if (path === '/membership/orders/ord_123') {
-        return { status: 'paid' };
-      }
-      throw new Error(`unexpected path: ${path}`);
-    });
-
-    const wrapper = mount(Personal, {
-      global: {
-        stubs: {
-          Teleport: true,
-          SvgIcon: true,
-          TCard: { template: '<div><slot /></div>' },
-          TInput: { template: '<input />' },
-          TTag: { template: '<span><slot /></span>' },
-          TButton: {
-            template: '<button @click="$emit(\'click\')"><slot /></button>',
-          },
-        },
-      },
-    });
-
-    await flushPromises();
+  it('loads membership benefits on mount', async () => {
+    const wrapper = mount(Personal, { global: { stubs: DEFAULT_STUBS } });
     await flushPromises();
 
-    expect(apiGetMock).toHaveBeenCalledWith('/membership/orders/ord_123');
-    expect(localStorage.getItem('membership_pending_order')).toBeNull();
-
-    const usersMeCalls = apiGetMock.mock.calls.filter(([path]) => path === '/users/me').length;
-    const benefitsCalls = apiGetMock.mock.calls.filter(([path]) => path === '/membership/benefits').length;
-
-    expect(usersMeCalls).toBeGreaterThanOrEqual(2);
-    expect(benefitsCalls).toBeGreaterThanOrEqual(2);
+    expect(apiGetMock).toHaveBeenCalledWith('/membership/benefits');
+    expect(apiGetMock).toHaveBeenCalledWith('/users/me');
 
     wrapper.unmount();
   });
 
-  it('allows manual query to resolve pending order to paid', async () => {
-    localStorage.setItem('membership_pending_order', JSON.stringify({ orderId: 'ord_123', ts: Date.now() }));
+  it('clicking 升级会员 opens modal and 立即支付 calls api.post', async () => {
+    apiPostMock.mockResolvedValue(undefined);
 
-    let orderQueryCount = 0;
-    apiGetMock.mockImplementation(async (path: string) => {
-      if (path === '/users/me') {
-        return {
-          id: 'u-1',
-          nickname: 'tester',
-          avatar_url: '',
-          intro: '',
-          tags: [],
-          subscription_type: 'free',
-          creator_level: 1,
-          coins: 0,
-        };
-      }
-      if (path === '/membership/benefits') {
-        return { tier: 'free', expires_at: null };
-      }
-      if (path === '/users/me/stats') {
-        return { joined_campaigns: 1, created_campaigns: 0, total_hours: 2 };
-      }
-      if (path === '/membership/orders/ord_123') {
-        orderQueryCount += 1;
-        if (orderQueryCount === 1) return { status: 'pending' };
-        return { status: 'paid' };
-      }
-      throw new Error(`unexpected path: ${path}`);
-    });
-
-    const wrapper = mount(Personal, {
-      global: {
-        stubs: {
-          Teleport: true,
-          SvgIcon: true,
-          TCard: { template: '<div><slot /></div>' },
-          TInput: { template: '<input />' },
-          TTag: { template: '<span><slot /></span>' },
-          TButton: {
-            template: '<button @click="$emit(\'click\')"><slot /></button>',
-          },
-        },
-      },
-    });
-
-    await flushPromises();
+    const wrapper = mount(Personal, { global: { stubs: DEFAULT_STUBS } });
     await flushPromises();
 
     const openModalBtn = wrapper.findAll('button').find((b) => b.text().includes('升级会员'));
@@ -187,70 +119,25 @@ describe('Personal membership pending order recovery', () => {
     await openModalBtn!.trigger('click');
     await flushPromises();
 
-    const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询支付结果'));
-    expect(queryBtn).toBeDefined();
-    await queryBtn!.trigger('click');
-    await flushPromises();
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text().includes('立即支付'));
+    expect(confirmBtn).toBeDefined();
+    await confirmBtn!.trigger('click');
     await flushPromises();
 
-    expect(orderQueryCount).toBeGreaterThanOrEqual(2);
-    expect(localStorage.getItem('membership_pending_order')).toBeNull();
-
-    const usersMeCalls = apiGetMock.mock.calls.filter(([path]) => path === '/users/me').length;
-    const benefitsCalls = apiGetMock.mock.calls.filter(([path]) => path === '/membership/benefits').length;
-    expect(usersMeCalls).toBeGreaterThanOrEqual(2);
-    expect(benefitsCalls).toBeGreaterThanOrEqual(2);
+    expect(apiPostMock).toHaveBeenCalledWith(
+      '/membership/orders',
+      expect.objectContaining({ sku: expect.any(String), channel: expect.any(String) }),
+      expect.any(String),
+    );
 
     wrapper.unmount();
   });
 
-  it('clears pending order when manual query resolves to failed', async () => {
-    localStorage.setItem('membership_pending_order', JSON.stringify({ orderId: 'ord_123', ts: Date.now() }));
+  it('shows error message when createOrder fails', async () => {
+    const { ElMessage } = await import('element-plus');
+    apiPostMock.mockRejectedValue(new Error('支付服务不可用'));
 
-    let orderQueryCount = 0;
-    apiGetMock.mockImplementation(async (path: string) => {
-      if (path === '/users/me') {
-        return {
-          id: 'u-1',
-          nickname: 'tester',
-          avatar_url: '',
-          intro: '',
-          tags: [],
-          subscription_type: 'free',
-          creator_level: 1,
-          coins: 0,
-        };
-      }
-      if (path === '/membership/benefits') {
-        return { tier: 'free', expires_at: null };
-      }
-      if (path === '/users/me/stats') {
-        return { joined_campaigns: 1, created_campaigns: 0, total_hours: 2 };
-      }
-      if (path === '/membership/orders/ord_123') {
-        orderQueryCount += 1;
-        if (orderQueryCount === 1) return { status: 'pending' };
-        return { status: 'failed' };
-      }
-      throw new Error(`unexpected path: ${path}`);
-    });
-
-    const wrapper = mount(Personal, {
-      global: {
-        stubs: {
-          Teleport: true,
-          SvgIcon: true,
-          TCard: { template: '<div><slot /></div>' },
-          TInput: { template: '<input />' },
-          TTag: { template: '<span><slot /></span>' },
-          TButton: {
-            template: '<button @click="$emit(\'click\')"><slot /></button>',
-          },
-        },
-      },
-    });
-
-    await flushPromises();
+    const wrapper = mount(Personal, { global: { stubs: DEFAULT_STUBS } });
     await flushPromises();
 
     const openModalBtn = wrapper.findAll('button').find((b) => b.text().includes('升级会员'));
@@ -258,17 +145,12 @@ describe('Personal membership pending order recovery', () => {
     await openModalBtn!.trigger('click');
     await flushPromises();
 
-    const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询支付结果'));
-    expect(queryBtn).toBeDefined();
-    await queryBtn!.trigger('click');
-    await flushPromises();
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text().includes('立即支付'));
+    expect(confirmBtn).toBeDefined();
+    await confirmBtn!.trigger('click');
     await flushPromises();
 
-    expect(orderQueryCount).toBeGreaterThanOrEqual(2);
-    expect(localStorage.getItem('membership_pending_order')).toBeNull();
-
-    const queryBtnAfterFailed = wrapper.findAll('button').find((b) => b.text().includes('查询支付结果'));
-    expect(queryBtnAfterFailed).toBeUndefined();
+    expect(ElMessage.error).toHaveBeenCalledWith(expect.stringContaining('支付服务不可用'));
 
     wrapper.unmount();
   });

@@ -80,6 +80,7 @@ async function removeConnection(connId: string) {
     });
 
     await deleteConnection(props.campaignId, connId);
+    connections.value = connections.value.filter((c) => c.id !== connId);
     ElMessage.success('场景连接已删除');
   } catch (err: any) {
     if (err?.message !== 'cancel') {
