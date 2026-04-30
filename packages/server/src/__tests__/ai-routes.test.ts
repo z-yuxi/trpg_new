@@ -387,3 +387,48 @@ describe('checkAiQuota 中间件', () => {
     expect(next).not.toHaveBeenCalled();
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 4. GET /api/ai/tasks
+// ──────────────────────────────────────────────────────────────────────────────
+describe('GET /api/ai/tasks', () => {
+  function makeChain(rows: any[]) {
+    return {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      select: vi.fn().mockResolvedValue(rows),
+    };
+  }
+
+  it('返回任务列表，默认最多 30 条', async () => {
+    const fakeTasks = [
+      { id: 'task-1', task_type: 'check_text', status: 'success', input_tokens: 100, output_tokens: 80, duration_ms: 500, created_at: new Date().toISOString() },
+      { id: 'task-2', task_type: 'import_module', status: 'failed', input_tokens: 0, output_tokens: 0, duration_ms: 0, created_at: new Date().toISOString() },
+    ];
+    mockDb.mockReturnValue(makeChain(fakeTasks) as any);
+
+    const res = await supertest(makeApp()).get('/api/ai/tasks').expect(200);
+
+    expect(res.body.tasks).toHaveLength(2);
+    expect(res.body.tasks[0]).toMatchObject({ id: 'task-1', task_type: 'check_text' });
+  });
+
+  it('接受 limit 查询参数', async () => {
+    mockDb.mockReturnValue(makeChain([]) as any);
+
+    const res = await supertest(makeApp()).get('/api/ai/tasks?limit=5').expect(200);
+
+    expect(res.body.tasks).toHaveLength(0);
+  });
+
+  it('limit 超过 100 时应被截断为 100', async () => {
+    const chain = makeChain([]);
+    const limitSpy = vi.spyOn(chain, 'limit').mockReturnThis();
+    mockDb.mockReturnValue(chain as any);
+
+    await supertest(makeApp()).get('/api/ai/tasks?limit=500').expect(200);
+
+    expect(limitSpy).toHaveBeenCalledWith(100);
+  });
+});
