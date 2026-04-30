@@ -21,6 +21,9 @@
 | 申请加入招募帖 / 确认入团 | [recruitment-apply.yaml](recruitment-apply.yaml) |
 | 跑团反馈（Stars and Wishes） | [campaign-feedback.yaml](campaign-feedback.yaml) |
 | 作品评价与收藏 | [product-reviews-collections.yaml](product-reviews-collections.yaml) |
+| AI 智能校对（同步） | [ai-check-text.yaml](ai-check-text.yaml) |
+| AI 模组分析（异步入队） | [ai-import-module.yaml](ai-import-module.yaml) |
+| AI 月度配额查询 | [ai-quota.yaml](ai-quota.yaml) |
 | 创建房间 | [campaign-create.yaml](campaign-create.yaml) |
 | 规则引擎执行检定 | [engine-execute.yaml](engine-execute.yaml) |
 | GM 审批/拒绝移动 | [gm-approve-move.yaml](gm-approve-move.yaml) |
@@ -41,3 +44,13 @@
 
 - 采用语义化版本（`info.version`）。
 - 破坏性变更必须升级主版本。
+
+## AI 错误码参照表
+
+| 错误码 | HTTP 状态 | 说明 | 前端处理建议 |
+|--------|----------|------|------------|
+| `AI_FEATURE_LOCKED` | 403 | 会员等级不支持此 AI 功能 | 弹窗提示"请升级为专业版或创作者版"，附带升级按钮 |
+| `AI_QUOTA_EXCEEDED` | 429 | 月度调用次数已达上限 | 弹窗显示"本月 AI 使用次数已达上限（X/Y），下月自动重置"，同时返回 `used` 与 `quota` |
+| `AI_UNAVAILABLE` | 502 | AI 服务暂时不可用 | 弹窗"AI 服务暂时不可用，请稍后重试"，可重试 |
+| `QUEUE_UNAVAILABLE` | 503 | 异步队列不可用 | 弹窗"任务入队失败，请稍后重试"，可重试 |
+| `Validation failed` | 400 | 请求参数不合法 | 检查参数合法性，前端表单校验增强 |

@@ -2,9 +2,9 @@
 # 附录D04：全局数据字典与 Schema 定义（原附录 E）
 
 ## 文档信息
-- 版本：V1.7（2026-04-29 反馈/评价/收藏与申请拒绝字段补充）
+- 版本：V1.8（2026-04-30 AI 使用日志与异步任务字段补充）
 - 上一版本：v1.5（2026-04-25）
-- 变更：新增"创作者权限字段约定"节，明确 `subscription_type`/`user_type` 的创作者判定逻辑与前端缓存键名
+- 变更：新增 `ai_usage_log` 表字段定义与 AI 异步任务事件结构，补充配额统计索引口径
 
 ## 0.1 2026-04-25 对齐声明
 
@@ -777,3 +777,42 @@ CREATE TABLE comment_likes (
 1. `reader_settings` 为作品阅览能力的唯一配置入口，前后端不得再为单一品类另建独立阅览配置结构。
 2. `watermark_enabled=true` 时，叙阅器渲染层必须输出与当前访问用户关联的可追溯标识。
 3. `copy_limit_chars` 仅控制前台单次选中上限，不替代后台权限校验。
+
+### 5.6 AI 使用日志与配额统计字段（2026-04-30 新增）
+
+#### 5.6.1 `ai_usage_log` 表
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| id | string | 是 | 日志主键（雪花 ID） |
+| user_id | string | 是 | 用户 ID |
+| task_type | ENUM('import_module','check_text','log_summary','generate_recipe') | 是 | 任务类型 |
+| endpoint | ENUM('pro','flash') | 是 | 模型端点 |
+| status | ENUM('queued','success','failed') | 是 | 任务状态 |
+| input_tokens | int | 是 | 输入 token 数，默认 `0` |
+| output_tokens | int | 是 | 输出 token 数，默认 `0` |
+| cost_cents | int | 是 | 成本（分），MVP 可先写 `0` |
+| duration_ms | int | 是 | 本次任务耗时（毫秒） |
+| created_at | timestamp | 是 | 创建时间 |
+
+索引约束：
+
+1. 必须建立按用户+任务+月份聚合索引：`idx_ai_user_month(user_id, task_type, created_at)`。
+2. 配额统计口径只统计 `status='success'` 记录；`queued/failed` 不计入月度额度。
+
+### 5.7 AI 异步任务事件结构（2026-04-30 新增）
+
+```typescript
+interface AiTaskUpdateEvent {
+  task_id: string;
+  status: 'queued' | 'success' | 'failed';
+  result?: unknown;
+  error?: string;
+}
+```
+
+说明：
+
+1. 该事件通过 Socket.IO 事件名 `ai_task_update` 推送给目标用户房间（`user:{user_id}`）。
+2. `status='success'` 时应返回 `result`；`status='failed'` 时应返回 `error`。
+3. 客户端收到事件后应更新任务卡片状态，并在必要时触发结果拉取或错误提示。

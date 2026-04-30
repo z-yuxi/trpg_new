@@ -46,11 +46,11 @@ export const aiConfig = {
 
 ## 3. 会员配额与计费口径
 
-| 会员等级 | 模组导入 | 智能校对 | 日志摘要 | 规则生成 |
-| --- | --- | --- | --- | --- |
-| 免费版 | 0 | 0 | 0 | 0 |
-| 专业版 | 3 次/月 | 20 次/月 | 5 次/月 | 3 次/月 |
-| 创作者版 | 10 次/月 | 100 次/月 | 15 次/月 | 10 次/月 |
+| 会员等级 | 模组导入 | 智能校对 | 日志摘要 | 规则生成 | 角色卡导入 |
+| --- | --- | --- | --- | --- | --- |
+| 免费版 | 0 | 0 | 0 | 0 | 0 |
+| 专业版 | 3 次/月 | 20 次/月 | 5 次/月 | 3 次/月 | 3 次/月 |
+| 创作者版 | 10 次/月 | 100 次/月 | 15 次/月 | 10 次/月 | 10 次/月 |
 
 规则：
 
@@ -72,9 +72,15 @@ CREATE TABLE ai_usage_log (
   cost_cents INT NOT NULL,
   duration_ms INT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_user_month (user_id, task_type, created_at)
+  INDEX idx_ai_user_month (user_id, task_type, created_at)
 );
 ```
+
+字段口径说明：
+
+1. 任务入队时先写入 `status='queued'`。
+2. 调用成功后更新为 `status='success'` 并写回 token 与耗时。
+3. 调用失败后更新为 `status='failed'`，仅记录耗时，不消耗配额。
 
 ## 4. 异步任务架构
 
@@ -82,6 +88,13 @@ CREATE TABLE ai_usage_log (
 2. 客户端可通过 ai_task_update Socket 事件或轮询任务接口获取进度。
 3. API 调用失败自动重试 2 次，间隔 3 秒与 9 秒。
 4. 连续失败后标记为 failed，并提示“本次不会消耗使用次数”。
+
+### 4.1 当前落地接口（2026-04-30）
+
+1. `POST /api/ai/check-text`：同步校对（flash）。
+2. `POST /api/ai/import-module`：异步模组分析（pro），返回 `202 + task_id`。
+3. `GET /api/ai/quota`：查询当月 AI 使用量。
+4. 配额耗尽返回 `429`（`AI_QUOTA_EXCEEDED`）；会员未开通返回 `403`（`AI_FEATURE_LOCKED`）。
 
 ## 5. 任务分流基线
 
@@ -91,6 +104,7 @@ CREATE TABLE ai_usage_log (
 | 智能校对 | flash | 次数 | 高频低延迟，不直接改写原文 |
 | 跑团日志摘要 | pro | 次数 | 输入 ILF，输出结构化摘要 |
 | 规则生成 | pro | 次数 | 需注入规则包 schema 上下文 |
+| 角色卡导入 | flash | 次数 | 粘贴代码或截图/PDF 上传，AI 解析字段后用户预览确认 |
 
 ## 6. 安全与合规
 
