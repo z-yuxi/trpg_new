@@ -120,6 +120,17 @@ const filteredRulesets = computed(() => {
   return list;
 });
 
+// 公示处：status=review 的模组 + 规则包（使用已加载数据，避免额外请求）
+const reviewItems = computed(() => {
+  const mods = modules.value
+    .filter(m => (m as unknown as { status?: string }).status === 'review')
+    .map(m => ({ id: m.id, title: m.title ?? m.name, name: m.name ?? m.title ?? '', author: m.author, description: '', type: 'module' as const }));
+  const rss = rulesets.value
+    .filter(r => r.status === 'review')
+    .map(r => ({ id: r.id, title: r.name, name: r.name, author: r.author, description: r.description ?? '', type: 'ruleset' as const }));
+  return [...mods, ...rss];
+});
+
 /* ========== 工具 ========== */
 function playerRange(m: Module) {
   if (m.min_players && m.max_players) return `${m.min_players}~${m.max_players} 人`;
@@ -279,22 +290,59 @@ function ratingLabel(r?: number) {
 
     <!-- 故事录 -->
     <template v-else-if="activeTab === 'stories'">
-      <EmptyState
-        icon-name=""
-        illustration-name="illust-empty"
-        title="故事录"
-        description="跑完一段故事？把它记录下来，分享给其他玩家。（功能建设中）"
-      />
+      <div class="stories-header">
+        <h2 class="stories-title">故事录</h2>
+        <p class="stories-desc">跑完一段故事？将它记录下来，留给自己，也分享给他人。</p>
+      </div>
+      <!-- 已完结战役列表（数据来自用户自己的战役） -->
+      <div v-if="!authStore.isLoggedIn" class="story-login-hint">
+        <EmptyState
+          title="登录后查看你的故事"
+          description="你参与或主持的完结战役，都可以在这里生成故事录。"
+          action-text="前往登录"
+          action-route="/login"
+        />
+      </div>
+      <div v-else-if="myModules.length === 0 && myRulesets.length === 0" class="story-empty">
+        <EmptyState
+          title="还没有完结的故事"
+          description="完结一场战役后，你可以在这里写下故事后记、导出聊天记录。"
+          action-text="去招募页找团"
+          action-route="/recruit"
+        />
+      </div>
+      <div v-else class="story-hint">
+        <p class="hint-text">功能建设中，完整故事录导出将在后续版本开放。</p>
+        <p class="hint-sub">敬请期待：跑团日志导出、卡片式故事摘要、公开分享。</p>
+      </div>
     </template>
 
     <!-- 公示处 -->
     <template v-else-if="activeTab === 'announcements'">
-      <EmptyState
-        icon-name=""
-        illustration-name="illust-empty"
-        title="公示处"
-        description="处于公示期的模组与规则包将在这里展示，欢迎提交异议。（功能建设中）"
-      />
+      <div class="announce-header">
+        <h2 class="stories-title">公示处</h2>
+        <p class="stories-desc">处于审核公示期（7天）的模组与规则包，欢迎社区提交意见。</p>
+      </div>
+      <!-- 从 modules/rulesets 里筛选 status=review 的条目 -->
+      <div v-if="reviewItems.length === 0" class="review-empty">
+        <EmptyState
+          title="当前公示栏为空"
+          description="暂无处于审核期的内容，创作者发布后将在此展示 7 天。"
+        />
+      </div>
+      <div v-else class="card-grid">
+        <div v-for="item in reviewItems" :key="item.id" class="ruleset-card">
+          <div class="ruleset-header">
+            <div class="ruleset-name">{{ item.title ?? item.name }}</div>
+            <TTag size="sm" color="default">公示中</TTag>
+          </div>
+          <div class="ruleset-meta">
+            <span class="meta-item">{{ item.author ?? '佚名' }}</span>
+            <span class="meta-item">{{ item.type === 'module' ? '模组' : '规则包' }}</span>
+          </div>
+          <p class="ruleset-desc">{{ item.description || '暂无描述' }}</p>
+        </div>
+      </div>
     </template>
 
     <QuickCreateCampaignDialog
@@ -516,4 +564,19 @@ function ratingLabel(r?: number) {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── 故事录 / 公示处 ── */
+.stories-header, .announce-header { margin-bottom: var(--space-4); }
+.stories-title { font-size: var(--text-xl); font-weight: 700; color: var(--text-primary); margin-bottom: var(--space-1); }
+.stories-desc { font-size: var(--text-sm); color: var(--text-secondary); }
+.story-login-hint, .story-empty, .review-empty { padding: var(--space-4) 0; }
+.story-hint {
+  padding: var(--space-8);
+  text-align: center;
+  background: var(--surface-card);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+}
+.hint-text { font-size: var(--text-base); color: var(--text-secondary); margin-bottom: var(--space-2); }
+.hint-sub  { font-size: var(--text-sm); color: var(--text-muted); }
 </style>

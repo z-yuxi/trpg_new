@@ -185,6 +185,54 @@ router.get('/:uid/follow-status', authMiddleware, async (req, res) => {
   res.json({ following: !!row });
 });
 
+// ── 粉丝/关注列表辅助：把 user 行转成简单摘要 ────────────────────────────
+async function toUserSummary(userId: string) {
+  const u = await db('users').where('id', userId).select('uid', 'nickname', 'avatar_url', 'subscription_type').first<Record<string, unknown>>();
+  return u ? { id: userId, uid: u['uid'], nickname: u['nickname'], avatar_url: u['avatar_url'] ?? null, subscription_type: u['subscription_type'] } : null;
+}
+
+// GET /api/users/:uid/followers — 该用户的粉丝列表
+router.get('/:uid/followers', async (req, res) => {
+  const target = await db('users').where({ uid: Number(req.params['uid']!) }).select('id').first<{ id: string }>();
+  if (!target) return res.status(404).json({ error: 'USER_NOT_FOUND' });
+
+  const { page: rawPage, limit: rawLimit } = req.query as Record<string, string>;
+  const page = Math.max(1, Number(rawPage ?? 1));
+  const limit = Math.min(Number(rawLimit ?? 20), 100);
+  const offset = (page - 1) * limit;
+
+  const rows = await db('user_follows')
+    .where('followee_id', target.id)
+    .orderBy('created_at', 'desc')
+    .limit(limit).offset(offset)
+    .select('follower_id');
+  const total = await db('user_follows').where('followee_id', target.id).count('follower_id as c').first<{ c: number | string }>();
+
+  const users = await Promise.all(rows.map((r: { follower_id: string }) => toUserSummary(r.follower_id)));
+  res.json({ data: users.filter(Boolean), total: Number(total?.c ?? 0) });
+});
+
+// GET /api/users/:uid/following — 该用户关注的人列表
+router.get('/:uid/following', async (req, res) => {
+  const target = await db('users').where({ uid: Number(req.params['uid']!) }).select('id').first<{ id: string }>();
+  if (!target) return res.status(404).json({ error: 'USER_NOT_FOUND' });
+
+  const { page: rawPage, limit: rawLimit } = req.query as Record<string, string>;
+  const page = Math.max(1, Number(rawPage ?? 1));
+  const limit = Math.min(Number(rawLimit ?? 20), 100);
+  const offset = (page - 1) * limit;
+
+  const rows = await db('user_follows')
+    .where('follower_id', target.id)
+    .orderBy('created_at', 'desc')
+    .limit(limit).offset(offset)
+    .select('followee_id');
+  const total = await db('user_follows').where('follower_id', target.id).count('followee_id as c').first<{ c: number | string }>();
+
+  const users = await Promise.all(rows.map((r: { followee_id: string }) => toUserSummary(r.followee_id)));
+  res.json({ data: users.filter(Boolean), total: Number(total?.c ?? 0) });
+});
+
 router.get('/:uid/campaigns', async (req, res) => {
   try {
     const data = await userService.getUserCampaigns(req.params.uid);

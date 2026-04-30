@@ -10,8 +10,16 @@ const router = useRouter();
 const authStore = useAuthStore();
 const uid = route.params.uid as string;
 
-type TabKey = 'player' | 'gm' | 'creator';
+type TabKey = 'player' | 'gm' | 'creator' | 'followers' | 'following';
 const activeTab = ref<TabKey>('player');
+
+interface UserSummary {
+  id: string;
+  uid?: number;
+  nickname: string;
+  avatar_url?: string | null;
+  subscription_type?: string;
+}
 
 interface UserProfile {
   id: string;
@@ -37,6 +45,8 @@ const tabLabels: { key: TabKey; label: string }[] = [
   { key: 'player', label: '玩家' },
   { key: 'gm', label: 'GM' },
   { key: 'creator', label: '创作者' },
+  { key: 'followers', label: '粉丝' },
+  { key: 'following', label: '关注' },
 ];
 
 // Badge computation
@@ -65,6 +75,32 @@ const isOwnProfile = () => String(authStore.userId) === String(uid);
 const playerStats = ref({ joinedCampaigns: 0, totalSessions: 0, avgRating: '-' });
 const gmStats = ref({ hostedCampaigns: 0, totalPlayers: 0, completionRate: '-' });
 const creatorWorks = ref<{ id: string; name: string; type: string; status: string }[]>([]);
+
+// 粉丝 / 关注列表
+const followersList = ref<UserSummary[]>([]);
+const followingList = ref<UserSummary[]>([]);
+const followersLoaded = ref(false);
+const followingLoaded = ref(false);
+
+async function loadFollowers() {
+  if (followersLoaded.value) return;
+  const res = await api.get<{ data: UserSummary[]; total: number }>(`/users/${uid}/followers`).catch(() => ({ data: [], total: 0 }));
+  followersList.value = res.data;
+  followersLoaded.value = true;
+}
+
+async function loadFollowing() {
+  if (followingLoaded.value) return;
+  const res = await api.get<{ data: UserSummary[]; total: number }>(`/users/${uid}/following`).catch(() => ({ data: [], total: 0 }));
+  followingList.value = res.data;
+  followingLoaded.value = true;
+}
+
+function switchTab(tab: TabKey) {
+  activeTab.value = tab;
+  if (tab === 'followers') loadFollowers();
+  if (tab === 'following') loadFollowing();
+}
 
 async function loadProfile() {
   loading.value = true;
@@ -136,8 +172,8 @@ onMounted(loadProfile);
           <div class="uid-text">{{ uidText(profile) }}</div>
           <p v-if="profile.intro" class="user-intro">{{ profile.intro }}</p>
           <div class="stat-row">
-            <span class="stat-item"><strong>{{ profile.follower_count ?? 0 }}</strong> 粉丝</span>
-            <span class="stat-item"><strong>{{ profile.following_count ?? 0 }}</strong> 关注</span>
+            <span class="stat-item stat-clickable" @click="switchTab('followers')"><strong>{{ profile.follower_count ?? 0 }}</strong> 粉丝</span>
+            <span class="stat-item stat-clickable" @click="switchTab('following')"><strong>{{ profile.following_count ?? 0 }}</strong> 关注</span>
           </div>
         </div>
         <div class="action-wrap" v-if="!isOwnProfile()">
@@ -155,7 +191,7 @@ onMounted(loadProfile);
           :key="t.key"
           class="tab-btn"
           :class="{ active: activeTab === t.key }"
-          @click="activeTab = t.key"
+          @click="switchTab(t.key)"
         >{{ t.label }}</button>
       </div>
 
@@ -243,6 +279,52 @@ onMounted(loadProfile);
             </div>
           </div>
         </template>
+
+        <!-- 粉丝 -->
+        <template v-else-if="activeTab === 'followers'">
+          <div v-if="!followersLoaded" class="empty-hint">加载中…</div>
+          <div v-else-if="followersList.length === 0" class="empty-hint">还没有粉丝</div>
+          <div v-else class="user-list">
+            <div
+              v-for="u in followersList"
+              :key="u.id"
+              class="user-list-item"
+              @click="router.push(`/user/${u.uid ?? u.id}`)"
+            >
+              <div class="ul-avatar">
+                <img v-if="u.avatar_url" :src="u.avatar_url" :alt="u.nickname" />
+                <span v-else>{{ u.nickname[0] }}</span>
+              </div>
+              <div class="ul-info">
+                <div class="ul-name">{{ u.nickname }}</div>
+                <div class="ul-sub" v-if="u.subscription_type === 'creator'">创作者</div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 关注 -->
+        <template v-else-if="activeTab === 'following'">
+          <div v-if="!followingLoaded" class="empty-hint">加载中…</div>
+          <div v-else-if="followingList.length === 0" class="empty-hint">还没有关注任何人</div>
+          <div v-else class="user-list">
+            <div
+              v-for="u in followingList"
+              :key="u.id"
+              class="user-list-item"
+              @click="router.push(`/user/${u.uid ?? u.id}`)"
+            >
+              <div class="ul-avatar">
+                <img v-if="u.avatar_url" :src="u.avatar_url" :alt="u.nickname" />
+                <span v-else>{{ u.nickname[0] }}</span>
+              </div>
+              <div class="ul-info">
+                <div class="ul-name">{{ u.nickname }}</div>
+                <div class="ul-sub" v-if="u.subscription_type === 'creator'">创作者</div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -277,6 +359,8 @@ onMounted(loadProfile);
 .stat-row { display: flex; gap: var(--space-4); }
 .stat-item { font-size: var(--text-sm); color: var(--text-secondary); }
 .stat-item strong { color: var(--text-primary); font-weight: 700; }
+.stat-clickable { cursor: pointer; transition: color var(--transition-fast); }
+.stat-clickable:hover { color: var(--color-accent); }
 .action-wrap { display: flex; flex-direction: column; gap: var(--space-2); flex-shrink: 0; }
 .follow-btn {
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); border: 1px solid var(--color-accent);
@@ -319,6 +403,25 @@ onMounted(loadProfile);
 .work-type { font-size: var(--text-xs); color: var(--text-muted); margin-bottom: 4px; }
 .work-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); margin-bottom: var(--space-2); }
 .work-status { font-size: var(--text-xs); padding: 1px 8px; border-radius: 100px; background: color-mix(in srgb, #6B8E6B 15%, transparent); color: #6B8E6B; }
+
+/* ── 用户列表（粉丝/关注） ── */
+.user-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.user-list-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3); border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-default);
+  cursor: pointer; transition: background var(--transition-fast);
+}
+.user-list-item:hover { background: var(--surface-hover); }
+.ul-avatar {
+  width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+  background: var(--color-accent); display: flex; align-items: center;
+  justify-content: center; color: #fff; font-weight: 700; flex-shrink: 0;
+}
+.ul-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ul-info { flex: 1; min-width: 0; }
+.ul-name { font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); }
+.ul-sub { font-size: var(--text-xs); color: var(--color-accent); margin-top: 2px; }
 
 @media (max-width: 600px) {
   .profile-header { flex-direction: column; }
