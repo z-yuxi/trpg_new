@@ -85,7 +85,8 @@ async function handleResponse<T>(res: Response): Promise<T> {
     } catch {
       // ignore parse error
     }
-    const err = new Error(message) as Error & { error_code?: string };
+    const err = new Error(message) as Error & { status?: number; error_code?: string };
+    err.status = res.status;
     err.error_code = errorCode;
     throw err;
   }

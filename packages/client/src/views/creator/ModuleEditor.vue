@@ -30,6 +30,22 @@
         <button class="btn btn--secondary" :disabled="exportBusy || !moduleId" @click="handleExportPdf">
           {{ exportBusy ? '导出中...' : '导出 PDF' }}
         </button>
+        <button
+          class="btn btn--ai"
+          :disabled="aiCheckBusy || !moduleId"
+          :class="{ 'btn--ai-active': aiPanelVisible }"
+          @click="handleAiCheck"
+        >
+          {{ aiCheckBusy ? '校对中...' : 'AI 校对' }}
+        </button>
+        <button
+          class="btn btn--secondary"
+          :disabled="aiImportBusy || !editorContent"
+          :title="'AI 分析当前内容，提取 NPC/场景/线索等结构化实体（异步，完成后通知）'"
+          @click="handleAiImportAnalysis"
+        >
+          {{ aiImportBusy ? 'AI 分析中...' : 'AI 分析结构' }}
+        </button>
         <button class="btn btn--secondary" @click="manualSave">保存</button>
         <button
           v-if="module?.status === 'draft'"
@@ -89,10 +105,32 @@
         <div v-else class="editor-loading">加载中...</div>
       </main>
 
-      <!-- 右侧属性面板（预留位置，批次 2 实现） -->
-      <aside class="props-panel" :class="{ 'props-panel--hidden': !propsPanelVisible }">
-        <div class="props-title">属性</div>
-        <div class="props-placeholder">选中业务块后此处将显示属性编辑表单</div>
+      <!-- 右侧 AI 校对面板 -->
+      <aside class="props-panel" :class="{ 'props-panel--hidden': !aiPanelVisible }">
+        <div class="props-title">
+          AI 校对结果
+          <button class="panel-close-btn" @click="aiPanelVisible = false">×</button>
+        </div>
+        <div v-if="aiCheckBusy" class="ai-loading">分析中，请稍候...</div>
+        <div v-else-if="aiIssues.length === 0 && aiChecked" class="ai-empty">未发现问题，文本状态良好。</div>
+        <div v-else-if="aiIssues.length === 0" class="ai-empty">点击「AI 校对」开始分析当前内容。</div>
+        <ul v-else class="ai-issues-list">
+          <li
+            v-for="(issue, idx) in aiIssues"
+            :key="idx"
+            class="ai-issue-item"
+            :class="`ai-issue--${issue.type}`"
+          >
+            <span class="issue-type-tag">{{ issueTypeLabel(issue.type) }}</span>
+            <span class="issue-original">「{{ issue.original }}」</span>
+            <span class="issue-arrow">→</span>
+            <span class="issue-suggestion">{{ issue.suggestion }}</span>
+            <span class="issue-reason">{{ issue.reason }}</span>
+          </li>
+        </ul>
+        <div v-if="aiQuotaInfo" class="ai-quota-bar">
+          本月已用 {{ aiQuotaInfo.used }}/{{ aiQuotaInfo.quota }} 次
+        </div>
       </aside>
     </div>
 
@@ -115,6 +153,7 @@ import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 import { extractOutline } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
+import { socketClient } from '../../socket/socket-client';
 import type { Module, ModuleOutlineItem } from '@trpg/shared';
 
 const router = useRouter();
@@ -142,10 +181,103 @@ interface ImportPreview {
 
 const importPreview = ref<ImportPreview | null>(null);
 
-// 保存状态: 'saved' | 'saving' | 'unsaved'
-const saveState = ref<'saved' | 'saving' | 'unsaved'>('saved');
+// ── AI 校对 ──────────────────────────────────────────────
+interface AiIssue {
+  type: 'typo' | 'punctuation' | 'term' | 'style';
+  original: string;
+  suggestion: string;
+  reason: string;
+}
+
+const aiPanelVisible = ref(false);
+const aiCheckBusy = ref(false);
+const aiChecked = ref(false);
+const aiIssues = ref<AiIssue[]>([]);
+const aiQuotaInfo = ref<{ used: number; quota: number } | null>(null);
+
+// AI 导入任务 ID → 等待 socket 回调
+const pendingAiImportTaskId = ref<string | null>(null);
+
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+  typo: '错别字',
+  punctuation: '标点',
+  term: '术语',
+  style: '语句',
+};
+function issueTypeLabel(type: string): string {
+  return ISSUE_TYPE_LABELS[type] ?? type;
+}
+
+async function fetchAiQuota() {
+  try {
+    const res = await api.get<{ month: string; used: Partial<Record<string, number>> }>('/ai/quota');
+    const used = res.used['check_text'] ?? 0;
+    // pro: 20次/月，creator: 100次/月（与后端 ai-quota.ts 保持一致）
+    const quota = 20; // 展示基础档位，实际后端强制
+    aiQuotaInfo.value = { used, quota };
+  } catch {
+    // 静默处理
+  }
+}
+
+async function handleAiCheck() {
+  const text = editorContent.value;
+  if (!text || aiCheckBusy.value) return;
+  aiCheckBusy.value = true;
+  aiPanelVisible.value = true;
+  aiIssues.value = [];
+  aiChecked.value = false;
+  try {
+    const result = await api.post<{ issues: AiIssue[] }>('/ai/check-text', {
+      text: text.slice(0, 5000), // 单次最多 5000 字
+    });
+    aiIssues.value = result.issues ?? [];
+    aiChecked.value = true;
+    await fetchAiQuota();
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    if (e?.status === 403) {
+      aiIssues.value = [];
+      alert('AI 校对功能需要专业版或创作者版会员，请升级后使用。');
+    } else if (e?.status === 429) {
+      alert('本月 AI 校对次数已用完，下月自动重置。');
+    } else {
+      alert('AI 校对暂时不可用，请稍后重试。');
+    }
+    aiPanelVisible.value = false;
+  } finally {
+    aiCheckBusy.value = false;
+  }
+}
+
+// AI 导入结构分析（异步入队，Socket 推送结果）
+const aiImportBusy = ref(false);
+
+async function handleAiImportAnalysis() {
+  const text = editorContent.value;
+  if (!text || aiImportBusy.value) return;
+  aiImportBusy.value = true;
+  try {
+    const res = await api.post<{ task_id: string; message: string }>('/ai/import-module', {
+      text_chunk: text.slice(0, 10000),
+    });
+    pendingAiImportTaskId.value = res.task_id;
+    alert(`AI 分析任务已提交（ID: ${res.task_id}）\n完成后将通过通知推送结果。`);
+  } catch (err: unknown) {
+    const e = err as { status?: number };
+    if (e?.status === 403) {
+      alert('AI 结构分析需要专业版或创作者版会员，请升级后使用。');
+    } else if (e?.status === 429) {
+      alert('本月 AI 模组导入次数已用完，下月自动重置。');
+    } else {
+      alert('任务提交失败，请稍后重试。');
+    }
+  } finally {
+    aiImportBusy.value = false;
+  }
+}
 const outlineCollapsed = ref(false);
-const propsPanelVisible = ref(false);
+const saveState = ref<'saved' | 'saving' | 'unsaved'>('saved');
 
 // ── 自动保存（debounce 3s） ──────────────────────────────
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -350,17 +482,18 @@ watch(editorContent, (val) => {
 });
 
 // ── 保存提示 ─────────────────────────────────────────────
-const saveIndicatorClass = computed(() => ({
-  'saved': 'indicator--saved',
-  'saving': 'indicator--saving',
-  'unsaved': 'indicator--unsaved',
-}[saveState.value]));
-
-const saveIndicatorText = computed(() => ({
-  'saved': '已保存',
-  'saving': '保存中...',
-  'unsaved': '未保存更改',
-}[saveState.value]));
+const SAVE_CLASS: Record<'saved' | 'saving' | 'unsaved', string> = {
+  saved: 'indicator--saved',
+  saving: 'indicator--saving',
+  unsaved: 'indicator--unsaved',
+};
+const SAVE_TEXT: Record<'saved' | 'saving' | 'unsaved', string> = {
+  saved: '已保存',
+  saving: '保存中...',
+  unsaved: '未保存更改',
+};
+const saveIndicatorClass = computed(() => SAVE_CLASS[saveState.value]);
+const saveIndicatorText = computed(() => SAVE_TEXT[saveState.value]);
 
 // ── 加载 ─────────────────────────────────────────────────
 onMounted(async () => {
@@ -370,11 +503,38 @@ onMounted(async () => {
     moduleTitle.value = data.name;
     editorContent.value = data.content ?? null;
   } catch {
-    // 模组不存在时跳回列表
     router.push('/creator/modules');
   } finally {
     editorReady.value = true;
   }
+
+  // 监听 AI 导入任务完成推送
+  socketClient.connectUser();
+  socketClient.onAiTaskUpdate((data) => {
+    if (data.task_id !== pendingAiImportTaskId.value) return;
+    pendingAiImportTaskId.value = null;
+    importBusy.value = false;
+    if (data.status === 'success' && data.result) {
+      try {
+        const parsed = typeof data.result === 'string'
+          ? JSON.parse(data.result as string)
+          : data.result;
+        // 将 AI 分析结果转为导入预览格式
+        importPreview.value = {
+          name: module.value?.name ?? '',
+          description: module.value?.description ?? '',
+          content: editorContent.value ?? '',
+          plain_text: '',
+          word_count: wordCount.value,
+          aiEntities: (parsed as { entities?: unknown[] })?.entities ?? [],
+        } as ImportPreview & { aiEntities: unknown[] };
+      } catch { /* ignore */ }
+    } else if (data.status === 'failed') {
+      alert(`AI 模组分析失败：${data.error ?? '未知错误'}（本次不消耗使用次数）`);
+    }
+  });
+
+  await fetchAiQuota();
 });
 
 // ── 离开前提示 ───────────────────────────────────────────
@@ -389,6 +549,7 @@ onMounted(() => window.addEventListener('beforeunload', beforeUnloadHandler));
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', beforeUnloadHandler);
   if (saveTimer) clearTimeout(saveTimer);
+  socketClient.offAiTaskUpdate();
 });
 
 function goBack() {
@@ -629,6 +790,64 @@ function goBack() {
 
 .props-panel--hidden { display: none; }
 
-.props-title { font-size: 13px; font-weight: 600; color: var(--color-text-secondary, #888); text-transform: uppercase; margin-bottom: 12px; }
+.props-title {
+  font-size: 13px; font-weight: 600; color: var(--color-text-secondary, #888);
+  text-transform: uppercase; margin-bottom: 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
 .props-placeholder { font-size: 13px; color: var(--color-text-placeholder, #bbb); line-height: 1.6; }
+.panel-close-btn {
+  background: none; border: none; cursor: pointer; font-size: 16px;
+  color: var(--color-text-muted, #aaa); padding: 0 2px; line-height: 1;
+}
+.panel-close-btn:hover { color: var(--color-text-primary, #222); }
+
+/* AI 按钮 */
+.btn--ai {
+  background: color-mix(in srgb, var(--color-accent, #6366f1) 12%, var(--color-surface, #fff));
+  color: var(--color-accent, #6366f1);
+  border: 1px solid color-mix(in srgb, var(--color-accent, #6366f1) 40%, transparent);
+  border-radius: var(--radius-md, 6px);
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn--ai:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent, #6366f1) 20%, var(--color-surface, #fff));
+}
+.btn--ai:disabled { opacity: .5; cursor: not-allowed; }
+.btn--ai-active {
+  background: var(--color-accent, #6366f1);
+  color: #fff;
+}
+
+/* AI 校对结果面板 */
+.ai-loading, .ai-empty {
+  font-size: 13px; color: var(--color-text-muted, #aaa); text-align: center; padding: 24px 0;
+}
+.ai-issues-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ai-issue-item {
+  display: flex; flex-direction: column; gap: 3px;
+  background: var(--color-input-bg, #f8f8f8);
+  border-radius: 6px; padding: 8px 10px;
+  border-left: 3px solid var(--color-accent, #6366f1);
+  font-size: 12px;
+}
+.ai-issue--typo { border-left-color: #ef4444; }
+.ai-issue--punctuation { border-left-color: #3b82f6; }
+.ai-issue--term { border-left-color: #f59e0b; }
+.ai-issue--style { border-left-color: #10b981; }
+.issue-type-tag {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  color: var(--color-text-muted, #aaa);
+}
+.issue-original { color: #ef4444; font-family: var(--font-mono, monospace); }
+.issue-arrow { color: var(--color-text-muted, #aaa); }
+.issue-suggestion { color: #10b981; font-weight: 600; }
+.issue-reason { color: var(--color-text-muted, #aaa); font-style: italic; }
+.ai-quota-bar {
+  font-size: 11px; color: var(--color-text-muted, #aaa);
+  text-align: right; padding-top: 8px; border-top: 1px solid var(--color-border, #eee); margin-top: 8px;
+}
 </style>

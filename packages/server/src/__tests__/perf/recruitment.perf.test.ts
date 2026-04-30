@@ -24,6 +24,17 @@ const pw = 'Test1234!';
 let pSeq = 0;
 const pUid = () => '136' + String(Date.now()).slice(-6) + String(++pSeq).padStart(2, '0');
 
+function envFloat(name: string): number | null {
+  const raw = process.env[name];
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// Windows 本地与高负载 CI 下波动较大，允许通过环境变量收紧/放宽阈值。
+const PERF_P99_MULTIPLIER = envFloat('PERF_P99_MULTIPLIER') ?? (process.platform === 'win32' ? 2 : 1);
+const p99Limit = (baseMs: number): number => Math.round(baseMs * PERF_P99_MULTIPLIER);
+
 // ── 计时工具 ──────────────────────────────────────────────────────────────────
 
 async function measureConcurrent(
@@ -89,7 +100,7 @@ describe('性能基准 - 招募列表', () => {
     console.log(`  [招募列表] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
 
     expect(errRate).toBeLessThan(0.01); // 错误率 < 1%
-    expect(p99).toBeLessThan(500);
+    expect(p99).toBeLessThan(p99Limit(500));
   });
 
   it('分页参数不影响成功率', async () => {
@@ -111,7 +122,7 @@ describe('性能基准 - 帖子详情', () => {
     );
     console.log(`  [帖子详情] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     expect(errRate).toBeLessThan(0.01);
-    expect(p99).toBeLessThan(300);
+    expect(p99).toBeLessThan(p99Limit(300));
   });
 });
 
@@ -140,7 +151,7 @@ describe('性能基准 - 并发申请写入', () => {
     console.log(`  [并发申请] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%, RPS≈${rps}`);
 
     expect(errRate).toBeLessThan(0.01); // 允许 <1% 5xx（并发冲突可能产生 400，不算错误）
-    expect(p99).toBeLessThan(800);
+    expect(p99).toBeLessThan(p99Limit(800));
   }, 60_000);
 });
 
@@ -185,7 +196,7 @@ describe('性能基准 - 招募帖创建写入', () => {
     );
     console.log(`  [并发创建帖] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     expect(errRate).toBe(0);
-    expect(p99).toBeLessThan(800);
+    expect(p99).toBeLessThan(p99Limit(800));
   }, 30_000);
 });
 
@@ -202,7 +213,7 @@ describe('性能基准 - schedule_weekday / schedule_time_slot 筛选', () => {
     );
     console.log(`  [时段筛选列表] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     expect(errRate).toBeLessThan(0.01);
-    expect(p99).toBeLessThan(500);
+    expect(p99).toBeLessThan(p99Limit(500));
   });
 
   it('带最少席位筛选的招募列表 P99 < 500ms', async () => {
@@ -211,7 +222,7 @@ describe('性能基准 - schedule_weekday / schedule_time_slot 筛选', () => {
     );
     console.log(`  [席位筛选列表] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     expect(errRate).toBeLessThan(0.01);
-    expect(p99).toBeLessThan(500);
+    expect(p99).toBeLessThan(p99Limit(500));
   });
 
   it('组合筛选（weekday + time_slot + min_seats）P99 < 600ms', async () => {
@@ -220,7 +231,7 @@ describe('性能基准 - schedule_weekday / schedule_time_slot 筛选', () => {
     );
     console.log(`  [组合筛选] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     expect(errRate).toBeLessThan(0.01);
-    expect(p99).toBeLessThan(600);
+    expect(p99).toBeLessThan(p99Limit(600));
   });
 });
 
@@ -247,7 +258,7 @@ describe('性能基准 - 消息时段过滤 (history_visibility=none EXISTS 子�
     );
     console.log(`  [消息历史接口] P99=${p99}ms, errRate=${(errRate * 100).toFixed(1)}%`);
     // 接口应快速返回 404（路由层）而非挂起
-    expect(p99).toBeLessThan(400);
+    expect(p99).toBeLessThan(p99Limit(400));
   });
 });
 

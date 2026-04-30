@@ -142,6 +142,14 @@ export class SocketClient {
     this.roomSocket?.on('grid_area_marked', handler);
   }
 
+  onAiTaskUpdate(handler: (data: { task_id: string; status: 'queued' | 'success' | 'failed'; result?: unknown; error?: string }) => void): void {
+    this.userSocket?.on('ai_task_update', handler);
+  }
+
+  offAiTaskUpdate(): void {
+    this.userSocket?.off('ai_task_update');
+  }
+
   disconnect(): void {
     this.roomSocket?.disconnect();
     this.userSocket?.disconnect();

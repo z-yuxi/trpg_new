@@ -22,21 +22,34 @@ export interface AiJobData {
   messages: AiMessage[];
 }
 
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 /** 创建 BullMQ 专用 Redis 连接（不能共享主客户端） */
 function createBullMQConnection(): IORedis {
   return new IORedis({
     host: process.env.REDIS_HOST ?? '127.0.0.1',
-    port: Number(process.env.REDIS_PORT) ?? 6379,
+    port: envInt('REDIS_PORT', 6379),
     password: process.env.REDIS_PASSWORD || undefined,
-    db: Number(process.env.REDIS_DB) ?? 0,
+    db: envInt('REDIS_DB', 0),
     // BullMQ 要求此项为 null，否则会抛 MaxRetriesPerRequestError
     maxRetriesPerRequest: null,
   });
 }
 
-const queueConnection = createBullMQConnection();
+let aiQueue: Queue<AiJobData> | null = null;
 
-export const aiQueue = new Queue<AiJobData>('ai-tasks', { connection: queueConnection });
+function getAiQueue(): Queue<AiJobData> {
+  if (!aiQueue) {
+    const queueConnection = createBullMQConnection();
+    aiQueue = new Queue<AiJobData>('ai-tasks', { connection: queueConnection });
+  }
+  return aiQueue;
+}
 
 /**
  * 启动 BullMQ Worker。
@@ -53,7 +66,7 @@ export function startAiWorker(io: Server): Worker<AiJobData> {
       try {
         const result = await callAI(endpoint, messages, taskType, userId);
 
-        io.to(`user:${userId}`).emit('ai_task_update', {
+        io.of('/user').to(`user:${userId}`).emit('ai_task_update', {
           task_id: taskId,
           status: 'success',
           result,
@@ -63,7 +76,7 @@ export function startAiWorker(io: Server): Worker<AiJobData> {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'AI 任务失败';
 
-        io.to(`user:${userId}`).emit('ai_task_update', {
+        io.of('/user').to(`user:${userId}`).emit('ai_task_update', {
           task_id: taskId,
           status: 'failed',
           error: message,
@@ -91,6 +104,6 @@ export async function enqueueAiTask(
   data: Omit<AiJobData, 'taskId'>,
 ): Promise<string> {
   const taskId = generateId();
-  await aiQueue.add('ai-task', { ...data, taskId });
+  await getAiQueue().add('ai-task', { ...data, taskId });
   return taskId;
 }
