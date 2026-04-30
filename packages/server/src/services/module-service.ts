@@ -48,6 +48,16 @@ function rowToModule(row: Record<string, unknown>, includeContent = false): Modu
         m.metadata = undefined;
       }
     }
+    const readerSettingsRaw = row['reader_settings'];
+    if (readerSettingsRaw) {
+      try {
+        m.reader_settings = typeof readerSettingsRaw === 'string'
+          ? JSON.parse(readerSettingsRaw)
+          : readerSettingsRaw;
+      } catch {
+        m.reader_settings = null;
+      }
+    }
   }
   return m;
 }
@@ -150,6 +160,11 @@ export class ModuleService {
     if (data.name !== undefined) updates['name'] = data.name;
     if (data.description !== undefined) updates['description'] = data.description;
     if (data.content !== undefined) updates['content'] = data.content;
+    if (data.reader_settings !== undefined) {
+      updates['reader_settings'] = data.reader_settings === null
+        ? null
+        : JSON.stringify(data.reader_settings);
+    }
     await db('modules').where({ id }).update(updates);
     return this.getById(id);
   }

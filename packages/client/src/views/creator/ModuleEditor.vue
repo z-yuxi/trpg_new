@@ -46,6 +46,7 @@
         >
           {{ aiImportBusy ? 'AI 分析中...' : 'AI 分析结构' }}
         </button>
+        <button class="btn btn--secondary" @click="readerSettingsPanelOpen = true">叙阅器设置</button>
         <button class="btn btn--secondary" @click="manualSave">保存</button>
         <button
           v-if="module?.status === 'draft'"
@@ -141,6 +142,93 @@
       @close="closeImportDialog"
       @confirm="confirmImport"
     />
+
+    <!-- ── 叙阅器设置抽屉 §14.8 ──────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="readerSettingsPanelOpen" class="rs-drawer" @click.self="readerSettingsPanelOpen = false">
+        <div class="rs-drawer__panel">
+          <header class="rs-drawer__head">
+            <h2>叙阅器设置</h2>
+            <button class="rs-drawer__close" @click="readerSettingsPanelOpen = false">×</button>
+          </header>
+          <div class="rs-drawer__body">
+
+            <!-- 预设模板 -->
+            <div class="rs-section">
+              <p class="rs-section__label">快速预设</p>
+              <div class="rs-presets">
+                <button class="rs-preset-btn" @click="applyPreset('paid_strict')">付费作品严保护</button>
+                <button class="rs-preset-btn" @click="applyPreset('free_open')">免费作品开放</button>
+                <button class="rs-preset-btn" @click="applyPreset('private')">纯私密创作</button>
+              </div>
+            </div>
+
+            <!-- 功能插件 -->
+            <div class="rs-section">
+              <p class="rs-section__label">功能开关</p>
+              <div class="rs-toggles">
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.toc" />章节目录</label>
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.reading_progress" />阅读进度记录</label>
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.share" />分享按钮</label>
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.annotation" />划线笔记</label>
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.import_campaign" />导入开团（模组专属）</label>
+                <label><input type="checkbox" v-model="rsDraft.plugin_flags.export_structured_data" />结构化数据导出</label>
+              </div>
+            </div>
+
+            <!-- 保护规则 -->
+            <div class="rs-section">
+              <p class="rs-section__label">内容保护</p>
+              <div class="rs-toggles">
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.anti_bulk_copy" />防批量复制（≤200字）</label>
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.trace_watermark" />溯源水印（含 UID）</label>
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.disable_pdf_export" />禁止 PDF 导出</label>
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.disable_public_comments" />禁止公开划线评论</label>
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.embed_copyright_notice" />版权声明自动嵌入</label>
+                <label><input type="checkbox" v-model="rsDraft.protection_flags.forbid_redistribution" />禁止二次分发</label>
+              </div>
+            </div>
+
+            <!-- 试读策略 -->
+            <div class="rs-section">
+              <p class="rs-section__label">游客试读比例</p>
+              <div class="rs-field">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  :value="Math.round((rsDraft.preview_policy.preview_ratio ?? 0) * 100)"
+                  @input="(e) => rsDraft.preview_policy.preview_ratio = Number((e.target as HTMLInputElement).value) / 100"
+                />
+                <span class="rs-field__hint">
+                  {{ Math.round((rsDraft.preview_policy.preview_ratio ?? 0) * 100) }}%
+                  {{ rsDraft.preview_policy.preview_ratio ? '（游客可见前 ' + Math.round((rsDraft.preview_policy.preview_ratio) * 100) + '%）' : '（无试读内容）' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 外观 -->
+            <div class="rs-section">
+              <p class="rs-section__label">正文行距</p>
+              <div class="rs-radio-group">
+                <label v-for="opt in [['compact','紧凑'],['comfortable','适中'],['relaxed','宽松']]" :key="opt[0]">
+                  <input type="radio" :value="opt[0]" v-model="rsDraft.appearance!.line_height" />
+                  {{ opt[1] }}
+                </label>
+              </div>
+            </div>
+
+          </div>
+          <footer class="rs-drawer__footer">
+            <button class="btn btn--secondary" @click="readerSettingsPanelOpen = false">取消</button>
+            <button class="btn btn--primary" :disabled="rsSaving" @click="saveReaderSettings">
+              {{ rsSaving ? '保存中…' : '保存设置' }}
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -154,7 +242,8 @@ import { api } from '../../utils/api';
 import { extractOutline } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
 import { socketClient } from '../../socket/socket-client';
-import type { Module, ModuleOutlineItem } from '@trpg/shared';
+import type { Module, ModuleOutlineItem, ReaderSettings } from '@trpg/shared';
+import { READER_SETTINGS_PRESETS } from '@trpg/shared';
 
 const router = useRouter();
 const route = useRoute();
@@ -170,6 +259,54 @@ const wordCount = ref(0);
 const importInput = ref<HTMLInputElement | null>(null);
 const importBusy = ref(false);
 const exportBusy = ref(false);
+
+// ── 叙阅器设置 ───────────────────────────────────────────
+const readerSettingsPanelOpen = ref(false);
+const rsSaving = ref(false);
+
+function defaultReaderSettings(): ReaderSettings {
+  return {
+    plugin_flags: {
+      toc: true,
+      reading_progress: true,
+      share: true,
+      annotation: true,
+      import_campaign: true,
+      export_structured_data: false,
+    },
+    protection_flags: {
+      anti_bulk_copy: false,
+      disable_public_comments: false,
+      disable_pdf_export: false,
+      trace_watermark: false,
+      embed_copyright_notice: false,
+      forbid_redistribution: false,
+    },
+    preview_policy: { preview_ratio: 0 },
+    appearance: { line_height: 'comfortable' },
+  };
+}
+
+const rsDraft = ref<ReaderSettings>(defaultReaderSettings());
+
+function applyPreset(key: keyof typeof READER_SETTINGS_PRESETS) {
+  rsDraft.value = JSON.parse(JSON.stringify(READER_SETTINGS_PRESETS[key]));
+}
+
+async function saveReaderSettings() {
+  if (!moduleId.value) return;
+  rsSaving.value = true;
+  try {
+    await api.put(`/modules/${moduleId.value}`, { reader_settings: rsDraft.value });
+    if (module.value) (module.value as any).reader_settings = rsDraft.value;
+  } catch (err) {
+    alert('保存叙阅器设置失败');
+    console.error(err);
+  } finally {
+    rsSaving.value = false;
+    readerSettingsPanelOpen.value = false;
+  }
+}
 
 interface ImportPreview {
   name: string;
@@ -502,6 +639,9 @@ onMounted(async () => {
     module.value = data;
     moduleTitle.value = data.name;
     editorContent.value = data.content ?? null;
+    if ((data as any).reader_settings) {
+      rsDraft.value = JSON.parse(JSON.stringify((data as any).reader_settings));
+    }
   } catch {
     router.push('/creator/modules');
   } finally {
@@ -849,5 +989,111 @@ function goBack() {
 .ai-quota-bar {
   font-size: 11px; color: var(--color-text-muted, #aaa);
   text-align: right; padding-top: 8px; border-top: 1px solid var(--color-border, #eee); margin-top: 8px;
+}
+
+/* ── 叙阅器设置抽屉 ─────────────────────────────────────── */
+.rs-drawer {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+.rs-drawer__panel {
+  background: var(--color-surface, #fff);
+  width: 420px;
+  max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,.15);
+}
+.rs-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border, #eee);
+}
+.rs-drawer__head h2 { margin: 0; font-size: 16px; }
+.rs-drawer__close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  line-height: 1;
+}
+.rs-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.rs-drawer__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--color-border, #eee);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.rs-section__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #888);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 0 0 8px;
+}
+.rs-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rs-preset-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid var(--color-primary, #6c63ff);
+  border-radius: 999px;
+  background: none;
+  color: var(--color-primary, #6c63ff);
+  cursor: pointer;
+  transition: background .15s;
+}
+.rs-preset-btn:hover {
+  background: color-mix(in srgb, var(--color-primary, #6c63ff) 10%, transparent);
+}
+.rs-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rs-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.rs-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rs-field input[type=range] { flex: 1; }
+.rs-field__hint { font-size: 13px; color: var(--text-secondary, #888); white-space: nowrap; }
+.rs-radio-group {
+  display: flex;
+  gap: 16px;
+}
+.rs-radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
 }
 </style>

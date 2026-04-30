@@ -506,6 +506,9 @@ export interface Ruleset {
    * Legacy 元数据（仅 legacy=true 时有意义）。
    */
   legacy_meta?: import('./recipe').LegacyMeta | null;
+
+  /** 叙阅器配置（§14.8） */
+  reader_settings?: ReaderSettings | null;
 }
 
 /** 规则集版本快照 */
@@ -604,6 +607,76 @@ export interface ModuleMetadata {
   estimated_hours?: number;
 }
 
+/**
+ * 叙阅器配置（存于 modules.reader_settings / rulesets.reader_settings JSON 列）
+ * 见产品设计 §14.8 / 数据字典 D04 §2.6
+ */
+export interface ReaderSettings {
+  plugin_flags: {
+    /** 划线笔记插件 */
+    annotation: boolean;
+    /** 章节目录 */
+    toc: boolean;
+    /** 阅读进度记录 */
+    reading_progress: boolean;
+    /** 分享按钮 */
+    share: boolean;
+    /** 导入开团（模组专属） */
+    import_campaign?: boolean;
+    /** 结构化数据导出（模组专属） */
+    export_structured_data?: boolean;
+    /** 房规引用（规则包专属） */
+    quote_house_rules?: boolean;
+  };
+  protection_flags: {
+    /** 防批量复制：限制单次选中 ≤200 字 */
+    anti_bulk_copy: boolean;
+    /** 禁止公开划线评论 */
+    disable_public_comments: boolean;
+    /** 禁止 PDF 导出 */
+    disable_pdf_export: boolean;
+    /** 溯源水印（含 UID） */
+    trace_watermark: boolean;
+    /** 版权声明自动嵌入 */
+    embed_copyright_notice: boolean;
+    /** 禁止二次分发 */
+    forbid_redistribution?: boolean;
+  };
+  preview_policy: {
+    /** 游客试读比例 0-1，如 0.3 = 前 30%；不设则无试读内容 */
+    preview_ratio?: number;
+    /** 指定可试读的章节 ID 列表（与 preview_ratio 二选一） */
+    preview_section_ids?: string[];
+  };
+  appearance?: {
+    theme_color?: string;
+    font_family?: string;
+    line_height?: 'compact' | 'comfortable' | 'relaxed';
+  };
+}
+
+/** ReaderSettings 预设模板 */
+export const READER_SETTINGS_PRESETS: Record<string, ReaderSettings> = {
+  /** 付费作品严保护 */
+  paid_strict: {
+    plugin_flags: { annotation: true, toc: true, reading_progress: true, share: true, import_campaign: true, export_structured_data: false },
+    protection_flags: { anti_bulk_copy: true, disable_public_comments: false, disable_pdf_export: true, trace_watermark: true, embed_copyright_notice: true, forbid_redistribution: true },
+    preview_policy: { preview_ratio: 0.2 },
+  },
+  /** 免费作品开放 */
+  free_open: {
+    plugin_flags: { annotation: true, toc: true, reading_progress: true, share: true, import_campaign: true, export_structured_data: true },
+    protection_flags: { anti_bulk_copy: false, disable_public_comments: false, disable_pdf_export: false, trace_watermark: false, embed_copyright_notice: true },
+    preview_policy: {},
+  },
+  /** 纯私密创作 */
+  private: {
+    plugin_flags: { annotation: true, toc: true, reading_progress: true, share: false, import_campaign: false, export_structured_data: false },
+    protection_flags: { anti_bulk_copy: true, disable_public_comments: true, disable_pdf_export: true, trace_watermark: true, embed_copyright_notice: true, forbid_redistribution: true },
+    preview_policy: {},
+  },
+};
+
 /** 模组举报类型 */
 export type ModuleReportType = 'plagiarism' | 'violation' | 'other';
 
@@ -655,6 +728,8 @@ export interface Module {
   public_notice_end_at?: Date | null;
   /** 下架原因 */
   suspended_reason?: string | null;
+  /** 叙阅器配置（§14.8） */
+  reader_settings?: ReaderSettings | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -679,6 +754,7 @@ export interface UpdateModuleRequest {
   name?: string;
   description?: string;
   content?: string;
+  reader_settings?: ReaderSettings | null;
 }
 
 /** 自动保存请求体 */

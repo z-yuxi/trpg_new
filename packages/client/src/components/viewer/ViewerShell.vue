@@ -34,6 +34,35 @@ const authStore = useAuthStore();
 const loading = ref(true);
 const error = ref<string | null>(null);
 
+interface ReaderSettings {
+  plugin_flags: {
+    annotation?: boolean;
+    toc?: boolean;
+    reading_progress?: boolean;
+    share?: boolean;
+    import_campaign?: boolean;
+    export_structured_data?: boolean;
+    quote_house_rules?: boolean;
+  };
+  protection_flags: {
+    anti_bulk_copy?: boolean;
+    disable_public_comments?: boolean;
+    disable_pdf_export?: boolean;
+    trace_watermark?: boolean;
+    embed_copyright_notice?: boolean;
+    forbid_redistribution?: boolean;
+  };
+  preview_policy: {
+    preview_ratio?: number;
+    preview_section_ids?: string[];
+  };
+  appearance?: {
+    theme_color?: string;
+    font_family?: string;
+    line_height?: 'compact' | 'comfortable' | 'relaxed';
+  };
+}
+
 interface AssetData {
   id: string;
   name: string;
@@ -48,11 +77,14 @@ interface AssetData {
     copy_protection?: boolean;
     preview_ratio?: number;
   } | null;
+  /** 叙阅器配置（§14.8，服务端注入） */
+  reader_settings?: ReaderSettings | null;
   status?: string;
   price?: number;
   /** 服务端注入：当前用户是否已获取该作品（购买/免费/作者） */
   is_owned?: boolean;
   ruleset_name?: string;
+  ruleset_id?: string;
   difficulty?: string | null;
   min_players?: number | null;
   max_players?: number | null;
@@ -134,19 +166,18 @@ function resumeReading() {
 const MAX_SELECTION_CHARS = 200;
 
 function handleSelectionChange() {
-  if (!asset.value?.metadata?.copy_protection) return;
+  if (!protectionFlags.value.anti_bulk_copy) return;
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return;
   const text = sel.toString();
   if (text.length > MAX_SELECTION_CHARS) {
-    // 折叠到起始位置，阻止超长选中
     sel.collapseToStart();
   }
 }
 
 // ─── 水印 §14.5 ───────────────────────────────────────────────────────────────
 const watermarkText = computed(() => {
-  if (!asset.value?.metadata?.watermark_enabled) return '';
+  if (!protectionFlags.value.trace_watermark) return '';
   return authStore.userId ? `UID:${authStore.userId}` : '版权所有';
 });
 
@@ -188,6 +219,8 @@ async function loadAsset() {
     asset.value = data;
     permLevel.value = detectPermLevel(data);
     emit('loaded', data);
+    // 应用创作者外观配置 §14.8
+    applyAppearance(data.reader_settings?.appearance);
   } catch (e: unknown) {
     const err = e as { status?: number; message?: string };
     if (err.status === 404) {
@@ -203,6 +236,55 @@ async function loadAsset() {
 // ─── 内容是否可见（试读限制） §14.4 ──────────────────────────────────────────
 const canViewFull = computed(() => permLevel.value !== 'guest');
 
+// ─── ReaderSettings 衍生计算 §14.8 ───────────────────────────────────────────
+/** 规范化后的 plugin_flags，缺省全部开启 */
+const pluginFlags = computed(() => {
+  const f = asset.value?.reader_settings?.plugin_flags;
+  return {
+    annotation:            f?.annotation            ?? true,
+    toc:                   f?.toc                   ?? true,
+    reading_progress:      f?.reading_progress      ?? true,
+    share:                 f?.share                 ?? true,
+    import_campaign:       f?.import_campaign       ?? true,
+    export_structured_data:f?.export_structured_data ?? false,
+    quote_house_rules:     f?.quote_house_rules      ?? false,
+  };
+});
+
+/** 规范化后的 protection_flags */
+const protectionFlags = computed(() => {
+  const f = asset.value?.reader_settings?.protection_flags;
+  return {
+    anti_bulk_copy:          f?.anti_bulk_copy          ?? false,
+    disable_public_comments: f?.disable_public_comments ?? false,
+    disable_pdf_export:      f?.disable_pdf_export      ?? false,
+    trace_watermark:         f?.trace_watermark          ?? false,
+    embed_copyright_notice:  f?.embed_copyright_notice  ?? true,
+    forbid_redistribution:   f?.forbid_redistribution    ?? false,
+  };
+});
+
+/**
+ * 试读截断内容：
+ * - 已获取/作者/管理员：返回完整 content
+ * - 游客且有 preview_ratio：按字符数截断到 ratio 比例
+ * - 游客且无 preview_ratio：返回 null（无试读内容）
+ */
+const visibleContent = computed<string | null>(() => {
+  if (!asset.value?.content) return null;
+  if (canViewFull.value) return asset.value.content;
+  const ratio = asset.value.reader_settings?.preview_policy?.preview_ratio;
+  if (!ratio || ratio <= 0) return null;
+  const len = Math.floor(asset.value.content.length * Math.min(1, ratio));
+  return asset.value.content.slice(0, len);
+});
+
+/** 游客试读了多少比例（用于 Paywall 提示） */
+const previewPercent = computed<number>(() => {
+  const ratio = asset.value?.reader_settings?.preview_policy?.preview_ratio ?? 0;
+  return Math.round(ratio * 100);
+});
+
 // ─── 生命周期 ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await loadAsset();
@@ -215,7 +297,27 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll);
   document.removeEventListener('selectionchange', handleSelectionChange);
   if (saveTimer) clearTimeout(saveTimer);
+  resetAppearance();
 });
+
+// ─── 外观自定义 §14.8 ────────────────────────────────────────────────────────
+function applyAppearance(a?: ReaderSettings['appearance']) {
+  if (!a) return;
+  const root = document.documentElement;
+  if (a.theme_color) root.style.setProperty('--color-primary', a.theme_color);
+  if (a.font_family) root.style.setProperty('--font-content', a.font_family);
+  if (a.line_height) {
+    const map = { compact: '1.5', comfortable: '1.8', relaxed: '2.1' };
+    root.style.setProperty('--viewer-line-height', map[a.line_height]);
+  }
+}
+
+function resetAppearance() {
+  const root = document.documentElement;
+  root.style.removeProperty('--color-primary');
+  root.style.removeProperty('--font-content');
+  root.style.removeProperty('--viewer-line-height');
+}
 
 // ─── 后退 ─────────────────────────────────────────────────────────────────────
 function goBack() {
@@ -251,6 +353,7 @@ function goBack() {
           >回到上次阅读位置</button>
           <!-- 目录 -->
           <button
+            v-if="pluginFlags.toc"
             class="viewer-topbar__btn"
             :class="{ 'viewer-topbar__btn--active': tocOpen }"
             aria-label="目录"
@@ -261,7 +364,7 @@ function goBack() {
           </button>
 
           <!-- 分享 -->
-          <button class="viewer-topbar__btn" aria-label="分享" @click="handleShare">
+          <button v-if="pluginFlags.share" class="viewer-topbar__btn" aria-label="分享" @click="handleShare">
             <!-- TODO: 需要图标 share -->
             <SvgIcon name="icon-share" :size="20" />
           </button>
@@ -381,21 +484,23 @@ function goBack() {
 
           <!-- 正文渲染 §3.1 -->
           <div
-            v-if="canViewFull && asset.content"
+            v-if="visibleContent"
             class="viewer-content"
             :class="{ 'viewer-content--watermark': !!watermarkText }"
             :style="watermarkText ? { '--watermark-text': JSON.stringify(watermarkText) } : undefined"
-            v-html="asset.content"
+            v-html="visibleContent"
           />
 
           <!-- 试读边界提示 §14.3 §14.4 — 文案见 G01.16 -->
-          <div v-else-if="!canViewFull" class="viewer-paywall">
+          <div v-if="!canViewFull" class="viewer-paywall">
             <div class="viewer-paywall__gate">
               <SvgIcon name="icon-lock" :size="32" />
               <p class="viewer-paywall__title">
-                {{ asset.metadata?.preview_ratio ? '当前仅开放试读' : '暂未开放试读' }}
+                {{ previewPercent > 0 ? '当前仅开放试读' : '暂未开放试读' }}
               </p>
-              <p class="viewer-paywall__sub">获取后可阅读完整内容</p>
+              <p class="viewer-paywall__sub">
+                {{ previewPercent > 0 ? `已展示前 ${previewPercent}% 内容，` : '' }}获取后可阅读完整内容
+              </p>
               <button class="viewer-btn viewer-btn--primary">获取完整内容</button>
               <!-- TODO: 接入购买/领取流程 -->
             </div>
@@ -816,7 +921,7 @@ function goBack() {
 /* ── 正文渲染区 ───────────────────────────────────────────────── */
 .viewer-content {
   font-size: 16px;
-  line-height: 1.8;
+  line-height: var(--viewer-line-height, 1.8);
   color: var(--text-body);
 
   /* 水印 §14.5 */

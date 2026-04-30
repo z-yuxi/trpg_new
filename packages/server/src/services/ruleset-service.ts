@@ -54,6 +54,7 @@ function rowToRuleset(row: Record<string, unknown>): Ruleset {
     legacy_meta: legacy && !recipeSource
       ? ({ origin: 'atoms_connections', migration_status: 'pending' } as LegacyMeta)
       : (legacy && recipeSource ? ({ origin: 'raw_recipe_wrapped', migration_status: 'pending' } as LegacyMeta) : null),
+    reader_settings: parseJsonField<import('@trpg/shared').ReaderSettings | null>(row['reader_settings'], null),
   };
 }
 
@@ -240,6 +241,8 @@ export class RulesetService {
       character_card_schema: object;
       /** 新 Recipe 主线：提交 recipe_source 时自动 validate + compile */
       recipe_source: RulesetRecipeSource;
+      /** 叙阅器配置 §14.8 */
+      reader_settings: import('@trpg/shared').ReaderSettings | null;
     }>
   ): Promise<Ruleset> {
     const ruleset = await this.findById(id);
@@ -268,6 +271,12 @@ export class RulesetService {
       updatePayload['recipe_source'] = JSON.stringify(data.recipe_source);
       updatePayload['compiled_graph'] = JSON.stringify(compiledGraph);
       updatePayload['legacy'] = 0;
+    }
+
+    if (data.reader_settings !== undefined) {
+      updatePayload['reader_settings'] = data.reader_settings === null
+        ? null
+        : JSON.stringify(data.reader_settings);
     }
 
     if (Object.keys(updatePayload).length > 0) {
