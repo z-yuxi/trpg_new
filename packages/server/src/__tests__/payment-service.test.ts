@@ -54,7 +54,8 @@ function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any
 function mockTransaction(trxFactory: (table: string) => any) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (mockDb as any).transaction = vi.fn().mockImplementation(async (cb: (trx: any) => Promise<void>) => {
-    const trx = vi.fn((table: string) => trxFactory(table));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const trx: any = vi.fn((table: string) => trxFactory(table));
     trx.raw = vi.fn().mockReturnValue('free_coins + 100');
     await cb(trx);
   });

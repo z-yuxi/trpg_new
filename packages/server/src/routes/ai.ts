@@ -149,9 +149,19 @@ router.get('/quota', async (req, res) => {
     used[r.task_type] = Number(r.used);
   }
 
+  // 返回当前会员等级对应的月度配额上限
+  const MONTHLY_QUOTA: Record<string, Record<string, number>> = {
+    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
+    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
+    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
+  };
+  const tier = (user.subscription_type as string | undefined) ?? 'free';
+  const limits = MONTHLY_QUOTA[tier] ?? MONTHLY_QUOTA['free'];
+
   res.json({
     month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
     used,
+    limits,
   });
 });
 

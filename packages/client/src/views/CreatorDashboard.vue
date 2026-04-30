@@ -9,8 +9,7 @@ const navItems = [
   { path: '/creator/workshop',   icon: 'icon-list',      label: '规则工坊' },
   { path: '/creator/modules',    icon: 'icon-book',      label: '模组编辑器' },
   { path: '/creator/assets',     icon: 'icon-dice',      label: '素材库' },
-  { path: '/creator/products',   icon: 'icon-star',      label: '我的作品' },
-];
+  { path: '/creator/products',   icon: 'icon-star',      label: '我的作品' },  { path: '/creator/earnings',   icon: 'icon-coin',      label: '收益' },];
 
 function isActive(path: string) {
   return route.path.startsWith(path);

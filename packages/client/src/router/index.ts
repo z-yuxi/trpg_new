@@ -119,6 +119,7 @@ const routes = [
       { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/CreatorAssets.vue') },
       { path: 'dashboard', name: 'CreatorDashboard', component: () => import('../views/creator/DashboardHome.vue') },
       { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/CreatorProducts.vue') },
+      { path: 'earnings', name: 'CreatorEarnings', component: () => import('../views/creator/CreatorEarnings.vue') },
     ],
   },
   {

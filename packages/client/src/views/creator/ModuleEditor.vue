@@ -348,10 +348,10 @@ function issueTypeLabel(type: string): string {
 
 async function fetchAiQuota() {
   try {
-    const res = await api.get<{ month: string; used: Partial<Record<string, number>> }>('/ai/quota');
+    const res = await api.get<{ month: string; used: Partial<Record<string, number>>; limits?: Partial<Record<string, number>> }>('/ai/quota');
     const used = res.used['check_text'] ?? 0;
-    // pro: 20次/月，creator: 100次/月（与后端 ai-quota.ts 保持一致）
-    const quota = 20; // 展示基础档位，实际后端强制
+    // 优先使用后端返回的实际配额上限，兜底显示 pro 档位 20 次
+    const quota = res.limits?.['check_text'] ?? 20;
     aiQuotaInfo.value = { used, quota };
   } catch {
     // 静默处理
