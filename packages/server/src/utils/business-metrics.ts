@@ -33,8 +33,12 @@ export type MetricEvent =
   | 'payment_failed'
   | 'grant_success'
   | 'grant_failed'
+  | 'refund_requested'           // 退款发起
+  | 'reconcile_triggered'        // 对账任务触发
+  | 'reconcile_pending_timeout'  // 发现超时挂起订单
   | 'ai_request'
   | 'ai_quota_exceeded'
+  | 'message_send_failed'        // 私信/消息发送失败
   | 'auth_register'
   | 'auth_login'
   | 'auth_login_failed'

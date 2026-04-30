@@ -24,6 +24,7 @@ import aiRoutes from './ai';
 import readingProgressRoutes from './reading-progress';
 import annotationsRoutes from './annotations';
 import paymentsRoutes from './payments';
+import trendingRoutes from './trending';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -86,5 +87,6 @@ router.use('/ai', aiRoutes);
 router.use('/reading-progress', readingProgressRoutes);
 router.use('/annotations', annotationsRoutes);
 router.use('/payments', paymentsRoutes);
+router.use('/trending', trendingRoutes);
 
 export default router;

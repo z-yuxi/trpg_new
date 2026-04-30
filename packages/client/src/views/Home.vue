@@ -4,16 +4,22 @@ import { useRouter } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import { useAuthStore } from '../stores/auth-store';
-import { discoverRulesets, discoverModules } from '../api/assets';
-import { listRecruitments } from '../api/recruitment';
+import { getTrendingModules, getTrendingStories } from '../api/trending';
+import type { TrendingModule, TrendingStory } from '../api/trending';
 
 const authStore = useAuthStore();
 const router = useRouter();
 
-const rulesets = ref<any[]>([]);
-const modules = ref<any[]>([]);
-const stories = ref<any[]>([]);
+const modules = ref<TrendingModule[]>([]);
+const stories = ref<TrendingStory[]>([]);
 const loading = ref(false);
+
+/** 将 top_badge 转换为可显示字符串 */
+function badgeLabel(badge: TrendingModule['top_badge']): string {
+  if (badge.type === 'featured') return '⭐申精';
+  if (badge.type === 'comment') return `💬${badge.count}`;
+  return `❤️${badge.count}`;
+}
 
 onMounted(async () => {
   if (authStore.isLoggedIn) {
@@ -23,15 +29,13 @@ onMounted(async () => {
 
   loading.value = true;
   try {
-    const [rData, mData, recData] = await Promise.all([
-      discoverRulesets({ limit: 6 }).catch(() => null),
-      discoverModules({ limit: 6 }).catch(() => null),
-      listRecruitments({ limit: 5 }).catch(() => null),
+    const [mData, sData] = await Promise.all([
+      getTrendingModules(4).catch(() => null),
+      getTrendingStories(4).catch(() => null),
     ]);
 
-    if (rData) rulesets.value = (rData.data ?? []).slice(0, 6);
-    if (mData) modules.value = (mData.data ?? []).slice(0, 6);
-    if (recData) stories.value = (recData as unknown[]).slice(0, 4);
+    if (mData) modules.value = mData.data ?? [];
+    if (sData) stories.value = sData.data ?? [];
   } catch { /* silent */ } finally {
     loading.value = false;
   }
@@ -46,30 +50,36 @@ onMounted(async () => {
       <button class="btn-accent" @click="router.push('/login')">进入叙事</button>
     </section>
 
-    <section class="section">
+    <!-- 精选模组：数据为 0 时隐藏整个区域 -->
+    <section v-if="loading || modules.length > 0" class="section">
       <h2 class="section-title">精选模组</h2>
       <div v-if="loading" class="grid-list">
         <TSkeleton type="card" v-for="i in 4" :key="`m-${i}`" />
       </div>
-      <div v-else-if="modules.length === 0" class="hint-text">暂无精选模组</div>
       <div v-else class="grid-list">
-        <TCard v-for="item in modules.slice(0, 4)" :key="item.id" class="preview-card">
-          <div class="preview-title">{{ item.name }}</div>
+        <TCard v-for="item in modules" :key="item.id" class="preview-card">
+          <div class="preview-card-header">
+            <div class="preview-title">{{ item.name }}</div>
+            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          </div>
           <p class="preview-desc">{{ item.description || '暂无简介' }}</p>
         </TCard>
       </div>
     </section>
 
-    <section class="section">
+    <!-- 热门故事：数据为 0 时隐藏整个区域 -->
+    <section v-if="loading || stories.length > 0" class="section">
       <h2 class="section-title">热门故事</h2>
       <div v-if="loading" class="grid-list">
         <TSkeleton type="card" v-for="i in 4" :key="`s-${i}`" />
       </div>
-      <div v-else-if="stories.length === 0" class="hint-text">暂无热门故事</div>
       <div v-else class="grid-list">
         <TCard v-for="item in stories" :key="item.id" class="preview-card">
-          <div class="preview-title">{{ item.title ?? item.campaign_name }}</div>
-          <p class="preview-desc">{{ item.description ?? '新的故事正在发生' }}</p>
+          <div class="preview-card-header">
+            <div class="preview-title">{{ item.title }}</div>
+            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          </div>
+          <p class="preview-desc">{{ item.summary || '新的故事正在发生' }}</p>
         </TCard>
       </div>
     </section>
@@ -98,6 +108,17 @@ onMounted(async () => {
 .section { margin-bottom: var(--space-7); }
 .section-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0; }
 .hint-text { font-size: var(--text-sm); color: var(--text-muted); padding: var(--space-3) 0; }
+.preview-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.hot-badge {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-overlay, rgba(0,0,0,0.06));
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 .btn-accent { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: var(--btn-primary-bg); color: var(--btn-primary-text); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .grid-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
 .preview-card { border: 1px solid var(--border-default); }

@@ -11,6 +11,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { authMiddleware } from '../middleware/auth';
 import { db } from '../db';
+import { metrics } from '../utils/business-metrics';
 
 const router = Router();
 
@@ -151,36 +152,41 @@ router.post('/conversations/:id/messages', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'EMPTY_CONTENT' });
   }
 
-  const [msgId] = await db('direct_messages').insert({
-    conversation_id: convId,
-    sender_id: userId,
-    content: content.trim(),
-    message_type: type === 'image' ? 'image' : 'text',
-    image_url: image_url ?? null,
-  });
+  try {
+    const [msgId] = await db('direct_messages').insert({
+      conversation_id: convId,
+      sender_id: userId,
+      content: content.trim(),
+      message_type: type === 'image' ? 'image' : 'text',
+      image_url: image_url ?? null,
+    });
 
-  const msg = await db('direct_messages').where('id', msgId).first<Record<string, unknown>>();
+    const msg = await db('direct_messages').where('id', msgId).first<Record<string, unknown>>();
 
-  // 更新会话摘要
-  await db('direct_conversations').where('id', convId).update({
-    last_message: content.trim().slice(0, 100),
-    last_message_at: new Date().toISOString(),
-  });
+    // 更新会话摘要
+    await db('direct_conversations').where('id', convId).update({
+      last_message: content.trim().slice(0, 100),
+      last_message_at: new Date().toISOString(),
+    });
 
-  // 更新发送者已读时间
-  await db('direct_reads')
-    .insert({ conversation_id: convId, user_id: userId, last_read_at: new Date().toISOString() })
-    .onConflict(['conversation_id', 'user_id'])
-    .merge({ last_read_at: new Date().toISOString() });
+    // 更新发送者已读时间
+    await db('direct_reads')
+      .insert({ conversation_id: convId, user_id: userId, last_read_at: new Date().toISOString() })
+      .onConflict(['conversation_id', 'user_id'])
+      .merge({ last_read_at: new Date().toISOString() });
 
-  res.status(201).json({
-    id: String(msg!['id']),
-    sender_id: userId,
-    content: content.trim(),
-    created_at: msg!['created_at'],
-    type: msg!['message_type'] ?? 'text',
-    image_url: msg!['image_url'] ?? null,
-  });
+    res.status(201).json({
+      id: String(msg!['id']),
+      sender_id: userId,
+      content: content.trim(),
+      created_at: msg!['created_at'],
+      type: msg!['message_type'] ?? 'text',
+      image_url: msg!['image_url'] ?? null,
+    });
+  } catch (err) {
+    metrics.inc('message_send_failed');
+    throw err;
+  }
 });
 
 // ── PUT /api/messages/conversations/:id/read ──────────────────────────────

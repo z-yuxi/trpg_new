@@ -7,7 +7,12 @@
     "dev": "tsx watch src/server.ts",
     "test": "vitest run",
     "test:accept": "vitest run --config vitest.acceptance.config.ts",
-    "migrate": "tsx src/db/migrate.ts"
+    "migrate": "tsx src/db/migrate.ts",
+    "seed:phase1": "tsx src/scripts/seeds/run.ts --phase=1",
+    "seed:phase2": "tsx src/scripts/seeds/run.ts --phase=2 --no-ai --dry-run",
+    "seed:phase3": "tsx src/scripts/seeds/run.ts --phase=3 --no-ai",
+    "seed:phase4": "tsx src/scripts/seeds/run.ts --phase=4",
+    "seed:phase3:ai": "tsx src/scripts/seeds/run.ts --phase=3"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

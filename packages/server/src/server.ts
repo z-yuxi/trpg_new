@@ -7,6 +7,7 @@ import { recruitmentService } from './services/recruitment-service';
 import { recruitmentMetricsService } from './services/recruitment-metrics-service';
 import { runDailyDataCheck } from './services/daily-check-service';
 import { repairOpenPositionHistory } from './services/scene-participation';
+import { trendingService } from './services/trending-service';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 
@@ -71,6 +72,17 @@ cron.schedule('*/5 * * * *', async () => {
     }
   } catch (err: any) {
     console.error('[Cron] Error expiring recruitment invites:', err?.message ?? err);
+  }
+});
+
+// ── 定时任务：每日 00:01 刷新热度排行缓存 ──────────────────────────────────
+const trendingRefreshCron = process.env.TRENDING_REFRESH_CRON ?? '1 0 * * *';
+cron.schedule(trendingRefreshCron, async () => {
+  try {
+    await trendingService.refreshCache();
+    console.log(`[Cron] Trending cache refreshed at ${new Date().toISOString()}`);
+  } catch (err: any) {
+    console.error('[Cron] Error refreshing trending cache:', err?.message ?? err);
   }
 });
 

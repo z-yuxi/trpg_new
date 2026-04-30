@@ -82,6 +82,8 @@ export const rows: Record<string, any[]> = {
   payment_audit_log: [],
   coin_transactions: [],
   subscription_events: [],
+  // 论坛
+  forum_threads: [],
 };
 
 function makeBuilder(tableName: string): any {
