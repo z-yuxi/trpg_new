@@ -10,9 +10,11 @@ import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 import { api, getToken } from '../utils/api';
 import { useTheme } from '../composables/useTheme';
+import { useNotificationStore } from '../stores/notification-store';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const notifStore = useNotificationStore();
 const { currentTheme, toggleTheme } = useTheme();
 
 const editing = ref(false);
@@ -374,6 +376,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
       <div class="menu-item" @click="router.push('/notifications')">
         <SvgIcon name="icon-bell" :size="20" />
         <span>通知</span>
+        <span v-if="notifStore.unreadCount > 0" class="menu-badge">{{ notifStore.unreadCount > 99 ? '99+' : notifStore.unreadCount }}</span>
       </div>
       <div class="menu-item" @click="router.push('/messages')">
         <SvgIcon name="icon-chat" :size="20" />
@@ -465,6 +468,17 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
 }
 .menu-item:hover { background: var(--color-page-bg); }
 .menu-item.danger { color: var(--color-danger); }
+.menu-badge {
+  margin-left: auto;
+  background: var(--color-error, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
 
 /* 骨架屏 */
 .user-card-skeleton { min-height: 96px; }

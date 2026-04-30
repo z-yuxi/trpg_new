@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import SvgIcon from '../components/SvgIcon.vue';
 import { api } from '../utils/api';
 import { useTheme } from '../composables/useTheme';
+import { useAuthStore } from '../stores/auth-store';
 
 const router = useRouter();
+const authStore = useAuthStore();
 const { currentTheme, setTheme } = useTheme();
 
 // ── 当前激活区块 ─────────────────────────────────────────────────────────────
@@ -98,8 +100,12 @@ const genrePrefs = ref<string[]>([]);
 const ruleOptions = ['COC 7th', 'D&D 5E', 'Pathfinder', '其他'];
 const genreOptions = ['恐怖', '奇幻', '科幻', '悬疑', '历史', '轻松'];
 
+// 初始回填期间为 false，onMounted 完成后置 true，避免 watch 误触发保存
+const settingsLoaded = ref(false);
+
 let contentTimer: ReturnType<typeof setTimeout> | null = null;
 async function saveContentPrefs() {
+  if (!settingsLoaded.value) return;
   if (contentTimer) clearTimeout(contentTimer);
   contentTimer = setTimeout(async () => {
     try {
@@ -120,6 +126,7 @@ const notifyPush = ref(false);
 
 let notifyTimer: ReturnType<typeof setTimeout> | null = null;
 async function saveNotifyPrefs() {
+  if (!settingsLoaded.value) return;
   if (notifyTimer) clearTimeout(notifyTimer);
   notifyTimer = setTimeout(async () => {
     try {
@@ -142,6 +149,7 @@ const allowAiTrain = ref(false);
 
 let privacyTimer: ReturnType<typeof setTimeout> | null = null;
 async function savePrivacy() {
+  if (!settingsLoaded.value) return;
   if (privacyTimer) clearTimeout(privacyTimer);
   privacyTimer = setTimeout(async () => {
     try {
@@ -189,6 +197,36 @@ async function deleteAccount() {
     deleteLoading.value = false;
   }
 }
+
+// ── 初始化：回填已保存的设置 ──────────────────────────────────────────────
+onMounted(async () => {
+  if (!authStore.isLoggedIn) return;
+  try {
+    const saved = await api.get<{
+      notification: { in_app: boolean; email: boolean; push: boolean };
+      content: { rule_prefs: string[]; genre_prefs: string[] };
+      privacy: { profile_visibility: string; dm_visibility: string; allow_stats: boolean; allow_ai_train: boolean };
+    }>('/users/me/settings');
+
+    // 通知偏好（不触发 watch 保存，故临时暂停 watch）
+    notifyInApp.value = saved.notification.in_app;
+    notifyEmail.value = saved.notification.email;
+    notifyPush.value = saved.notification.push;
+
+    // 内容偏好
+    rulePrefs.value = saved.content.rule_prefs ?? [];
+    genrePrefs.value = saved.content.genre_prefs ?? [];
+
+    // 隐私设置
+    profileVisibility.value = (saved.privacy.profile_visibility as typeof profileVisibility.value) ?? 'public';
+    dmVisibility.value = (saved.privacy.dm_visibility as typeof dmVisibility.value) ?? 'all';
+    allowStats.value = saved.privacy.allow_stats ?? true;
+    allowAiTrain.value = saved.privacy.allow_ai_train ?? false;
+  } catch {
+    // 静默失败，保持默认值
+  }
+  settingsLoaded.value = true;
+});
 </script>
 
 <template>

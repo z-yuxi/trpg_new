@@ -23,6 +23,52 @@ router.get('/me', authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
 
+// GET /api/users/me/settings — 一次性返回所有设置字段（供 Settings.vue 回填）
+router.get('/me/settings', authMiddleware, async (req, res) => {
+  const row = await db('users')
+    .where('id', req.user!.id)
+    .select(
+      'notification_settings',
+      'content_preferences',
+      'profile_public',
+      'online_visible',
+      'campaign_history_public',
+      'dm_visibility',
+      'allow_stats',
+      'allow_ai_train',
+    )
+    .first<Record<string, unknown>>();
+
+  const notif = row?.['notification_settings']
+    ? (typeof row['notification_settings'] === 'string'
+        ? JSON.parse(row['notification_settings'] as string)
+        : row['notification_settings']) as Record<string, unknown>
+    : {};
+  const contentPrefs = row?.['content_preferences']
+    ? (typeof row['content_preferences'] === 'string'
+        ? JSON.parse(row['content_preferences'] as string)
+        : row['content_preferences']) as Record<string, unknown>
+    : {};
+
+  res.json({
+    notification: {
+      in_app: notif['in_app'] ?? true,
+      email: notif['email'] ?? false,
+      push: notif['push'] ?? false,
+    },
+    content: {
+      rule_prefs: (contentPrefs['rule_prefs'] as string[]) ?? [],
+      genre_prefs: (contentPrefs['genre_prefs'] as string[]) ?? [],
+    },
+    privacy: {
+      profile_visibility: row?.['profile_public'] !== false ? 'public' : 'private',
+      dm_visibility: (row?.['dm_visibility'] as string) ?? 'all',
+      allow_stats: row?.['allow_stats'] !== false,
+      allow_ai_train: row?.['allow_ai_train'] === true,
+    },
+  });
+});
+
 // PUT /api/users/me
 router.put('/me', authMiddleware, async (req, res) => {
   const schema = z.object({
@@ -133,8 +179,12 @@ router.put('/me/password', authMiddleware, async (req, res) => {
 router.put('/me/privacy', authMiddleware, async (req, res) => {
   const schema = z.object({
     profile_public: z.boolean().optional(),
+    profile_visibility: z.enum(['public', 'friends', 'private']).optional(),
     online_visible: z.boolean().optional(),
     campaign_history_public: z.boolean().optional(),
+    dm_visibility: z.enum(['all', 'following', 'none']).optional(),
+    allow_stats: z.boolean().optional(),
+    allow_ai_train: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -144,8 +194,8 @@ router.put('/me/privacy', authMiddleware, async (req, res) => {
   try {
     await userService.updatePrivacySettings(req.user!.id, parsed.data);
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
   }
 });
 
@@ -183,14 +233,10 @@ router.put('/me/content-preferences', authMiddleware, async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Validation failed' });
   try {
-    await db('user_settings')
-      .insert({
-        user_id: req.user!.id,
-        content_preferences: JSON.stringify(parsed.data),
-        updated_at: new Date().toISOString(),
-      })
-      .onConflict('user_id')
-      .merge({ content_preferences: JSON.stringify(parsed.data), updated_at: new Date().toISOString() });
+    // 存入 users.content_preferences（migration 032 新增列）
+    await db('users')
+      .where('id', req.user!.id)
+      .update({ content_preferences: JSON.stringify(parsed.data) });
     res.json({ success: true });
   } catch (err: unknown) {
     res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });

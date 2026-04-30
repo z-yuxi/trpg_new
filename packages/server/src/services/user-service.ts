@@ -172,11 +172,28 @@ export class UserService {
   }
 
   async updatePrivacySettings(userId: string, settings: {
+    profile_visibility?: string;
     profile_public?: boolean;
     online_visible?: boolean;
     campaign_history_public?: boolean;
+    dm_visibility?: string;
+    allow_stats?: boolean;
+    allow_ai_train?: boolean;
   }): Promise<void> {
-    await db('users').where({ id: userId }).update(settings);
+    const update: Record<string, unknown> = {};
+    // 同时支持两种写法：profile_visibility(string) 或 profile_public(boolean)
+    if (settings.profile_visibility !== undefined) {
+      update['profile_public'] = settings.profile_visibility === 'public';
+    }
+    if (settings.profile_public !== undefined) update['profile_public'] = settings.profile_public;
+    if (settings.online_visible !== undefined) update['online_visible'] = settings.online_visible;
+    if (settings.campaign_history_public !== undefined) update['campaign_history_public'] = settings.campaign_history_public;
+    if (settings.dm_visibility !== undefined) update['dm_visibility'] = settings.dm_visibility;
+    if (settings.allow_stats !== undefined) update['allow_stats'] = settings.allow_stats;
+    if (settings.allow_ai_train !== undefined) update['allow_ai_train'] = settings.allow_ai_train;
+    if (Object.keys(update).length > 0) {
+      await db('users').where({ id: userId }).update(update);
+    }
   }
 
   async updateNotificationSettings(userId: string, settings: {
