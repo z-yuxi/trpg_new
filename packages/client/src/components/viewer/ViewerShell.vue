@@ -195,16 +195,153 @@ function scrollToAnchor(id: string) {
   tocOpen.value = false;
 }
 
-// ─── 分享 ─────────────────────────────────────────────────────────────────────
-function handleShare() {
-  const url = window.location.href;
-  if (navigator.share) {
-    navigator.share({ title: asset.value?.name ?? '作品', url }).catch(() => {});
-  } else {
-    navigator.clipboard.writeText(url).then(() => {
-      alert('链接已复制');
-    }).catch(() => {});
+// ─── 分享海报 §14 ────────────────────────────────────────────────────────────
+const shareModalOpen = ref(false);
+const sharePosterUrl = ref<string | null>(null);
+const sharePosterGenerating = ref(false);
+
+async function handleShare() {
+  shareModalOpen.value = true;
+  if (!sharePosterUrl.value) await generatePoster();
+}
+
+async function generatePoster() {
+  if (!asset.value) return;
+  sharePosterGenerating.value = true;
+  try {
+    const W = 750, H = 1200;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+
+    // 背景渐变
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#1a1035');
+    grad.addColorStop(1, '#0d0820');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // 封面图（如有）
+    if (asset.value.cover_url) {
+      try {
+        const img = await loadImage(asset.value.cover_url);
+        // 封面铺满顶部 450px，带渐变遮罩
+        const coverH = 450;
+        const scale = Math.max(W / img.width, coverH / img.height);
+        const dw = img.width * scale, dh = img.height * scale;
+        ctx.drawImage(img, (W - dw) / 2, 0, dw, dh);
+        // 遮罩：从 250px 渐变到 450px
+        const mask = ctx.createLinearGradient(0, 250, 0, 450);
+        mask.addColorStop(0, 'rgba(26,16,53,0)');
+        mask.addColorStop(1, 'rgba(26,16,53,1)');
+        ctx.fillStyle = mask;
+        ctx.fillRect(0, 0, W, coverH);
+      } catch { /* 封面加载失败则跳过 */ }
+    }
+
+    // 平台名
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.font = 'bold 28px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('叙阅器 · TRPG', 48, 530);
+
+    // 标题
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 52px system-ui, sans-serif';
+    wrapText(ctx, asset.value.name, 48, 610, W - 96, 62);
+
+    // 作者
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    ctx.font = '30px system-ui, sans-serif';
+    ctx.fillText(asset.value.author_name ? `作者：${asset.value.author_name}` : '', 48, 720);
+
+    // 描述（最多 2 行）
+    if (asset.value.description) {
+      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.font = '26px system-ui, sans-serif';
+      wrapText(ctx, asset.value.description, 48, 780, W - 96, 34, 2);
+    }
+
+    // 分割线
+    ctx.strokeStyle = 'rgba(255,255,255,.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(48, 870); ctx.lineTo(W - 48, 870); ctx.stroke();
+
+    // URL 二维码占位 + 扫码提示（简化：只显示 URL 文字）
+    ctx.fillStyle = 'rgba(255,255,255,.4)';
+    ctx.font = '22px system-ui, monospace';
+    ctx.textAlign = 'center';
+    const url = window.location.href;
+    ctx.fillText(url.length > 55 ? url.slice(0, 52) + '...' : url, W / 2, 940);
+
+    // 底部品牌
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillText('扫描或访问链接即可阅读', W / 2, 1000);
+
+    sharePosterUrl.value = canvas.toDataURL('image/png');
+  } finally {
+    sharePosterGenerating.value = false;
   }
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lineH: number, maxLines = 99) {
+  const words = Array.from(text); // 按字符分词（中文）
+  let line = '';
+  let lines = 0;
+  for (const ch of words) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, y + lines * lineH);
+      line = ch;
+      lines++;
+      if (lines >= maxLines) { ctx.fillText(line + '…', x, y + lines * lineH); return; }
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, y + lines * lineH);
+}
+
+function downloadPoster() {
+  if (!sharePosterUrl.value) return;
+  const a = document.createElement('a');
+  a.href = sharePosterUrl.value;
+  a.download = `${asset.value?.name ?? 'share'}-海报.png`;
+  a.click();
+}
+
+function copyShareLink() {
+  navigator.clipboard.writeText(window.location.href).then(() => {
+    alert('链接已复制');
+  }).catch(() => {});
+}
+
+async function nativeShare() {
+  if (!navigator.share) { copyShareLink(); return; }
+  const shareData: ShareData = { title: asset.value?.name ?? '作品', url: window.location.href };
+  if (sharePosterUrl.value && navigator.canShare) {
+    try {
+      const res = await fetch(sharePosterUrl.value);
+      const blob = await res.blob();
+      const file = new File([blob], 'poster.png', { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        shareData.files = [file];
+      }
+    } catch { /* ignore */ }
+  }
+  navigator.share(shareData).catch(() => {});
 }
 
 // ─── 加载数据 ─────────────────────────────────────────────────────────────────
@@ -795,6 +932,27 @@ function goBack() {
     <!-- 遮罩（更多菜单打开时关闭用） -->
     <div v-if="moreMenuOpen" class="viewer-overlay" @click="closeMoreMenu" />
 
+    <!-- 分享海报弹窗 -->
+    <Teleport to="body">
+      <div v-if="shareModalOpen" class="share-modal" @click.self="shareModalOpen = false">
+        <div class="share-modal__box">
+          <div class="share-modal__head">
+            <span>分享作品</span>
+            <button class="rs-drawer__close" @click="shareModalOpen = false">×</button>
+          </div>
+          <div class="share-modal__poster-wrap">
+            <div v-if="sharePosterGenerating" class="share-modal__generating">生成中…</div>
+            <img v-else-if="sharePosterUrl" :src="sharePosterUrl" class="share-modal__poster" alt="分享海报" />
+          </div>
+          <div class="share-modal__actions">
+            <button class="share-modal__btn" @click="downloadPoster" :disabled="!sharePosterUrl">保存海报</button>
+            <button class="share-modal__btn share-modal__btn--outline" @click="copyShareLink">复制链接</button>
+            <button v-if="'share' in navigator" class="share-modal__btn share-modal__btn--primary" @click="nativeShare">分享</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 划线浮动工具栏 §14.6 -->
     <Teleport to="body">
       <div
@@ -1354,6 +1512,74 @@ function goBack() {
 
     &:hover { background: var(--btn-primary-hover); }
   }
+}
+
+/* ── 分享海报弹窗 ──────────────────────────────────────────── */
+.share-modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 1200;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+
+.share-modal__box {
+  background: var(--surface-elevated, #fff);
+  border-radius: 12px;
+  width: 380px; max-width: 100%;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+}
+
+.share-modal__head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light, #eee);
+  font-weight: 600; font-size: 15px;
+}
+
+.share-modal__poster-wrap {
+  width: 100%;
+  aspect-ratio: 5 / 8;
+  background: #1a1035;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+
+.share-modal__poster {
+  width: 100%; height: 100%; object-fit: contain;
+}
+
+.share-modal__generating {
+  color: rgba(255,255,255,.5); font-size: 14px;
+}
+
+.share-modal__actions {
+  display: flex; gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-light, #eee);
+}
+
+.share-modal__btn {
+  flex: 1; padding: 8px 0;
+  border-radius: 6px; font-size: 14px;
+  border: 1px solid var(--border-light, #ddd);
+  background: var(--surface-page, #fafafa);
+  color: var(--text-primary);
+  cursor: pointer;
+
+  &--outline {
+    border-color: var(--color-primary, #6c63ff);
+    color: var(--color-primary, #6c63ff);
+    background: none;
+  }
+
+  &--primary {
+    background: var(--color-primary, #6c63ff);
+    color: #fff; border-color: transparent;
+  }
+
+  &:disabled { opacity: .5; cursor: not-allowed; }
 }
 
 /* ── 划线笔记 §14.6 ─────────────────────────────────────────── */
