@@ -140,8 +140,8 @@ describe('executeCommand + mock_context — API 集成', () => {
     expect(Array.isArray(result.dice_rolls)).toBe(true);
     expect(Array.isArray(result.logs)).toBe(true);
     expect(result.logs.length).toBeGreaterThan(0);
-    // logs 字段应有 atom_type
-    expect(result.logs[0]).toHaveProperty('atom_type');
+    // logs 字段应有 node_type（NodeExecutionLog 的字段名）
+    expect(result.logs[0]).toHaveProperty('node_type');
     expect(result.logs[0]).toHaveProperty('node_id');
     expect(result.logs[0]).toHaveProperty('inputs');
     expect(result.logs[0]).toHaveProperty('output');

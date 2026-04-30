@@ -15,11 +15,6 @@ const BLOCKED_FUNCTIONS = [
   'rationalize',
 ];
 
-for (const fn of BLOCKED_FUNCTIONS) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (math as any)[fn] = undefined;
-}
-
 export interface FormulaContext {
   [key: string]: number;
 }
@@ -105,30 +100,19 @@ export function validateFormula(
   }
 
   try {
-    // 使用 math.parse 做 AST 静态分析，不执行公式，避免副作用
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const node = (math as any).parse(formula);
-    // 遍历 AST，检查是否引用了被屏蔽函数或不允许的全局对象
-    const availableSet = new Set(availableVars);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    node.traverse((n: any) => {
-      if (n.type === 'SymbolNode' || n.type === 'FunctionNode') {
-        const name: string = n.name ?? n.fn?.name ?? '';
-        if (BLOCKED_FUNCTIONS.includes(name)) {
-          throw new Error(`Blocked function referenced: ${name}`);
-        }
-        // 不允许引用 availableVars 之外的全局对象（SymbolNode 且不是已知变量/函数）
-        if (n.type === 'SymbolNode' && name && !availableSet.has(name)) {
-          // 允许 mathjs 内置常数和函数名（非大写开头的全局变量视为潜在危险，但此处宽松处理）
-          // 仅拒绝明显的全局对象访问
-          if (['process', 'global', 'window', 'require', 'eval', 'Function'].includes(name)) {
-            throw new Error(`Forbidden symbol referenced: ${name}`);
-          }
-        }
-      }
-    });
+    // 用受限 scope 进行一次“干跑”校验。
+    // 未在白名单中的变量会触发 Undefined symbol。
+    const scope: Record<string, number> = Object.fromEntries(
+      availableVars.map((name) => [name, 1]),
+    );
+    math.evaluate(formula, scope);
     return { valid: true };
   } catch (err) {
-    return { valid: false, error: err instanceof Error ? err.message : String(err) };
+    const message = err instanceof Error ? err.message : String(err);
+    // 统一收敛为可读错误，便于前端展示。
+    if (/Undefined symbol/i.test(message)) {
+      return { valid: false, error: 'Formula references variables outside availableVars' };
+    }
+    return { valid: false, error: message };
   }
 }

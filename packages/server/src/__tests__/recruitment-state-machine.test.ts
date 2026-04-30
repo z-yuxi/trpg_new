@@ -25,25 +25,29 @@ const mockDb = vi.mocked(db);
 function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any {
   const rowsPromise = Promise.resolve(resolveRows);
   const chain: Record<string, any> = {
-    where:     vi.fn(),
-    andWhere:  vi.fn(),
-    whereIn:   vi.fn(),
+    where:       vi.fn(),
+    andWhere:    vi.fn(),
+    whereIn:     vi.fn(),
+    whereNot:    vi.fn(),
     whereNotNull: vi.fn(),
-    leftJoin:  vi.fn(),
-    select:    vi.fn(),
-    orderBy:   vi.fn(),
-    offset:    vi.fn(),
-    limit:     vi.fn(),
-    insert:    vi.fn().mockResolvedValue([1]),
-    update:    vi.fn().mockResolvedValue(1),
-    first:     vi.fn().mockResolvedValue(firstValue),
-    count:     vi.fn().mockResolvedValue([{ 'count(*)': 0 }]),
-    then:      rowsPromise.then.bind(rowsPromise),
-    catch:     rowsPromise.catch.bind(rowsPromise),
+    leftJoin:    vi.fn(),
+    select:      vi.fn(),
+    orderBy:     vi.fn(),
+    offset:      vi.fn(),
+    limit:       vi.fn(),
+    max:         vi.fn(),
+    count:       vi.fn(),
+    insert:      vi.fn().mockResolvedValue([1]),
+    update:      vi.fn().mockResolvedValue(1),
+    decrement:   vi.fn().mockResolvedValue(1),
+    first:       vi.fn().mockResolvedValue(firstValue),
+    then:        rowsPromise.then.bind(rowsPromise),
+    catch:       rowsPromise.catch.bind(rowsPromise),
   };
   for (const key of [
-    'where', 'andWhere', 'whereIn', 'whereNotNull',
+    'where', 'andWhere', 'whereIn', 'whereNot', 'whereNotNull',
     'leftJoin', 'select', 'orderBy', 'offset', 'limit',
+    'max', 'count',
   ]) {
     chain[key].mockReturnValue(chain);
   }
@@ -100,8 +104,8 @@ describe('RecruitmentService 状态机', () => {
       const post = makePost({ status: 'open' });
       const appRow = makeApp({ status: 'pending' });
       const chain = makeChain(post);
+      // findById 已被 spyOn 拦截，db.first 的第一次调用是检查重复申请
       chain.first
-        .mockResolvedValueOnce(post)    // findById（帖）
         .mockResolvedValueOnce(null)    // 检查重复申请
         .mockResolvedValueOnce(appRow); // 返回新建申请
 
@@ -121,14 +125,17 @@ describe('RecruitmentService 状态机', () => {
       const post = makePost({ status: 'full' });
       const appRow = makeApp({ status: 'waiting', waiting_position: 1 });
       const chain = makeChain(post);
+      // findById 已被 spyOn 拦截，db.first 调用顺序：
+      //   1. 检查重复申请 → null
+      //   2. nextWaitingPosition: MAX 查询 → null（队列为空，position = 1）
+      //   3. 返回新建申请 → appRow
       chain.first
-        .mockResolvedValueOnce(null)  // 检查重复
+        .mockResolvedValueOnce(null)    // 检查重复
+        .mockResolvedValueOnce(null)    // nextWaitingPosition: max → null
         .mockResolvedValueOnce(appRow); // 返回
 
       mockDb.mockReturnValue(chain);
       vi.spyOn(service as any, 'findById').mockResolvedValue(post);
-      // nextWaitingPosition 依赖 count
-      chain.count.mockResolvedValueOnce([{ 'count(*)': 0 }]);
 
       const result = await service.createApplication({
         post_id: 'post-001',
@@ -187,10 +194,14 @@ describe('RecruitmentService 状态机', () => {
       const app = makeApp({ status: 'pending' });
       const updatedApp = makeApp({ status: 'rejected', reject_reason: '不合适' });
       const chain = makeChain(app);
+      // db.first 调用顺序：
+      //   1. 申请查询 → app
+      //   2. promoteNextWaiting: 帖查询 → null（早退，不继续）
+      //   3. 最终返回申请 → updatedApp
       chain.first
         .mockResolvedValueOnce(app)
-        .mockResolvedValueOnce(updatedApp)
-        .mockResolvedValueOnce(null); // promoteNextWaiting: no waiting
+        .mockResolvedValueOnce(null)        // promoteNextWaiting: post → null → early return
+        .mockResolvedValueOnce(updatedApp); // 最终返回
 
       mockDb.mockReturnValue(chain);
       vi.spyOn(service as any, 'findById').mockResolvedValue(post);
@@ -218,14 +229,18 @@ describe('RecruitmentService 状态机', () => {
       const confirmedApp = makeApp({ status: 'confirmed', invited_expires_at: null });
       const post = makePost({ player_count_max: 2 });
       const chain = makeChain(app);
+      // db.first 调用顺序：
+      //   1. 申请查询 → app
+      //   2. recalculatePostCounters: 帖查询 → post
+      //   3. recalculatePostCounters: count confirmed (.count().first()) → { total: 1 }
+      //   4. 最终返回申请 → confirmedApp
       chain.first
         .mockResolvedValueOnce(app)
-        .mockResolvedValueOnce(confirmedApp) // after update
-        .mockResolvedValueOnce(post);        // recalculate: findById
+        .mockResolvedValueOnce(post)           // recalculate: 帖查询
+        .mockResolvedValueOnce({ total: 1 })   // recalculate: count confirmed
+        .mockResolvedValueOnce(confirmedApp);  // 最终返回
 
       mockDb.mockReturnValue(chain);
-      // count for recalculate
-      chain.count.mockResolvedValueOnce([{ 'count(*)': 1 }]);
 
       const result = await service.confirmApplication({
         application_id: 'app-001',
