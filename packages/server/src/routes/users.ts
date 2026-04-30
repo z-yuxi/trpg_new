@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { userService } from '../services/user-service';
 import { forumService } from '../services/forum-service';
 import { notificationService } from '../services/notification-service';
+import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 
 const router: IRouter = Router();
@@ -13,8 +14,9 @@ router.get('/me/stats', authMiddleware, async (req, res) => {
   try {
     const stats = await userService.getStats(req.user!.id);
     res.json(stats);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    console.error('[users:getStats]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
   }
 });
 
@@ -73,7 +75,10 @@ router.get('/me/settings', authMiddleware, async (req, res) => {
 router.put('/me', authMiddleware, async (req, res) => {
   const schema = z.object({
     nickname: z.string().min(1).max(32).optional(),
-    avatar_url: z.string().min(1).max(512).optional(),
+    avatar_url: z.string().url().max(512).refine(
+      (url) => url.startsWith('/uploads/') || /^https?:\/\//i.test(url),
+      { message: 'avatar_url 必须是 /uploads/ 相对路径或 https:// 地址' },
+    ).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -83,8 +88,9 @@ router.put('/me', authMiddleware, async (req, res) => {
   try {
     const user = await userService.updateProfile(req.user!.id, parsed.data);
     res.json({ user });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    console.error('[users:updateProfile]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '更新失败') });
   }
 });
 
@@ -103,8 +109,9 @@ router.post('/me/activate-creator', authMiddleware, async (req, res) => {
     });
     const updated = await userService.findById(req.user!.id);
     res.json({ user: userService.toSafeUser(updated!) });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Upgrade failed' });
+  } catch (err: unknown) {
+    console.error('[users:activateCreator]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '升级失败') });
   }
 });
 
@@ -112,8 +119,8 @@ router.post('/me/activate-creator', authMiddleware, async (req, res) => {
 router.get('/me/activity', authMiddleware, async (req, res) => {
   const { page, limit } = req.query as Record<string, string>;
   const result = await forumService.getUserActivity(req.user!.id, {
-    page: page ? Number(page) : 1,
-    limit: limit ? Number(limit) : 20,
+    page: page ? Math.max(1, Number(page)) : 1,
+    limit: Math.min(Math.max(1, limit ? Number(limit) : 20), 100),
   });
   res.json(result);
 });
@@ -124,7 +131,8 @@ router.get('/:uid/profile', async (req, res) => {
     if (!profile) { res.status(404).json({ error: 'User not found' }); return; }
     res.json(profile);
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error)?.message ?? 'Query failed' });
+    console.error('[users:getProfile]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
   }
 });
 
@@ -237,8 +245,9 @@ router.get('/:uid/campaigns', async (req, res) => {
   try {
     const data = await userService.getUserCampaigns(req.params.uid);
     res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    console.error('[users:getCampaigns]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
   }
 });
 
@@ -246,8 +255,9 @@ router.get('/:uid/hosted-campaigns', async (req, res) => {
   try {
     const data = await userService.getHostedCampaigns(req.params.uid);
     res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    console.error('[users:getHostedCampaigns]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
   }
 });
 
@@ -255,8 +265,9 @@ router.get('/:uid/created-modules', async (req, res) => {
   try {
     const data = await userService.getUserCreatedModules(req.params.uid);
     res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    console.error('[users:getCreatedModules]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
   }
 });
 
@@ -274,9 +285,10 @@ router.put('/me/password', authMiddleware, async (req, res) => {
   try {
     await userService.changePassword(req.user!.id, parsed.data.current_password, parsed.data.new_password);
     res.json({ success: true });
-  } catch (err: any) {
-    const isUserError = err?.message === '当前密码错误';
-    res.status(isUserError ? 400 : 500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    const isUserError = err instanceof Error && err.message === '当前密码错误';
+    console.error('[users:changePassword]', err instanceof Error ? err.message : err);
+    res.status(isUserError ? 400 : 500).json({ error: isUserError ? '当前密码错误' : safeErrorMessage(err, '修改失败') });
   }
 });
 
@@ -300,7 +312,8 @@ router.put('/me/privacy', authMiddleware, async (req, res) => {
     await userService.updatePrivacySettings(req.user!.id, parsed.data);
     res.json({ success: true });
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+    console.error('[users:updatePrivacy]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '\u66f4\u65b0\u5931\u8d25') });
   }
 });
 
@@ -325,7 +338,8 @@ router.put('/me/notification-settings', authMiddleware, async (req, res) => {
     await userService.updateNotificationSettings(req.user!.id, parsed.data);
     res.json({ success: true });
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+    console.error('[users:updateNotifications]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '\u66f4\u65b0\u5931\u8d25') });
   }
 });
 
@@ -344,7 +358,8 @@ router.put('/me/content-preferences', authMiddleware, async (req, res) => {
       .update({ content_preferences: JSON.stringify(parsed.data) });
     res.json({ success: true });
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+    console.error('[users:updateContentPrefs]', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: safeErrorMessage(err, '\u66f4\u65b0\u5931\u8d25') });
   }
 });
 

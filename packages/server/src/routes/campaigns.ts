@@ -1,6 +1,7 @@
-import { Router, type IRouter } from 'express';
+import { Router, type IRouter, type Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
+import { safeErrorMessage } from '../utils/error-response';
 import type { GridToken, StoryTime } from '@trpg/shared';
 import { authMiddleware } from '../middleware/auth';
 import { campaignService, scheduledMoveService } from '../services/campaign-service';
@@ -21,6 +22,12 @@ import { io } from '../app';
 import { safeJsonParse } from '../utils/safe-json';
 
 const router: IRouter = Router();
+
+/** 统一内部错误响应：服务端记录完整错误，客户端只收到安全消息 */
+function serverErr(res: Response, err: unknown, defaultMsg = '操作失败，请稍后再试'): void {
+  console.error('[campaigns]', err instanceof Error ? err.message : err);
+  res.status(500).json({ error: safeErrorMessage(err, defaultMsg) });
+}
 
 // 速率限制：防止房间码遍历攻击，每 IP 每分钟最多 20 次
 const joinLimiter = rateLimit({
@@ -136,8 +143,8 @@ router.post('/', async (req, res) => {
       allow_ob: parsed.data.allow_ob,
     });
     res.status(201).json(campaign);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -146,8 +153,8 @@ router.get('/', async (req, res) => {
   try {
     const campaigns = await campaignService.findByUserId(req.user!.id);
     res.json(campaigns);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -227,8 +234,8 @@ router.post('/quick-create', async (req, res) => {
     }
 
     res.status(201).json({ campaign, recruitment_post: recruitmentPost });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Quick create failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -272,8 +279,8 @@ router.put('/:id', async (req, res) => {
     }
     const updated = await campaignService.update(req.params.id, safeBody);
     res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -284,8 +291,8 @@ router.get('/:id/scenes', async (req, res) => {
   try {
     const scenes = await campaignService.listScenes(req.params.id);
     res.json(scenes);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -296,8 +303,8 @@ router.get('/:id/scenes/:sceneId/grid-map', async (req, res) => {
   try {
     const map = await campaignService.getGridMap(req.params.id, req.params.sceneId);
     res.json(map);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -319,8 +326,8 @@ router.put('/:id/scenes/:sceneId/grid-map', async (req, res) => {
 
     const map = await campaignService.updateGridMap(req.params.id, req.params.sceneId, body);
     res.json(map);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -366,8 +373,8 @@ router.put('/:id/scenes/:sceneId', async (req, res) => {
     await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).update(updates);
     const scene = await db('scenes').where({ id: req.params.sceneId }).first();
     res.json(scene);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -387,9 +394,10 @@ router.delete('/:id/scenes/:sceneId', async (req, res) => {
       await trx('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).delete();
     });
     res.status(204).end();
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res.status(status).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    const status = typeof (err as Record<string, unknown>)?.status === 'number' ? (err as Record<string, unknown>).status as number : 500;
+    console.error('[campaigns:deleteScene]', err instanceof Error ? err.message : err);
+    res.status(status).json({ error: safeErrorMessage(err, '删除失败') });
   }
 });
 
@@ -410,8 +418,8 @@ router.post('/:id/characters/:characterId/join', async (req, res) => {
       user_id: character['user_id'] as string,
     });
     res.status(201).json(instance);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Join campaign failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -431,8 +439,8 @@ router.post('/:id/scenes/:sceneId/join', async (req, res) => {
     const { joinScene } = await import('../services/scene-participation.js');
     await joinScene(character_id, campaignId, sceneId);
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Join scene failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -451,8 +459,8 @@ router.post('/:id/scenes/:sceneId/leave', async (req, res) => {
     const { leaveScene } = await import('../services/scene-participation.js');
     await leaveScene(character_id, campaignId, sceneId);
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Leave scene failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -464,8 +472,8 @@ router.get('/:id/scenes/:sceneId/participants', async (req, res) => {
     const { getParticipants } = await import('../services/scene-participation.js');
     const participants = await getParticipants(req.params.sceneId!);
     res.json(participants);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -486,8 +494,8 @@ router.get('/:id/scenes/:sceneId/ob-permissions', async (req, res) => {
 
     const permissions = await listSceneActiveObPermissions(req.params.sceneId);
     res.json(permissions);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'List failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -520,9 +528,10 @@ router.post('/:id/scenes/:sceneId/ob-permissions/grant', async (req, res) => {
     }
 
     res.status(result.alreadyGranted ? 200 : 201).json(result.permission);
-  } catch (err: any) {
-    const status = typeof err?.status === 'number' ? err.status : 500;
-    res.status(status).json({ error: err?.message ?? 'Grant failed' });
+  } catch (err: unknown) {
+    const status = typeof (err as Record<string, unknown>)?.status === 'number' ? (err as Record<string, unknown>).status as number : 500;
+    console.error('[campaigns:grantOb]', err instanceof Error ? err.message : err);
+    res.status(status).json({ error: safeErrorMessage(err, '授权失败') });
   }
 });
 
@@ -553,9 +562,10 @@ router.post('/:id/scenes/:sceneId/ob-permissions/revoke', async (req, res) => {
     }
 
     res.json({ ok: true });
-  } catch (err: any) {
-    const status = typeof err?.status === 'number' ? err.status : 500;
-    res.status(status).json({ error: err?.message ?? 'Revoke failed' });
+  } catch (err: unknown) {
+    const status = typeof (err as Record<string, unknown>)?.status === 'number' ? (err as Record<string, unknown>).status as number : 500;
+    console.error('[campaigns:revokeOb]', err instanceof Error ? err.message : err);
+    res.status(status).json({ error: safeErrorMessage(err, '撤销授权失败') });
   }
 });
 
@@ -636,8 +646,8 @@ async function upsertSceneConnection(req: any, res: any, isCreate: boolean) {
 router.post('/:id/connections', async (req, res) => {
   try {
     await upsertSceneConnection(req, res, true);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -645,8 +655,8 @@ router.post('/:id/connections', async (req, res) => {
 router.put('/:id/connections/:connId', async (req, res) => {
   try {
     await upsertSceneConnection(req, res, false);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -667,8 +677,8 @@ router.delete('/:id/connections/:connId', async (req, res) => {
       return;
     }
     res.status(204).end();
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -679,8 +689,8 @@ router.get('/:id/connections', async (req, res) => {
   try {
     const connections = await listSceneConnections(req.params.id);
     res.json(connections);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -688,8 +698,8 @@ router.get('/:id/connections', async (req, res) => {
 router.post('/:id/scenes/connections', async (req, res) => {
   try {
     await upsertSceneConnection(req, res, true);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -697,8 +707,8 @@ router.get('/:id/scenes/connections', async (req, res) => {
   try {
     const connections = await listSceneConnections(req.params.id);
     res.json(connections);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -745,8 +755,8 @@ router.get('/:id/npcs', async (req, res) => {
   try {
     const npcs = await db('campaign_npcs').where({ campaign_id: req.params.id });
     res.json(npcs);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -905,8 +915,8 @@ router.get('/:id/messages', async (req, res) => {
     }
 
     res.json(filtered);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -917,8 +927,8 @@ router.get('/:id/round-state', async (req, res) => {
   try {
     const state = await db('campaign_round_state').where({ campaign_id: req.params.id }).first() ?? null;
     res.json(state);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -931,8 +941,8 @@ router.get('/:id/position-history', async (req, res) => {
       .where({ campaign_id: req.params.id })
       .orderBy('created_at', 'desc');
     res.json(history);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1013,8 +1023,8 @@ router.get('/:id/trajectory-matrix', async (req, res) => {
       characters: (characters as Array<{ id: string; name: string }>).map((c) => ({ id: c.id, name: c.name })),
       matrix,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1042,8 +1052,8 @@ router.get('/:id/my-virtual-scenes', async (req, res) => {
       .select('sp.scene_id');
     const sceneIds = [...new Set((pRows as { scene_id: string }[]).map((r) => r.scene_id))];
     res.json(sceneIds);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1079,8 +1089,8 @@ router.get('/:id/characters', async (req, res) => {
         online: onlineUserIds.has(String(row['user_id'])),
       })),
     );
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1114,8 +1124,8 @@ router.get('/:id/characters/:charId', async (req, res) => {
       skills: parseJson(sheet.skills) ?? {},
       background: sheet.background || '',
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1134,8 +1144,8 @@ router.post('/:id/force-move', async (req, res) => {
     const { forceMove } = await import('../services/movement.js');
     const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
     res.json({ character_id, ...result });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Force move failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1152,8 +1162,8 @@ router.get('/:id/scheduled-moves', async (req, res) => {
       status: typeof status === 'string' ? status as 'pending' | 'approved' | 'cancelled' : undefined,
     });
     res.json(moves);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1170,8 +1180,8 @@ router.post('/:id/time/announce', async (req, res) => {
     const timeLabel = String(req.body.time_label ?? '');
     const result = await announceTime(req.params.id, sceneId, timeLabel, req.user!.id);
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Time announce failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1184,8 +1194,8 @@ router.get('/:id/moves', async (req, res) => {
     const { listMoves } = await import('../services/movement.js');
     const moves = await listMoves(req.params.id, req.query.status as string | undefined);
     res.json(moves);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1234,8 +1244,9 @@ router.post('/:id/moves/request', async (req, res) => {
     try {
       const result = await requestMove(character_id, req.params.id, to_scene_id);
       moveRecord = result.record;
-    } catch (moveErr: any) {
-      res.status(400).json({ error: moveErr?.message ?? 'Move request denied' });
+    } catch (moveErr: unknown) {
+      console.error('[campaigns:requestMove]', moveErr instanceof Error ? moveErr.message : moveErr);
+      res.status(400).json({ error: safeErrorMessage(moveErr, '移动申请失败') });
       return;
     }
     res.status(201).json({
@@ -1245,8 +1256,8 @@ router.post('/:id/moves/request', async (req, res) => {
       travel_duration: travelDuration,
       execute_at_story: null,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Request failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1260,8 +1271,8 @@ router.post('/:id/moves/:moveId/approve', async (req, res) => {
     const result = await approveMove(req.params.moveId!, req.user!.id, req.body.story_arrival_time ?? null);
     if (!result.record) { res.status(404).json({ error: 'Move not found' }); return; }
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Approve failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1275,8 +1286,8 @@ router.post('/:id/moves/:moveId/reject', async (req, res) => {
     const move = await rejectMove(req.params.moveId!, req.user!.id);
     if (!move) { res.status(404).json({ error: 'Move not found' }); return; }
     res.json(move);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Reject failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1325,8 +1336,8 @@ router.post('/:id/moves/force', async (req, res) => {
     });
 
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Force move failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1350,8 +1361,8 @@ router.get('/:id/clues', async (req, res) => {
     }
 
     res.json(clues);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1376,8 +1387,8 @@ router.get('/:id/clues/:clueId', async (req, res) => {
     }
 
     res.json(clue);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1406,8 +1417,8 @@ router.post('/:id/clues', async (req, res) => {
       revealed_to,
     });
     res.status(201).json(clue);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1421,8 +1432,8 @@ router.put('/:id/clues/:clueId', async (req, res) => {
     const clue = await clueService.update(req.params.clueId, req.body ?? {});
     if (!clue) { res.status(404).json({ error: 'Clue not found' }); return; }
     res.json(clue);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1441,8 +1452,8 @@ router.post('/:id/clues/:clueId/reveal', async (req, res) => {
     const clue = await clueService.revealToCharacters(req.params.clueId, characterIds);
     if (!clue) { res.status(404).json({ error: 'Clue not found' }); return; }
     res.json(clue);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Reveal failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 
@@ -1469,7 +1480,7 @@ router.patch('/:id/clues/:clueId/style', async (req, res) => {
     const clue = await db('campaign_clues').where({ id: req.params.clueId }).first();
     res.json(clue);
   } catch (err: unknown) {
-    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+    serverErr(res, err);
   }
 });
 
@@ -1483,8 +1494,8 @@ router.delete('/:id/clues/:clueId', async (req, res) => {
     const deleted = await clueService.delete(req.params.clueId);
     if (!deleted) { res.status(404).json({ error: 'Clue not found' }); return; }
     res.status(204).end();
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    serverErr(res, err);
   }
 });
 

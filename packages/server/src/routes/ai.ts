@@ -14,6 +14,7 @@ import { authMiddleware } from '../middleware/auth';
 import { checkAiQuota } from '../middleware/ai-quota';
 import { callAI } from '../services/ai-service';
 import { enqueueAiTask } from '../queue/ai-queue';
+import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 import type { TaskType } from '../services/ai-service';
 
@@ -69,7 +70,8 @@ router.post('/check-text', checkAiQuota('check_text'), async (req, res) => {
     const result = jsonMatch ? (JSON.parse(jsonMatch[0]) as unknown) : { issues: [] };
     res.json(result);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'AI 服务暂时不可用';
+    console.error('[ai:checkText]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, 'AI 服务暂时不可用');
     res.status(502).json({ error: 'AI_UNAVAILABLE', message });
   }
 });
@@ -122,7 +124,8 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
       message: '模组分析任务已加入队列，完成后将通过 Socket.IO 推送 ai_task_update 事件',
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : '入队失败';
+    console.error('[ai:importModule]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, '入队失败');
     res.status(503).json({ error: 'QUEUE_UNAVAILABLE', message });
   }
 });

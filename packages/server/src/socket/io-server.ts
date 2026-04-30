@@ -9,7 +9,7 @@ export type TypedIO = Server<ClientToServerEvents, ServerToClientEvents>;
 
 export function createSocketServer(httpServer: HttpServer): TypedIO {
   const io: TypedIO = new Server(httpServer, {
-    cors: { origin: '*' },
+    cors: { origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',') },
     pingInterval: 25000,
     pingTimeout: 10000,
   });

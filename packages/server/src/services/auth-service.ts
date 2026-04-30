@@ -10,7 +10,11 @@ if (!JWT_SECRET) {
 }
 const _JWT_SECRET: string = JWT_SECRET;
 // refresh token 使用独立密钥（与 access token 隔离）
-const _JWT_REFRESH_SECRET: string = (process.env.JWT_REFRESH_SECRET ?? _JWT_SECRET + '-refresh');
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+if (!JWT_REFRESH_SECRET) {
+  throw new Error('JWT_REFRESH_SECRET environment variable is required but not set');
+}
+const _JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET;
 
 const JWT_EXPIRES_IN = '15m';
 const JWT_REFRESH_EXPIRES_IN = '7d';

@@ -12,6 +12,9 @@ import { auditLogger } from './middleware/audit-log';
 const app: Application = express();
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
 
+// 信任 nginx 等反向代理传递的 X-Forwarded-For，确保 IP 限流基于真实客户端 IP
+app.set('trust proxy', 1);
+
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',');
 
 app.use(helmet());

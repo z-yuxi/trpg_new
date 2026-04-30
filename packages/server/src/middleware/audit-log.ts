@@ -65,7 +65,7 @@ function truncateUa(ua: string | undefined): string {
   return ua.length > 80 ? ua.slice(0, 80) + '…' : ua;
 }
 
-/** 从 JWT payload 提取 userId（不验证签名，仅用于日志） */
+/** 从 JWT payload 提取 userId（不验证签名，仅用于日志，不可作为鉴权依据） */
 function extractUserIdFromToken(req: Request): string {
   try {
     const auth = req.headers.authorization;
@@ -108,6 +108,7 @@ export function auditLogger(req: Request, res: Response, next: NextFunction): vo
       event: 'audit',
       action,
       userId,
+      userId_verified: false, // 未验证签名，可被伪造，仅供日志参考
       ip,
       method: req.method,
       path: req.path,

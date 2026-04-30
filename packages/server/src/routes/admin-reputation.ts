@@ -15,6 +15,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { db } from '../db';
+import { safeErrorMessage } from '../utils/error-response';
 import { reputationAuditService } from '../services/reputation-audit-service';
 
 const router = Router();
@@ -215,8 +216,9 @@ router.post(
       }
       await db('modules').where({ id }).update({ status: 'public', updated_at: new Date() });
       res.json({ id, status: 'public' });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? 'Approve failed' });
+    } catch (err: unknown) {
+      console.error('[admin:approveModule]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
     }
   }
 );
@@ -247,8 +249,9 @@ router.post(
         updated_at: new Date(),
       });
       res.json({ id, status: 'suspended', suspended_reason: parsed.data.reason });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? 'Suspend failed' });
+    } catch (err: unknown) {
+      console.error('[admin:suspendModule]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
     }
   }
 );
@@ -267,8 +270,9 @@ router.post(
       if (!row) { res.status(404).json({ error: 'Ruleset not found' }); return; }
       await db('rulesets').where({ id }).update({ status: 'published', updated_at: new Date() });
       res.json({ id, status: 'published' });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? 'Approve failed' });
+    } catch (err: unknown) {
+      console.error('[admin:approveRuleset]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
     }
   }
 );
@@ -292,8 +296,9 @@ router.post(
         updated_at: new Date(),
       });
       res.json({ id, status: 'deprecated', reason: parsed.data.reason });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? 'Suspend failed' });
+    } catch (err: unknown) {
+      console.error('[admin:suspendRuleset]', err instanceof Error ? err.message : err);
+      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
     }
   }
 );
