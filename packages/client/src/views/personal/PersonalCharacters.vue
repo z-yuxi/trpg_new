@@ -8,11 +8,13 @@ import TButton from '../../components/base/TButton.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
+import { getToken } from '../../utils/api';
 
 const router = useRouter();
 
 const loading = ref(false);
 const cards = ref<any[]>([]);
+const exportingId = ref<string | null>(null);
 
 const normalizedCards = computed(() => cards.value.map((item) => {
   const activeCampaign = item.active_campaign_name || item.current_campaign_name || item.campaign_name || '';
@@ -40,6 +42,53 @@ async function loadCharacters() {
 
 function openEditor(id: string) {
   router.push(`/character/editor/${id}`);
+}
+
+async function exportCSON(id: string, name: string) {
+  exportingId.value = id;
+  try {
+    const { cson_text } = await api.post<{ cson_text: string }>(`/characters/${id}/export`, {});
+    const blob = new Blob([cson_text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.cson`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '导出失败');
+  } finally {
+    exportingId.value = null;
+  }
+}
+
+async function exportPDF(id: string, name: string) {
+  exportingId.value = id;
+  try {
+    const res = await fetch(`/api/characters/${id}/export/pdf`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) {
+        ElMessage.warning((data as any).error ?? '导出 PDF 需要 Pro 会员或以上');
+        return;
+      }
+      throw new Error((data as any).error ?? 'PDF 导出失败');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? 'PDF 导出失败');
+  } finally {
+    exportingId.value = null;
+  }
 }
 
 onMounted(loadCharacters);
@@ -88,6 +137,20 @@ onMounted(loadCharacters);
           </TTag>
         </div>
         <p v-if="card.isActive" class="active-campaign">所在团：{{ card.activeCampaign }}</p>
+        <div class="card-actions" @click.stop>
+          <TButton
+            size="sm"
+            type="ghost"
+            :loading="exportingId === card.id"
+            @click="exportCSON(card.id, card.name)"
+          >导出 CSON</TButton>
+          <TButton
+            size="sm"
+            type="ghost"
+            :loading="exportingId === card.id"
+            @click="exportPDF(card.id, card.name)"
+          >导出 PDF <TTag size="sm" color="warning" style="margin-left:4px">Pro</TTag></TButton>
+        </div>
       </TCard>
     </div>
   </div>
@@ -123,4 +186,5 @@ onMounted(loadCharacters);
 .name { margin: 0; font-size: var(--text-base); }
 .ruleset { margin: 2px 0 0; font-size: var(--text-sm); color: var(--color-text-muted); }
 .active-campaign { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--color-success); }
+.card-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-card-border); }
 </style>

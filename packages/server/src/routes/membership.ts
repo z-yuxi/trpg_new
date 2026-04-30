@@ -1,16 +1,23 @@
 /**
  * 会员与支付路由
  *
- * GET  /api/membership/benefits      — 查询当前用户有效档位和所有权益
- * POST /api/membership/grant         — 运营手工授予会员（需 admin）
- * GET  /api/membership/events        — 查询当前用户订阅事件历史
+ * GET  /api/membership/benefits          — 查询当前用户有效档位和所有权益
+ * POST /api/membership/grant             — 运营手工授予会员（需 admin）
+ * GET  /api/membership/events            — 查询当前用户订阅事件历史
+ *
+ * POST /api/membership/orders            — 创建支付订单（前端发起）
+ * GET  /api/membership/orders/:id        — 轮询订单状态
+ * POST /api/membership/orders/:id/cancel — 取消待支付订单
+ * POST /api/membership/webhook/:channel  — 三方支付回调（需配置 channel_secret 签名验证）
  */
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth';
 import { membershipService } from '../services/membership-service';
 import { db } from '../db';
-import { MEMBERSHIP_BENEFITS } from '@trpg/shared';
+import { generateId, MEMBERSHIP_BENEFITS } from '@trpg/shared';
+import type { MembershipTier } from '@trpg/shared';
 
 const router: IRouter = Router();
 
@@ -74,6 +81,173 @@ router.post('/grant', authMiddleware, async (req, res) => {
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Grant failed' });
+  }
+});
+
+// ── 支付订单 SKU 定义 ─────────────────────────────────────────────────────────
+const SKU_CATALOG: Record<string, { product_type: string; tier: MembershipTier; months: number; amount_cents: number; label: string }> = {
+  pro_monthly:     { product_type: 'sub_pro',     tier: 'pro',     months: 1,  amount_cents: 1800, label: 'Pro 会员 · 月' },
+  pro_yearly:      { product_type: 'sub_pro',     tier: 'pro',     months: 12, amount_cents: 19800, label: 'Pro 会员 · 年' },
+  creator_monthly: { product_type: 'sub_creator', tier: 'creator', months: 1,  amount_cents: 3800, label: 'Creator 会员 · 月' },
+  creator_yearly:  { product_type: 'sub_creator', tier: 'creator', months: 12, amount_cents: 38800, label: 'Creator 会员 · 年' },
+};
+
+const createOrderSchema = z.object({
+  sku: z.string().min(1),
+  channel: z.enum(['alipay', 'wechat']),
+});
+
+// POST /api/membership/orders — 创建支付订单
+router.post('/orders', authMiddleware, async (req, res) => {
+  const parsed = createOrderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+  const sku = SKU_CATALOG[parsed.data.sku];
+  if (!sku) {
+    res.status(400).json({ error: `未知 SKU: ${parsed.data.sku}`, available_skus: Object.keys(SKU_CATALOG) });
+    return;
+  }
+  try {
+    const orderId = generateId();
+    await db('payment_orders').insert({
+      id: orderId,
+      user_id: req.user!.id,
+      product_type: sku.product_type,
+      product_sku: parsed.data.sku,
+      amount_cents: sku.amount_cents,
+      channel: parsed.data.channel,
+      status: 'pending',
+      metadata: JSON.stringify({ label: sku.label, months: sku.months }),
+    });
+    // TODO: 对接真实支付渠道（微信 JSAPI / 支付宝 H5）时在此生成预付单并返回 pay_params
+    res.status(201).json({
+      order_id: orderId,
+      amount_cents: sku.amount_cents,
+      label: sku.label,
+      status: 'pending',
+      // pay_params 上线真实支付后在此补充
+      pay_params: null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Order creation failed' });
+  }
+});
+
+// GET /api/membership/orders/:id — 轮询订单状态
+router.get('/orders/:id', authMiddleware, async (req, res) => {
+  try {
+    const order = await db('payment_orders').where({ id: req.params.id, user_id: req.user!.id }).first();
+    if (!order) { res.status(404).json({ error: 'Not found' }); return; }
+    res.json({
+      order_id: order.id,
+      status: order.status,
+      paid_at: order.paid_at ?? null,
+      amount_cents: order.amount_cents,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// POST /api/membership/orders/:id/cancel — 取消待支付订单
+router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
+  try {
+    const order = await db('payment_orders').where({ id: req.params.id, user_id: req.user!.id, status: 'pending' }).first();
+    if (!order) { res.status(404).json({ error: 'Order not found or cannot be cancelled' }); return; }
+    await db('payment_orders').where({ id: req.params.id }).update({ status: 'failed' });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Cancel failed' });
+  }
+});
+
+// POST /api/membership/webhook/:channel — 三方支付回调（生产时须验证签名）
+// WARNING: 生产上线前必须替换为真实签名验证逻辑，当前仅作骨架示例。
+router.post('/webhook/:channel', async (req, res) => {
+  const channel = req.params.channel;
+  if (!['alipay', 'wechat'].includes(channel)) {
+    res.status(400).json({ error: 'Unknown channel' });
+    return;
+  }
+
+  // ── 签名验证占位（生产替换） ──────────────────────────────────────────────
+  const webhookSecret = process.env[`PAYMENT_WEBHOOK_SECRET_${channel.toUpperCase()}`];
+  if (webhookSecret) {
+    const sig = req.headers['x-payment-signature'] as string | undefined;
+    const body = JSON.stringify(req.body);
+    const expected = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
+    if (!sig || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+      res.status(401).json({ error: 'Invalid signature' });
+      return;
+    }
+  }
+
+  // ── 提取三方流水号与订单 ID（各渠道字段不同，此处统一使用 external_order_id 与 out_trade_no） ──
+  const body = req.body as Record<string, unknown>;
+  const outTradeNo = String(body['out_trade_no'] ?? body['order_id'] ?? '');
+  const externalOrderId = String(body['trade_no'] ?? body['transaction_id'] ?? '');
+  const tradeStatus = String(body['trade_status'] ?? body['result_code'] ?? '');
+
+  const isPaid = tradeStatus === 'TRADE_SUCCESS' || tradeStatus === 'SUCCESS' || tradeStatus === 'success';
+  if (!isPaid || !outTradeNo) {
+    res.json({ ok: true }); // 非终态，幂等返回 200
+    return;
+  }
+
+  try {
+    const order = await db('payment_orders').where({ id: outTradeNo, status: 'pending' }).first();
+    if (!order) {
+      res.json({ ok: true }); // 已处理或不存在，幂等
+      return;
+    }
+
+    // 事务：更新订单 → 更新用户会员 → 写 subscription_event
+    await db.transaction(async (trx) => {
+      await trx('payment_orders').where({ id: outTradeNo }).update({
+        status: 'paid',
+        external_order_id: externalOrderId || null,
+        paid_at: trx.fn.now(),
+      });
+
+      const sku = SKU_CATALOG[order.product_sku as string];
+      if (!sku) return;
+
+      const currentUser = await trx('users')
+        .where({ id: order.user_id })
+        .select('subscription_type', 'subscription_expires_at')
+        .first();
+
+      const now = new Date();
+      const baseDate =
+        currentUser?.subscription_expires_at && new Date(currentUser.subscription_expires_at) > now
+          ? new Date(currentUser.subscription_expires_at)
+          : now;
+      const expiresAt = new Date(baseDate);
+      expiresAt.setMonth(expiresAt.getMonth() + sku.months);
+
+      await trx('users').where({ id: order.user_id }).update({
+        subscription_type: sku.tier,
+        subscription_expires_at: expiresAt,
+      });
+
+      await trx('subscription_events').insert({
+        id: generateId(),
+        user_id: order.user_id,
+        event_type: currentUser?.subscription_type === 'free' ? 'subscribe' : 'renew',
+        from_tier: currentUser?.subscription_type ?? 'free',
+        to_tier: sku.tier,
+        order_id: outTradeNo,
+        expires_at: expiresAt,
+        metadata: JSON.stringify({ channel, external_order_id: externalOrderId }),
+      });
+    });
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[webhook] Error:', err);
+    res.status(500).json({ error: 'Internal error' });
   }
 });
 

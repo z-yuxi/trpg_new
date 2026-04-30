@@ -1,6 +1,8 @@
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { payGate } from '../middleware/pay-gate';
 import { characterSheetService, characterInstanceService } from '../services/character-sheet-service';
+import { createCharacterPdfBuffer } from '../services/character-pdf-service';
 import { exportCSON, importCSON } from '@trpg/shared';
 import { db } from '../db';
 import { io } from '../app';
@@ -92,7 +94,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/characters/:id/export - 导出 CSON
+// POST /api/characters/:id/export - 导出 CSON（免费）
 router.post('/:id/export', async (req, res) => {
   try {
     const sheet = await characterSheetService.findById(req.params.id);
@@ -102,6 +104,24 @@ router.post('/:id/export', async (req, res) => {
     res.json({ cson_text });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Export failed' });
+  }
+});
+
+// POST /api/characters/:id/export/pdf — 导出 PDF（需 Pro/Creator 会员）
+router.post('/:id/export/pdf', payGate('character_card_pdf'), async (req, res) => {
+  try {
+    const sheet = await characterSheetService.findById(req.params.id);
+    if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
+    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    const buf = await createCharacterPdfBuffer(sheet);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(sheet.name || 'character')}.pdf`
+    );
+    res.send(buf);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'PDF export failed' });
   }
 });
 
