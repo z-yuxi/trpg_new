@@ -51,14 +51,18 @@ class NotificationService {
 
   async getUserNotifications(
     userId: string,
-    opts: { type?: NotificationType; is_read?: boolean; page?: number; limit?: number }
+    opts: { type?: NotificationType; types?: NotificationType[]; is_read?: boolean; page?: number; limit?: number }
   ): Promise<{ data: UserNotification[]; total: number }> {
     const page = opts.page ?? 1;
-    const limit = Math.min(opts.limit ?? 20, 100);
+    const limit = Math.min(opts.limit ?? 50, 100);
     const offset = (page - 1) * limit;
 
     let q = db('user_notifications').where({ user_id: userId });
-    if (opts.type) q = q.where({ type: opts.type });
+    if (opts.types && opts.types.length > 0) {
+      q = q.whereIn('type', opts.types);
+    } else if (opts.type) {
+      q = q.where({ type: opts.type });
+    }
     if (opts.is_read !== undefined) q = q.where({ is_read: opts.is_read ? 1 : 0 });
 
     const [total, rows] = await Promise.all([
@@ -76,9 +80,13 @@ class NotificationService {
     return updated > 0;
   }
 
-  async markAllAsRead(userId: string, type?: NotificationType): Promise<void> {
+  async markAllAsRead(userId: string, type?: NotificationType, types?: NotificationType[]): Promise<void> {
     let q = db('user_notifications').where({ user_id: userId, is_read: false });
-    if (type) q = q.where({ type });
+    if (types && types.length > 0) {
+      q = q.whereIn('type', types);
+    } else if (type) {
+      q = q.where({ type });
+    }
     await q.update({ is_read: true });
   }
 

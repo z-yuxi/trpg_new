@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import BottomNav from './BottomNav.vue';
 import { useTheme } from '../composables/useTheme';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
+import { useNotificationStore } from '../stores/notification-store';
 
 const { currentTheme, toggleTheme } = useTheme();
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const notifStore = useNotificationStore();
 
 const currentPath = computed(() => route?.path ?? '/');
 const pageTitle = computed(() => (route?.meta?.title as string) ?? '');
@@ -36,6 +38,44 @@ function handleBack() {
   }
   router?.push('/');
 }
+
+// ===== 头像下拉卡片 =====
+const dropdownOpen = ref(false);
+
+function toggleDropdown() {
+  dropdownOpen.value = !dropdownOpen.value;
+}
+
+function closeDropdown() {
+  dropdownOpen.value = false;
+}
+
+function navigateTo(path: string) {
+  router.push(path);
+  closeDropdown();
+}
+
+function handleLogout() {
+  if (!confirm('确定要退出登录吗？')) return;
+  authStore.logout?.();
+  router.push('/login');
+  closeDropdown();
+}
+
+function handleOutsideClick(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.avatar-wrapper')) {
+    closeDropdown();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleOutsideClick);
+  notifStore.fetchUnreadCount?.();
+});
+onUnmounted(() => {
+  document.removeEventListener('click', handleOutsideClick);
+});
 </script>
 
 <template>
@@ -85,9 +125,57 @@ function handleBack() {
           <button class="icon-btn theme-toggle" @click="toggleTheme" aria-label="切换主题">
             <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
           </button>
-          <router-link to="/tuantu" class="avatar-btn" aria-label="团途">
-            <SvgIcon name="icon-settings" :size="20" />
-          </router-link>
+          <!-- 头像 + 下拉卡片 -->
+          <div class="avatar-wrapper" @click.stop="toggleDropdown">
+            <div class="avatar-btn" :class="{ open: dropdownOpen }" aria-label="个人菜单">
+              <img
+                v-if="authStore.avatarUrl"
+                :src="authStore.avatarUrl"
+                class="avatar-img"
+                alt="头像"
+              />
+              <SvgIcon v-else name="icon-user" :size="20" />
+              <span
+                v-if="notifStore.unreadCount > 0"
+                class="avatar-badge"
+                :aria-label="`${notifStore.unreadCount}条未读通知`"
+              />
+            </div>
+
+            <!-- 下拉卡片 -->
+            <Transition name="dropdown">
+              <div v-if="dropdownOpen" class="dropdown-card" @click.stop>
+                <!-- 用户信息行 -->
+                <div class="dropdown-user" @click="navigateTo('/tuantu')">
+                  <div class="dropdown-avatar">
+                    <img v-if="authStore.avatarUrl" :src="authStore.avatarUrl" alt="头像" />
+                    <SvgIcon v-else name="icon-user" :size="20" />
+                  </div>
+                  <div class="dropdown-name">{{ authStore.nickname ?? '用户' }}</div>
+                </div>
+                <div class="dropdown-divider" />
+                <!-- 功能菜单 -->
+                <button class="dropdown-item" @click="navigateTo('/notifications')">
+                  <SvgIcon name="icon-bell" :size="16" />
+                  <span>通知</span>
+                  <span v-if="notifStore.unreadCount > 0" class="item-badge">{{ notifStore.unreadCount > 99 ? '99+' : notifStore.unreadCount }}</span>
+                </button>
+                <button class="dropdown-item" @click="navigateTo('/messages')">
+                  <SvgIcon name="icon-chat" :size="16" />
+                  <span>私信</span>
+                </button>
+                <button class="dropdown-item" @click="navigateTo('/settings')">
+                  <SvgIcon name="icon-settings" :size="16" />
+                  <span>设置</span>
+                </button>
+                <div class="dropdown-divider" />
+                <button class="dropdown-item danger" @click="handleLogout">
+                  <SvgIcon name="icon-logout" :size="16" />
+                  <span>退出登录</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
         </div>
       </div>
     </header>
@@ -188,6 +276,13 @@ function handleBack() {
 }
 .icon-btn:hover { color: var(--color-accent); }
 .theme-toggle { background: var(--color-page-bg); }
+
+/* ===== 头像下拉卡片 ===== */
+.avatar-wrapper {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
 .avatar-btn {
   display: flex;
   align-items: center;
@@ -197,10 +292,115 @@ function handleBack() {
   border-radius: 50%;
   background: var(--color-page-bg);
   color: var(--color-text-secondary);
-  text-decoration: none;
-  transition: color var(--transition-fast);
+  border: 2px solid transparent;
+  transition: border-color var(--transition-fast);
+  position: relative;
 }
-.avatar-btn:hover { color: var(--color-accent); }
+.avatar-btn.open,
+.avatar-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.avatar-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-error, #ef4444);
+  border: 2px solid var(--color-card-bg);
+}
+
+.dropdown-card {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 200px;
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  z-index: 200;
+  overflow: hidden;
+  padding: var(--space-1) 0;
+}
+.dropdown-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.dropdown-user:hover { background: var(--surface-hover); }
+.dropdown-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-page-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dropdown-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dropdown-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--color-card-border);
+  margin: var(--space-1) 0;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  text-align: left;
+}
+.dropdown-item:hover { background: var(--surface-hover); color: var(--color-text-primary); }
+.dropdown-item.danger:hover { color: var(--color-error, #ef4444); }
+.item-badge {
+  margin-left: auto;
+  background: var(--color-error, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 9999px;
+  padding: 1px 5px;
+  min-width: 18px;
+  text-align: center;
+}
+/* 过渡动画 */
+.dropdown-enter-active, .dropdown-leave-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+.dropdown-enter-from, .dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 
 /* 桌面端"创作台"模式切换按钮 */
 .creator-tab-btn {

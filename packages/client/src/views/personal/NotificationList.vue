@@ -4,29 +4,49 @@ import { ElMessage, ElBadge, ElButton, ElEmpty, ElSkeleton } from 'element-plus'
 import SvgIcon from '../../components/SvgIcon.vue';
 import { socketClient } from '../../socket/socket-client';
 import { api } from '../../utils/api';
-import type { NotificationType, UserNotification } from '@trpg/shared';
+import type { UserNotification } from '@trpg/shared';
+import { useRouter } from 'vue-router';
 
-type Tab = NotificationType | 'all';
+type Category = 'all' | 'trpg' | 'community' | 'system';
 
-const activeTab = ref<Tab>('all');
+const activeCategory = ref<Category>('all');
 const notifications = ref<UserNotification[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const unreadCount = ref(0);
+const router = useRouter();
 
-const tabs: { label: string; value: Tab; type?: NotificationType }[] = [
+const tabs: { label: string; value: Category }[] = [
   { label: '全部', value: 'all' },
-  { label: '系统', value: 'system', type: 'system' },
-  { label: '交易', value: 'transaction', type: 'transaction' },
-  { label: '社交', value: 'social', type: 'social' },
-  { label: '审核', value: 'audit', type: 'audit' },
+  { label: '跑团', value: 'trpg' },
+  { label: '社区', value: 'community' },
+  { label: '系统', value: 'system' },
 ];
+
+/** 各分类跳转目标（点击通知时路由） */
+const JUMP_MAP: Record<string, string> = {
+  apply_approved: '/recruit',
+  apply_rejected: '/recruit',
+  waitlist_promoted: '/recruit',
+  group_success: '/rooms',
+  group_dissolved: '/rooms',
+  move_approved: '/rooms',
+  move_rejected: '/rooms',
+  move_cancelled: '/rooms',
+  comment_floor: '/discuss',
+  comment_reply: '/discuss',
+  at_mention: '/discuss',
+  post_featured: '/discuss',
+  feature_rejected: '/discuss',
+  achievement_unlocked: '/tuantu',
+  badge_earned: '/tuantu',
+};
 
 async function fetchNotifications() {
   loading.value = true;
   try {
     const params = new URLSearchParams({ page: '1', limit: '50' });
-    if (activeTab.value !== 'all') params.set('type', activeTab.value);
+    if (activeCategory.value !== 'all') params.set('category', activeCategory.value);
     const body = await api.get<{ data: UserNotification[]; total: number }>(`/notifications?${params}`);
     notifications.value = body.data;
     total.value = body.total;
@@ -44,32 +64,35 @@ async function fetchUnreadCount() {
   } catch { /* ignore */ }
 }
 
-async function markAsRead(id: string) {
-  try {
-    await api.put(`/notifications/${id}/read`, {});
-    const n = notifications.value.find(n => n.id === id);
-    if (n) {
-      n.is_read = true;
-      unreadCount.value = Math.max(0, unreadCount.value - 1);
-    }
-  } catch { /* ignore */ }
+async function markAsRead(n: UserNotification) {
+  if (!n.is_read) {
+    await api.put(`/notifications/${n.id}/read`, {}).catch(() => {});
+    n.is_read = true;
+    unreadCount.value = Math.max(0, unreadCount.value - 1);
+  }
+  // 跳转关联内容
+  const target = JUMP_MAP[n.type] ?? null;
+  if (n.metadata?.['url']) {
+    router.push(String(n.metadata['url']));
+  } else if (target) {
+    router.push(target);
+  }
 }
 
 async function markAllAsRead() {
-  const type = activeTab.value !== 'all' ? activeTab.value as NotificationType : undefined;
   const body: Record<string, string> = {};
-  if (type) body['type'] = type;
+  if (activeCategory.value !== 'all') body['category'] = activeCategory.value;
   try {
     await api.put('/notifications/read-all', body);
     notifications.value.forEach(n => { n.is_read = true; });
-    if (activeTab.value === 'all') unreadCount.value = 0;
+    if (activeCategory.value === 'all') unreadCount.value = 0;
     else await fetchUnreadCount();
     ElMessage.success('已全部标为已读');
   } catch { /* ignore */ }
 }
 
-function handleTabChange(tab: Tab) {
-  activeTab.value = tab;
+function handleTabChange(cat: Category) {
+  activeCategory.value = cat;
   fetchNotifications();
 }
 
@@ -80,16 +103,32 @@ function formatTime(date: Date | string) {
   if (diff < 60000) return '刚刚';
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-  return d.toLocaleDateString('zh-CN');
+  if (diff < 172800000) return '昨天';
+  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
+/** 通知类型 → 中文标签 */
+const TYPE_LABEL: Record<string, string> = {
+  apply_approved: '招募通知', apply_rejected: '招募通知', waitlist_promoted: '招募通知',
+  group_success: '成团通知', group_dissolved: '解散通知',
+  move_approved: '移动通知', move_rejected: '移动通知', move_cancelled: '移动通知',
+  comment_floor: '社区通知', comment_reply: '社区通知', at_mention: '@提及',
+  post_featured: '精华通知', feature_rejected: '社区通知',
+  report_result: '举报结果', system_announcement: '系统公告',
+  achievement_unlocked: '成就', badge_earned: '勋章',
+  system: '系统通知', transaction: '交易通知', social: '社区通知', audit: '审核通知',
+};
+
 const hasUnread = computed(() => notifications.value.some(n => !n.is_read));
+
+const emptyText = computed(() =>
+  activeCategory.value === 'all' ? '暂无通知' : '该分类下暂无通知'
+);
 
 onMounted(async () => {
   await fetchUnreadCount();
   await fetchNotifications();
 
-  // 实时接收新通知
   socketClient.connectUser();
   socketClient.onNotificationNew((n: UserNotification) => {
     notifications.value.unshift(n);
@@ -116,7 +155,7 @@ onMounted(async () => {
         v-for="tab in tabs"
         :key="tab.value"
         class="tab-btn"
-        :class="{ active: activeTab === tab.value }"
+        :class="{ active: activeCategory === tab.value }"
         @click="handleTabChange(tab.value)"
       >
         <ElBadge v-if="tab.value === 'all' && unreadCount > 0" :value="unreadCount" :max="99">
@@ -128,7 +167,7 @@ onMounted(async () => {
 
     <ElSkeleton v-if="loading" :rows="4" animated />
 
-    <ElEmpty v-else-if="notifications.length === 0" description="暂无通知" />
+    <ElEmpty v-else-if="notifications.length === 0" :description="emptyText" />
 
     <ul v-else class="noti-list">
       <li
@@ -136,13 +175,16 @@ onMounted(async () => {
         :key="n.id"
         class="noti-item"
         :class="{ unread: !n.is_read }"
-        @click="markAsRead(n.id)"
+        @click="markAsRead(n)"
       >
         <div class="noti-dot" v-if="!n.is_read" />
         <div class="noti-body">
+          <div class="noti-header-row">
+            <span class="noti-tag">{{ TYPE_LABEL[n.type] ?? n.type }}</span>
+            <span class="noti-time">{{ formatTime(n.created_at) }}</span>
+          </div>
           <div class="noti-title">{{ n.title }}</div>
           <div class="noti-content">{{ n.content }}</div>
-          <div class="noti-time">{{ formatTime(n.created_at) }}</div>
         </div>
       </li>
     </ul>
@@ -224,6 +266,19 @@ onMounted(async () => {
   margin-top: 6px;
 }
 .noti-body { flex: 1; min-width: 0; }
+.noti-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.noti-tag {
+  font-size: var(--text-xs);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+}
 .noti-title {
   font-weight: var(--font-semibold);
   font-size: var(--text-sm);
@@ -234,7 +289,6 @@ onMounted(async () => {
   font-size: var(--text-sm);
   color: var(--text-body);
   line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-1);
 }
 .noti-time {
   font-size: var(--text-xs);

@@ -1,7 +1,31 @@
 import type { ChatMessage, StoryTime, CharacterInstance, GridToken, GridOverlay, SnowflakeId } from './index';
 
 // ===== 通知类型 =====
-export type NotificationType = 'system' | 'transaction' | 'social' | 'audit';
+
+/** 细粒度通知类型（设计规格 I03） */
+export type NotificationType =
+  // 跑团类
+  | 'apply_approved' | 'apply_rejected' | 'waitlist_promoted'
+  | 'group_success' | 'group_dissolved'
+  | 'move_approved' | 'move_rejected' | 'move_cancelled'
+  // 社区类
+  | 'comment_floor' | 'comment_reply' | 'at_mention'
+  | 'post_featured' | 'feature_rejected'
+  // 系统类
+  | 'report_result' | 'system_announcement'
+  | 'achievement_unlocked' | 'badge_earned'
+  // 旧类型（向后兼容，勿新增）
+  | 'system' | 'transaction' | 'social' | 'audit';
+
+/** UI 筛选标签分类 */
+export type NotificationCategory = 'trpg' | 'community' | 'system';
+
+/** 各分类包含的通知类型 */
+export const NOTIFICATION_CATEGORY_TYPES: Record<NotificationCategory, NotificationType[]> = {
+  trpg: ['apply_approved', 'apply_rejected', 'waitlist_promoted', 'group_success', 'group_dissolved', 'move_approved', 'move_rejected', 'move_cancelled'],
+  community: ['comment_floor', 'comment_reply', 'at_mention', 'post_featured', 'feature_rejected'],
+  system: ['report_result', 'system_announcement', 'achievement_unlocked', 'badge_earned', 'system', 'audit'],
+};
 
 export interface UserNotification {
   id: string;

@@ -1,19 +1,31 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { notificationService } from '../services/notification-service';
-import type { NotificationType } from '@trpg/shared';
+import type { NotificationType, NotificationCategory } from '@trpg/shared';
+import { NOTIFICATION_CATEGORY_TYPES } from '@trpg/shared';
 
 const router = Router();
 
 // GET /api/notifications
+// 支持 ?category=trpg|community|system（UI 分类）或 ?type=具体类型
 router.get('/', authMiddleware, async (req, res) => {
   const userId = req.user!.id;
-  const { type, is_read, page, limit } = req.query as Record<string, string>;
+  const { type, category, is_read, page, limit } = req.query as Record<string, string>;
+
+  // category 优先于 type：把分类展开为多个 type 过滤
+  let typeFilter: NotificationType | undefined = type as NotificationType | undefined;
+  let typesFilter: NotificationType[] | undefined;
+  if (category && category in NOTIFICATION_CATEGORY_TYPES) {
+    typesFilter = NOTIFICATION_CATEGORY_TYPES[category as NotificationCategory];
+    typeFilter = undefined;
+  }
+
   const result = await notificationService.getUserNotifications(userId, {
-    type: type as NotificationType | undefined,
+    type: typeFilter,
+    types: typesFilter,
     is_read: is_read === 'true' ? true : is_read === 'false' ? false : undefined,
     page: page ? Number(page) : 1,
-    limit: limit ? Number(limit) : 20,
+    limit: limit ? Number(limit) : 50,
   });
   res.json(result);
 });
@@ -25,9 +37,14 @@ router.get('/unread-count', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/notifications/read-all
+// 支持 { type } 或 { category } 两种粒度
 router.put('/read-all', authMiddleware, async (req, res) => {
-  const { type } = req.body as { type?: NotificationType };
-  await notificationService.markAllAsRead(req.user!.id, type);
+  const { type, category } = req.body as { type?: NotificationType; category?: NotificationCategory };
+  let typesFilter: NotificationType[] | undefined;
+  if (category && category in NOTIFICATION_CATEGORY_TYPES) {
+    typesFilter = NOTIFICATION_CATEGORY_TYPES[category];
+  }
+  await notificationService.markAllAsRead(req.user!.id, type, typesFilter);
   res.json({ success: true });
 });
 
