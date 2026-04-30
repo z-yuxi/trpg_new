@@ -1,5 +1,6 @@
 import './utils/load-env';
-import { httpServer } from './app';
+import { httpServer, io } from './app';
+import { startAiWorker } from './queue/ai-queue';
 import cron from 'node-cron';
 import { moduleService } from './services/module-service';
 import { recruitmentService } from './services/recruitment-service';
@@ -19,6 +20,9 @@ for (const envVar of requiredEnvVars) {
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// ── AI 异步任务 Worker ────────────────────────────────────────────────────────
+startAiWorker(io);
 
 // ── 优雅关闭 ────────────────────────────────────────────────────────────────
 async function gracefulShutdown(signal: string) {

@@ -68,6 +68,13 @@ export interface ServerToClientEvents {
   unread_count_changed: (data: { count: number }) => void;
   grid_token_moved: (data: { campaign_id: string; scene_id: string; token: GridToken }) => void;
   grid_area_marked: (data: { campaign_id: string; scene_id: string; overlays: GridOverlay[] }) => void;
+  /** AI 异步任务进度推送（任务完成/失败时由 BullMQ Worker 推送给对应用户） */
+  ai_task_update: (data: {
+    task_id: string;
+    status: 'queued' | 'success' | 'failed';
+    result?: unknown;
+    error?: string;
+  }) => void;
 }
 
 // ===== Client → Server 事件 =====

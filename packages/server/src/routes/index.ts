@@ -20,6 +20,7 @@ import reviewRoutes from './reviews';
 import adminReputationRoutes from './admin-reputation';
 import creatorEarningsRoutes from './creator-earnings';
 import directMessagesRoutes from './direct-messages';
+import aiRoutes from './ai';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -78,5 +79,6 @@ router.use('/membership', membershipRoutes);
 router.use('/experiments', experimentRoutes);
 router.use('/creator', creatorEarningsRoutes);
 router.use('/messages', directMessagesRoutes);
+router.use('/ai', aiRoutes);
 
 export default router;

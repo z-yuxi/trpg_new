@@ -14,8 +14,19 @@ import { recruitmentMetricsService } from '../services/recruitment-metrics-servi
 
 const router: IRouter = Router();
 
+// 所有指标路由需要管理员权限
+function adminMiddleware(req: any, res: any, next: any) {
+  const user = req.user;
+  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
+  if (!isAdmin) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  next();
+}
+
 // ── 漏斗快照 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/funnel', authMiddleware, async (req, res) => {
+router.get('/recruitment/funnel', authMiddleware, adminMiddleware, async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days ?? 7)));
   try {
     const snapshot = await recruitmentMetricsService.getFunnelSnapshot(days);
@@ -26,7 +37,7 @@ router.get('/recruitment/funnel', authMiddleware, async (req, res) => {
 });
 
 // ── 每日日报 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/daily', authMiddleware, async (req, res) => {
+router.get('/recruitment/daily', authMiddleware, adminMiddleware, async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days ?? 30)));
   try {
     const reports = await recruitmentMetricsService.getDailyReports(days);
@@ -37,7 +48,7 @@ router.get('/recruitment/daily', authMiddleware, async (req, res) => {
 });
 
 // ── 异常告警 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/alerts', authMiddleware, async (req, res) => {
+router.get('/recruitment/alerts', authMiddleware, adminMiddleware, async (req, res) => {
   const days = Math.min(30, Math.max(1, Number(req.query.days ?? 7)));
   try {
     const alerts = await recruitmentMetricsService.detectAlerts(days);
@@ -48,7 +59,7 @@ router.get('/recruitment/alerts', authMiddleware, async (req, res) => {
 });
 
 // ── 手动失效缓存 ───────────────────────────────────────────────────────────────
-router.post('/recruitment/cache/invalidate', authMiddleware, async (_req, res) => {
+router.post('/recruitment/cache/invalidate', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
     await recruitmentMetricsService.invalidateCache();
     res.json({ ok: true, message: '缓存已失效' });

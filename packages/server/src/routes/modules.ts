@@ -39,9 +39,12 @@ const importConfirmSchema = z.object({
 
 router.get('/', async (req, res) => {
   try {
-    const firstUser = await db('users').select('id').orderBy('uid', 'asc').first();
-    if (firstUser?.id) {
-      await moduleService.seedIfEmpty(firstUser.id as string);
+    // 仅在非生产环境执行种子数据（避免生产环境每次请求都触发）
+    if (process.env.NODE_ENV !== 'production') {
+      const firstUser = await db('users').select('id').orderBy('uid', 'asc').first();
+      if (firstUser?.id) {
+        await moduleService.seedIfEmpty(firstUser.id as string);
+      }
     }
 
     const result = await moduleService.listPublic({
