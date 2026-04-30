@@ -46,6 +46,9 @@
         >
           {{ aiImportBusy ? 'AI 分析中...' : 'AI 分析结构' }}
         </button>
+        <button class="btn btn--secondary" @click="openTermsPanel">
+          术语白名单{{ moduleTerms.length ? ` (${moduleTerms.length})` : '' }}
+        </button>
         <button class="btn btn--secondary" @click="readerSettingsPanelOpen = true">叙阅器设置</button>
         <button class="btn btn--secondary" @click="manualSave">保存</button>
         <button
@@ -156,6 +159,47 @@
       @confirm="confirmImport"
     />
 
+    <AiEntityReviewDialog
+      :open="aiEntityDialogOpen"
+      :entities="aiEntityList"
+      :current-text="typeof editorContent === 'string' ? editorContent : ''"
+      :busy="aiEntityDialogBusy"
+      @close="aiEntityDialogOpen = false"
+      @confirm="handleEntityConfirm"
+    />
+
+    <!-- ── 术语白名单管理抽屉 ──────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="termsPanelOpen" class="rs-drawer" @click.self="termsPanelOpen = false">
+        <div class="rs-drawer__panel">
+          <header class="rs-drawer__head">
+            <h2>术语白名单</h2>
+            <button class="rs-drawer__close" @click="termsPanelOpen = false">×</button>
+          </header>
+          <div class="rs-drawer__body">
+            <p class="rs-section__label">
+              AI 校对与模组分析时，这些术语将被识别为专有名词，不会被改写或标记为错误。
+            </p>
+            <p class="rs-section__label" style="margin-top:4px;color:var(--color-text-muted,#aaa)">
+              用中文顿号、英文逗号或换行分隔，最多 100 条，每条最长 64 字。
+            </p>
+            <textarea
+              v-model="termsDraft"
+              class="terms-textarea"
+              rows="8"
+              placeholder="例如：拉兹、呼唤者、黑暗大法师、SAN值损失"
+            />
+            <div class="rs-footer">
+              <button class="btn btn--secondary" @click="termsPanelOpen = false">取消</button>
+              <button class="btn btn--primary" :disabled="termsSaving" @click="saveTerms">
+                {{ termsSaving ? '保存中...' : '保存' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- ── 叙阅器设置抽屉 §14.8 ──────────────────────────── -->
     <Teleport to="body">
       <div v-if="readerSettingsPanelOpen" class="rs-drawer" @click.self="readerSettingsPanelOpen = false">
@@ -249,10 +293,11 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDialog.vue';
+import AiEntityReviewDialog from '../../components/module-editor/AiEntityReviewDialog.vue';
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
-import { getModule, updateModule, autoSaveModule, submitModule as apiSubmitModule, withdrawModule as apiWithdrawModule } from '../../api/modules';
+import { getModule, updateModule, autoSaveModule, submitModule as apiSubmitModule, withdrawModule as apiWithdrawModule, getModuleTerms, saveModuleTerms, applyModuleEntities, type ModuleEntity } from '../../api/modules';
 import { extractOutline } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
 import { socketClient } from '../../socket/socket-client';
@@ -349,6 +394,64 @@ const aiQuotaInfo = ref<{ used: number; quota: number } | null>(null);
 // AI 导入任务 ID → 等待 socket 回调
 const pendingAiImportTaskId = ref<string | null>(null);
 
+// AI 实体审阅对话框
+const aiEntityDialogOpen = ref(false);
+const aiEntityDialogBusy = ref(false);
+const aiEntityList = ref<ModuleEntity[]>([]);
+
+async function handleEntityConfirm(selected: ModuleEntity[]) {
+  if (!moduleId.value || selected.length === 0) return;
+  aiEntityDialogBusy.value = true;
+  try {
+    const res = await applyModuleEntities(moduleId.value, selected);
+    editorContent.value = res.updated_content as any;
+    saveState.value = 'saved';
+    aiEntityDialogOpen.value = false;
+  } catch {
+    alert('写入失败，请稍后重试');
+  } finally {
+    aiEntityDialogBusy.value = false;
+  }
+}
+
+// ── 模组术语白名单 ─────────────────────────────────────────
+const moduleTerms = ref<string[]>([]);
+const termsPanelOpen = ref(false);
+const termsDraft = ref<string>('');
+const termsSaving = ref(false);
+
+async function fetchModuleTerms() {
+  if (!moduleId.value) return;
+  try {
+    const res = await getModuleTerms(moduleId.value);
+    moduleTerms.value = res.terms.map((t) => t.term);
+  } catch { /* 静默 */ }
+}
+
+async function saveTerms() {
+  if (!moduleId.value || termsSaving.value) return;
+  const list = termsDraft.value
+    .split(/[,，\n]/)                 // 支持中英文逗号或换行分隔
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t.length <= 64)
+    .slice(0, 100);
+  termsSaving.value = true;
+  try {
+    await saveModuleTerms(moduleId.value, list);
+    moduleTerms.value = list;
+    termsPanelOpen.value = false;
+  } catch {
+    alert('保存术语失败，请重试');
+  } finally {
+    termsSaving.value = false;
+  }
+}
+
+function openTermsPanel() {
+  termsDraft.value = moduleTerms.value.join('、');
+  termsPanelOpen.value = true;
+}
+
 const ISSUE_TYPE_LABELS: Record<string, string> = {
   typo: '错别字',
   punctuation: '标点',
@@ -410,7 +513,8 @@ async function handleAiCheck() {
   aiChecked.value = false;
   try {
     const result = await api.post<{ issues: AiIssue[] }>('/ai/check-text', {
-      text: text.slice(0, 5000), // 单次最多 5000 字
+      text: text.slice(0, 5000),
+      rule_terms: moduleTerms.value.length ? moduleTerms.value : undefined,
     });
     aiIssues.value = result.issues ?? [];
     aiChecked.value = true;
@@ -441,6 +545,7 @@ async function handleAiImportAnalysis() {
   try {
     const res = await api.post<{ task_id: string; message: string }>('/ai/import-module', {
       text_chunk: text.slice(0, 10000),
+      term_whitelist: moduleTerms.value.length ? moduleTerms.value : undefined,
     });
     pendingAiImportTaskId.value = res.task_id;
     alert(`AI 分析任务已提交（ID: ${res.task_id}）\n完成后将通过通知推送结果。`);
@@ -697,28 +802,29 @@ onMounted(async () => {
   socketClient.onAiTaskUpdate((data) => {
     if (data.task_id !== pendingAiImportTaskId.value) return;
     pendingAiImportTaskId.value = null;
-    importBusy.value = false;
+    aiImportBusy.value = false;
     if (data.status === 'success' && data.result) {
       try {
         const parsed = typeof data.result === 'string'
           ? JSON.parse(data.result as string)
           : data.result;
-        // 将 AI 分析结果转为导入预览格式
-        importPreview.value = {
-          name: module.value?.name ?? '',
-          description: module.value?.description ?? '',
-          content: editorContent.value ?? '',
-          plain_text: '',
-          word_count: wordCount.value,
-          aiEntities: (parsed as { entities?: unknown[] })?.entities ?? [],
-        } as ImportPreview & { aiEntities: unknown[] };
-      } catch { /* ignore */ }
+        const entities: ModuleEntity[] = (parsed as { entities?: ModuleEntity[] })?.entities ?? [];
+        if (entities.length === 0) {
+          alert('AI 分析完成，但未识别到任何结构化实体。');
+          return;
+        }
+        aiEntityList.value = entities;
+        aiEntityDialogOpen.value = true;
+      } catch {
+        alert('AI 分析结果解析失败，请重试。');
+      }
     } else if (data.status === 'failed') {
       alert(`AI 模组分析失败：${data.error ?? '未知错误'}（本次不消耗使用次数）`);
     }
   });
 
   await fetchAiQuota();
+  await fetchModuleTerms();
 });
 
 // ── 离开前提示 ───────────────────────────────────────────
@@ -1104,6 +1210,21 @@ function goBack() {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+.rs-footer {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+}
+.terms-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+  background: var(--color-input-bg, #f9f9f9);
+  margin-top: 8px;
 }
 .rs-section__label {
   font-size: 12px;

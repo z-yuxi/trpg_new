@@ -333,4 +333,97 @@ router.put('/:id/terms', authMiddleware, async (req, res) => {
   res.json({ terms: terms.map((t) => ({ term: t })) });
 });
 
+// ── POST /api/modules/:id/entities/apply — 将 AI 分析实体写入模组内容 ─────────
+const entitySchema = z.object({
+  type: z.enum(['npc', 'scene', 'clue', 'item', 'event']),
+  name: z.string().min(1).max(100),
+  description: z.string().max(300),
+  mentions: z.array(z.string()).max(10).optional().default([]),
+});
+
+const entitiesApplySchema = z.object({
+  entities: z.array(entitySchema).min(1).max(100),
+});
+
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  npc: 'NPC',
+  scene: '场景',
+  clue: '线索',
+  item: '物品',
+  event: '事件',
+};
+
+router.post('/:id/entities/apply', authMiddleware, requireCreator, async (req, res) => {
+  const moduleId = req.params['id'];
+  const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string; content: string | null }>();
+  if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const parsed = entitiesApplySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { entities } = parsed.data;
+
+  // 按类型分组
+  const grouped = new Map<string, typeof entities>();
+  for (const e of entities) {
+    if (!grouped.has(e.type)) grouped.set(e.type, []);
+    grouped.get(e.type)!.push(e);
+  }
+
+  // 构建追加的 TipTap 节点
+  const newNodes: unknown[] = [
+    // 分隔标题
+    {
+      type: 'heading',
+      attrs: { level: 1 },
+      content: [{ type: 'text', text: 'AI 分析结构' }],
+    },
+  ];
+
+  for (const [type, items] of grouped.entries()) {
+    newNodes.push({
+      type: 'heading',
+      attrs: { level: 2 },
+      content: [{ type: 'text', text: ENTITY_TYPE_LABELS[type] ?? type }],
+    });
+    for (const entity of items) {
+      newNodes.push({
+        type: 'heading',
+        attrs: { level: 3 },
+        content: [{ type: 'text', text: entity.name }],
+      });
+      if (entity.description) {
+        newNodes.push({
+          type: 'paragraph',
+          content: [{ type: 'text', text: entity.description }],
+        });
+      }
+    }
+  }
+
+  // 合并到现有内容
+  let existingDoc: { type: string; content: unknown[] } = { type: 'doc', content: [] };
+  if (mod.content) {
+    try {
+      existingDoc = JSON.parse(mod.content) as typeof existingDoc;
+    } catch { /* 使用空文档 */ }
+  }
+
+  const updatedContent = JSON.stringify({
+    ...existingDoc,
+    content: [...(existingDoc.content ?? []), ...newNodes],
+  });
+
+  await db('modules').where({ id: moduleId }).update({
+    content: updatedContent,
+    updated_at: new Date(),
+  });
+
+  res.json({ updated_content: updatedContent });
+});
+
 export default router;

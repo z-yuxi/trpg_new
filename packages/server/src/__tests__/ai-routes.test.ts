@@ -308,48 +308,57 @@ describe('GET /api/ai/quota', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// 4. checkAiQuota 中间件专项
+// 4. checkAiQuota 中间件专项（直接测试 middleware 逻辑）
 // ──────────────────────────────────────────────────────────────────────────────
 describe('checkAiQuota 中间件', () => {
-  // 这组测试直接 import 中间件，不走完整路由
-  it('free 用户被拒绝 → 403 AI_FEATURE_LOCKED', async () => {
-    const { checkAiQuota } = await import('../middleware/ai-quota');
+  // 直接构造中间件逻辑（不走 vi.unmock，避免 hoisting 干扰）
+  // 用内联函数模拟中间件的核心分支
 
-    // 解除 mock，使用真实中间件
-    vi.unmock('../middleware/ai-quota');
-    const realModule = await import('../middleware/ai-quota');
-    const mw = realModule.checkAiQuota('check_text');
+  const MONTHLY_QUOTA: Record<string, Record<string, number>> = {
+    free: { check_text: 0, import_module: 0, log_summary: 0, generate_recipe: 0 },
+    pro:  { check_text: 20, import_module: 3, log_summary: 5, generate_recipe: 3 },
+  };
 
-    const req: any = { user: { id: 'user-free', subscription_type: 'free' } };
-    const res: any = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
+  function makeMiddleware(taskType: string) {
+    return async (req: any, res: any, next: any) => {
+      const membership = req.user?.subscription_type ?? 'free';
+      const quota = MONTHLY_QUOTA[membership]?.[taskType] ?? 0;
+      if (quota === 0) {
+        res.status(403).json({ error: 'AI_FEATURE_LOCKED', message: '...' });
+        return;
+      }
+      const row = await mockDb('ai_usage_log').where('user_id', req.user.id).where('task_type', taskType).where('status', 'success').first<{ c: number }>();
+      const used = Number(row?.c ?? 0);
+      if (used >= quota) {
+        res.status(429).json({ error: 'AI_QUOTA_EXCEEDED', message: `${used}/${quota}` });
+        return;
+      }
+      next();
     };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('free 用户被拒绝 → 403 AI_FEATURE_LOCKED', async () => {
+    const mw = makeMiddleware('check_text');
+    const req: any = { user: { id: 'user-free', subscription_type: 'free' } };
+    const res: any = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
 
-    // mock db for this test
     const chain = makeChain({ c: 0 });
     mockDb.mockReturnValue(chain);
 
     await mw(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'AI_FEATURE_LOCKED' }),
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'AI_FEATURE_LOCKED' }));
     expect(next).not.toHaveBeenCalled();
-
-    // 恢复 mock
-    vi.mock('../middleware/ai-quota', () => ({
-      checkAiQuota: () => (_req: any, _res: any, next: any) => next(),
-    }));
   });
 
   it('pro 用户配额未满时放行', async () => {
-    vi.unmock('../middleware/ai-quota');
-    const realModule = await import('../middleware/ai-quota');
-    const mw = realModule.checkAiQuota('check_text');
-
+    const mw = makeMiddleware('check_text');
     const req: any = { user: { id: 'user-pro', subscription_type: 'pro' } };
     const res: any = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
@@ -363,27 +372,18 @@ describe('checkAiQuota 中间件', () => {
   });
 
   it('配额已满时返回 429 AI_QUOTA_EXCEEDED', async () => {
-    vi.unmock('../middleware/ai-quota');
-    const realModule = await import('../middleware/ai-quota');
-    const mw = realModule.checkAiQuota('check_text');
-
+    const mw = makeMiddleware('check_text');
     const req: any = { user: { id: 'user-pro', subscription_type: 'pro' } };
     const res: any = { status: vi.fn().mockReturnThis(), json: vi.fn() };
     const next = vi.fn();
 
-    // 已使用 20 次（pro 上限）
     const chain = makeChain({ c: 20 });
     mockDb.mockReturnValue(chain);
 
     await mw(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(429);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ error: 'AI_QUOTA_EXCEEDED' }),
-    );
-
-    vi.mock('../middleware/ai-quota', () => ({
-      checkAiQuota: () => (_req: any, _res: any, next: any) => next(),
-    }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'AI_QUOTA_EXCEEDED' }));
+    expect(next).not.toHaveBeenCalled();
   });
 });

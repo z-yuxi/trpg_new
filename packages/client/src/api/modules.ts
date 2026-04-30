@@ -85,3 +85,14 @@ export function saveModuleTerms(id: string, terms: string[]): Promise<{ terms: A
   return api.put(`/modules/${id}/terms`, { terms });
 }
 
+export interface ModuleEntity {
+  type: 'npc' | 'scene' | 'clue' | 'item' | 'event';
+  name: string;
+  description: string;
+  mentions?: string[];
+}
+
+export function applyModuleEntities(id: string, entities: ModuleEntity[]): Promise<{ updated_content: string }> {
+  return api.post(`/modules/${id}/entities/apply`, { entities }, key());
+}
+
