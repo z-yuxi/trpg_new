@@ -7,6 +7,7 @@ import TTag from '../../components/base/TTag.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
+import { showApiError } from '../../utils/feedback';
 
 interface Thread {
   id: string;
@@ -36,6 +37,7 @@ const boardMeta = computed(() => BOARD_META[board.value] ?? { label: '讨论区'
 const page = ref(1);
 const pageSize = 20;
 const sort = ref<'newest' | 'hottest' | 'latest_reply'>('latest_reply');
+const keywordInput = ref('');
 const keyword = ref('');
 const timeRange = ref<'all' | '1' | '7' | '30'>('all');
 const threads = ref<Thread[]>([]);
@@ -57,11 +59,17 @@ async function fetchThreads() {
     const body = await api.get<{ data: Thread[]; total: number }>(`/forum/boards/${board.value}/threads?${params}`);
     threads.value = body.data;
     total.value = body.total;
-  } catch (error: any) {
-    ElMessage.error(error?.message ?? '加载失败');
+  } catch (error: unknown) {
+    showApiError(error, '加载失败');
   } finally {
     loading.value = false;
   }
+}
+
+function applyKeywordSearch() {
+  keyword.value = keywordInput.value.trim();
+  page.value = 1;
+  fetchThreads();
 }
 
 async function submitPost() {
@@ -81,8 +89,8 @@ async function submitPost() {
     newTitle.value = '';
     newContent.value = '';
     router.push(`/discuss/thread/${thread.id}`);
-  } catch (e: any) {
-    ElMessage.error(e?.message ?? '发帖失败');
+  } catch (e: unknown) {
+    showApiError(e, '发帖失败');
   } finally {
     posting.value = false;
   }
@@ -128,7 +136,17 @@ onMounted(fetchThreads);
         </div>
       </div>
       <div class="header-actions">
-        <ElInput v-model="keyword" placeholder="搜索标题或内容" clearable class="search-input" @keyup.enter="page = 1; fetchThreads()" @clear="page = 1; fetchThreads()" />
+        <div class="search-group">
+          <ElInput
+            v-model="keywordInput"
+            placeholder="搜索标题或内容"
+            clearable
+            class="search-input"
+            @keyup.enter="applyKeywordSearch"
+            @clear="applyKeywordSearch"
+          />
+          <button class="search-btn" @click="applyKeywordSearch">搜索</button>
+        </div>
         <select v-model="timeRange" class="sort-select">
           <option value="all">全部时间</option>
           <option value="1">24 小时</option>
@@ -239,6 +257,25 @@ onMounted(fetchThreads);
 .board-desc { margin: 4px 0 0; color: var(--text-muted); font-size: var(--text-sm); }
 .header-actions { display: flex; align-items: center; gap: var(--space-2); }
 .search-input { width: 220px; }
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.search-btn {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.search-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--color-primary, #5B8DB8);
+}
 .sort-select {
   padding: 4px 8px;
   border: 1px solid var(--border-default);

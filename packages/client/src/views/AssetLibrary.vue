@@ -58,12 +58,17 @@ function handleCampaignCreated(payload: { campaignId: string; recruitmentPostId:
 }
 
 const activeTab = ref<'modules' | 'rulesets' | 'stories' | 'announcements'>('modules');
-const search = ref('');
+const searchInput = ref('');
+const searchKeyword = ref('');
 const loading = ref(false);
 const rulesets = ref<Ruleset[]>([]);
 const modules = ref<Module[]>([]);
 const myModules = ref<Module[]>([]);
 const myRulesets = ref<Ruleset[]>([]);
+
+function applySearch() {
+  searchKeyword.value = searchInput.value.trim();
+}
 
 /* 筛选条件 */
 const filterRuleset  = ref('');
@@ -101,7 +106,7 @@ onMounted(async () => {
 /* ========== 本地过滤 ========== */
 const filteredModules = computed(() => {
   let list = modules.value;
-  const kw = search.value.trim().toLowerCase();
+  const kw = searchKeyword.value.toLowerCase();
   if (kw) list = list.filter(m => (m.title ?? m.name ?? '').toLowerCase().includes(kw));
   if (filterRuleset.value)   list = list.filter(m => m.ruleset_name === filterRuleset.value);
   if (filterDifficulty.value) list = list.filter(m => m.difficulty === filterDifficulty.value);
@@ -115,7 +120,7 @@ const filteredModules = computed(() => {
 
 const filteredRulesets = computed(() => {
   let list = rulesets.value;
-  const kw = search.value.trim().toLowerCase();
+  const kw = searchKeyword.value.toLowerCase();
   if (kw) list = list.filter(r => r.name.toLowerCase().includes(kw));
   return list;
 });
@@ -173,7 +178,10 @@ function ratingLabel(r?: number) {
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
-      <TInput v-model="search" placeholder="搜索..." style="width: 200px;" />
+      <div class="search-group">
+        <TInput v-model="searchInput" placeholder="搜索..." style="width: 200px;" @keydown.enter.prevent="applySearch" />
+        <TButton type="secondary" size="sm" @click="applySearch">搜索</TButton>
+      </div>
       <template v-if="activeTab === 'modules'">
         <select v-model="filterRuleset"   class="filter-select"><option value="">全部规则</option></select>
         <select v-model="filterTheme"     class="filter-select"><option value="">全部题材</option></select>
@@ -406,6 +414,11 @@ function ratingLabel(r?: number) {
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 .filter-select {
   height: 36px;

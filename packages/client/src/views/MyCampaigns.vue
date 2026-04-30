@@ -8,6 +8,7 @@ import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import { api } from '../utils/api';
+import { showApiError } from '../utils/feedback';
 
 const router = useRouter();
 type CampaignListItem = {
@@ -26,20 +27,29 @@ const createOptionsLoading = ref(false);
 
 // 房间状态 Tab
 const statusFilter = ref<'running' | 'preparing' | 'ended'>('running');
+const searchInput = ref('');
+const searchKeyword = ref('');
 const STATUS_TABS = [
   { key: 'running'   as const, label: '进行中' },
   { key: 'preparing' as const, label: '待开始' },
   { key: 'ended'     as const, label: '已结束' },
 ];
 const filteredCampaigns = computed(() =>
-  campaigns.value.filter(c =>
+  campaigns.value.filter(c => {
+    const byStatus =
     statusFilter.value === 'running'
       ? (c.status === 'running' || c.status === 'paused')
       : statusFilter.value === 'preparing'
         ? c.status === 'preparing'
-        : c.status === 'ended'
-  )
+        : c.status === 'ended';
+    const byKeyword = !searchKeyword.value || c.name.toLowerCase().includes(searchKeyword.value.toLowerCase());
+    return byStatus && byKeyword;
+  })
 );
+
+function applySearch() {
+  searchKeyword.value = searchInput.value.trim();
+}
 
 const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 'default' | 'danger' }> = {
   running: { label: '进行中', color: 'success' },
@@ -52,7 +62,9 @@ async function loadCampaigns() {
   loading.value = true;
   try {
     campaigns.value = await api.get<CampaignListItem[]>('/campaigns');
-  } catch { ElMessage.error('加载失败'); }
+  } catch (error: unknown) {
+    showApiError(error, '加载失败');
+  }
   finally { loading.value = false; }
 }
 
@@ -105,7 +117,9 @@ async function createCampaign() {
     showCreateDialog.value = false;
     createForm.value = { name: '', ruleset_id: '', module_id: '' };
     await loadCampaigns();
-  } catch (e: unknown) { ElMessage.error((e as Error)?.message || '创建失败'); }
+  } catch (e: unknown) {
+    showApiError(e, '创建失败');
+  }
   finally { createLoading.value = false; }
 }
 
@@ -121,7 +135,9 @@ async function joinCampaign() {
     showJoinDialog.value = false;
     joinCode.value = '';
     router.push(`/room/${campaign.id}`);
-  } catch (e: unknown) { ElMessage.error((e as Error)?.message || '加入失败，请检查房间码'); }
+  } catch (e: unknown) {
+    showApiError(e, '加入失败，请检查房间码');
+  }
   finally { joinLoading.value = false; }
 }
 
@@ -136,6 +152,16 @@ function copyCode(code: string) {
     <div class="page-header">
       <h1 class="page-title">我的房间</h1>
       <div class="header-actions">
+        <div class="search-group">
+          <ElInput
+            v-model="searchInput"
+            placeholder="搜索房间名"
+            clearable
+            @keydown.enter.prevent="applySearch"
+            @clear="applySearch"
+          />
+          <TButton type="secondary" @click="applySearch">搜索</TButton>
+        </div>
         <TButton type="secondary" @click="showJoinDialog = true">加入房间</TButton>
         <TButton type="primary" @click="openCreateDialog">创建房间</TButton>
       </div>
@@ -218,6 +244,15 @@ function copyCode(code: string) {
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
 .page-title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text-primary); }
 .header-actions { display: flex; gap: var(--space-2); }
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 220px;
+}
+.search-group :deep(.el-input) {
+  min-width: 0;
+}
 .tab-bar {
   display: flex;
   gap: var(--space-1);
@@ -245,4 +280,14 @@ function copyCode(code: string) {
 .role-badge.player { background: #dbeafe; color: #1e40af; }
 .room-code { font-family: var(--font-mono); font-size: var(--text-sm); cursor: pointer; color: var(--color-text-secondary); letter-spacing: 2px; }
 .room-code:hover { color: var(--color-accent); }
+@media (max-width: 900px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .header-actions {
+    flex-wrap: wrap;
+  }
+}
 </style>

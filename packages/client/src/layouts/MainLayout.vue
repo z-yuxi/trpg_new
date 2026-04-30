@@ -6,6 +6,7 @@ import { useTheme } from '../composables/useTheme';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 import { useNotificationStore } from '../stores/notification-store';
+import { shouldShowBackButton } from '../composables/usePageInteractionPolicy';
 
 const { currentTheme, toggleTheme } = useTheme();
 const router = useRouter();
@@ -15,7 +16,7 @@ const notifStore = useNotificationStore();
 
 const currentPath = computed(() => route?.path ?? '/');
 const pageTitle = computed(() => (route?.meta?.title as string) ?? '');
-const canGoBack = computed(() => currentPath.value !== '/');
+const canGoBack = computed(() => shouldShowBackButton(route));
 const showCreatorEntry = computed(() => authStore.isLoggedIn && authStore.isCreator);
 const isInCreator = computed(() => currentPath.value.startsWith('/creator'));
 

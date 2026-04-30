@@ -7,6 +7,7 @@ import TTag from '../../components/base/TTag.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
 import { api } from '../../utils/api';
+import { showApiError } from '../../utils/feedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { getApplyButtonState } from '../../composables/useApplyButtonState';
 
@@ -60,6 +61,7 @@ const filterWeekday = ref<string>('all');
 const filterTimeSlot = ref<string>('all');
 const filterMinSeats = ref<'all' | '1' | '2'>('all');
 const sort = ref<'latest' | 'oldest' | 'hottest'>('latest');
+const keywordInput = ref('');
 const keyword = ref('');
 
 const weekdayOptions = [
@@ -152,11 +154,16 @@ async function loadPosts() {
     const result = await api.get<{ data: RecruitmentPostVM[]; total: number }>(`/recruitment?${query.toString()}`);
     posts.value = result.data ?? [];
     total.value = result.total ?? 0;
-  } catch (err: any) {
-    ElMessage.error(err?.message ?? '加载招募帖失败');
+  } catch (err: unknown) {
+    showApiError(err, '加载招募帖失败');
   } finally {
     loading.value = false;
   }
+}
+
+function applyKeywordSearch() {
+  keyword.value = keywordInput.value.trim();
+  resetPageAndReload();
 }
 
 function goDetail(id: string) {
@@ -184,8 +191,8 @@ async function handleCardAction(event: Event, post: RecruitmentPostVM) {
         await api.post(`/recruitment/applications/${post.my_application_id}/confirm`, {});
         ElMessage.success('已确认入团！');
         await loadPosts();
-      } catch (err: any) {
-        ElMessage.error(err?.message ?? '确认失败');
+      } catch (err: unknown) {
+        showApiError(err, '确认失败');
       } finally {
         confirmingId.value = null;
       }
@@ -207,8 +214,6 @@ watch(() => props.fixedType, () => {
   resetPageAndReload();
 });
 watch([filterStatus, filterRuleset, filterType, filterTag, filterWeekday, filterTimeSlot, filterMinSeats, sort], resetPageAndReload);
-watch(keyword, () => { page.value = 1; });
-
 onMounted(loadPosts);
 </script>
 
@@ -219,7 +224,16 @@ onMounted(loadPosts);
       <span>{{ props.mine === 'posted' ? '可按标签、规则包、状态筛选' : '集中查看自己所有申请状态' }}</span>
     </div>
     <div class="toolbar">
-      <ElInput v-model="keyword" placeholder="按标题或描述搜索" clearable @keyup.enter="resetPageAndReload" @clear="resetPageAndReload" />
+      <div class="search-group">
+        <ElInput
+          v-model="keywordInput"
+          placeholder="按标题或描述搜索"
+          clearable
+          @keyup.enter="applyKeywordSearch"
+          @clear="applyKeywordSearch"
+        />
+        <button class="search-btn" @click="applyKeywordSearch">搜索</button>
+      </div>
       <ElSelect v-if="!props.fixedType" v-model="filterType" @change="resetPageAndReload">
         <ElOption label="全部类型" value="all" />
         <ElOption label="GM 招玩家" value="gm_recruit" />
@@ -365,6 +379,30 @@ onMounted(loadPosts);
   grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(110px, 160px));
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.search-group :deep(.el-input) {
+  flex: 1;
+  min-width: 0;
+}
+.search-btn {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.search-btn:hover {
+  border-color: var(--color-primary, #5B8DB8);
+  color: var(--text-primary);
 }
 /* 时间/席位筛选折行 */
 .toolbar > *:nth-child(n+5) {

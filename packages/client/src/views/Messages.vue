@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { ElMessage } from 'element-plus';
 import EmptyState from '../components/base/EmptyState.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { api } from '../utils/api';
+import { showApiError } from '../utils/feedback';
 import { useAuthStore } from '../stores/auth-store';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -35,23 +35,28 @@ const inputText = ref('');
 const loadingConvs = ref(false);
 const loadingMsgs = ref(false);
 const sending = ref(false);
-const searchQuery = ref('');
+const searchInput = ref('');
+const searchKeyword = ref('');
 const mobileView = ref<'list' | 'chat'>('list');
 
 const filteredConversations = computed(() =>
   conversations.value.filter(c =>
-    !searchQuery.value || c.other_user.nickname.includes(searchQuery.value)
+    !searchKeyword.value || c.other_user.nickname.includes(searchKeyword.value)
   )
 );
+
+function applySearch() {
+  searchKeyword.value = searchInput.value.trim();
+}
 
 async function loadConversations() {
   loadingConvs.value = true;
   try {
     const data = await api.get<Conversation[]>('/messages/conversations');
     conversations.value = data;
-  } catch {
-    // API 未就绪时静默失败，展示空状态
+  } catch (error) {
     conversations.value = [];
+    showApiError(error);
   } finally {
     loadingConvs.value = false;
   }
@@ -69,8 +74,9 @@ async function openConversation(conv: Conversation) {
       await api.put(`/messages/conversations/${conv.id}/read`, {}).catch(() => {});
       conv.unread_count = 0;
     }
-  } catch {
+  } catch (error) {
     messages.value = [];
+    showApiError(error);
   } finally {
     loadingMsgs.value = false;
   }
@@ -95,11 +101,11 @@ async function sendMessage() {
     // 替换临时消息
     const idx = messages.value.findIndex(m => m.id === tempMsg.id);
     if (idx !== -1) messages.value[idx] = sent;
-  } catch {
+  } catch (error) {
     // 标记发送失败
     const idx = messages.value.findIndex(m => m.id === tempMsg.id);
     if (idx !== -1) (messages.value[idx] as any)._failed = true;
-    ElMessage.error('发送失败，请重试');
+    showApiError(error, '发送失败，请重试');
   } finally {
     sending.value = false;
   }
@@ -128,8 +134,8 @@ onMounted(async () => {
         conversations.value.unshift(conv);
       }
       await openConversation(conv);
-    } catch {
-      ElMessage.warning('无法打开该会话');
+    } catch (error) {
+      showApiError(error, '无法打开该会话');
     }
     // 清除 query 参数
     router.replace({ path: '/messages' });
@@ -145,19 +151,27 @@ onMounted(async () => {
         <span class="conv-title">私信</span>
       </div>
       <div class="conv-search">
-        <input v-model="searchQuery" class="search-input" placeholder="搜索会话" />
+        <div class="search-row">
+          <input
+            v-model="searchInput"
+            class="search-input"
+            placeholder="搜索会话"
+            @keydown.enter.prevent="applySearch"
+          />
+          <button class="search-btn" @click="applySearch">搜索</button>
+        </div>
       </div>
 
       <div v-if="loadingConvs" class="conv-loading">加载中…</div>
 
       <EmptyState
-        v-else-if="filteredConversations.length === 0 && !searchQuery"
+        v-else-if="filteredConversations.length === 0 && !searchKeyword"
         title="暂无私信"
         :show-action="true"
         action-text="去社区发现有趣玩家"
         @action="router.push('/discuss')"
       />
-      <div v-else-if="filteredConversations.length === 0 && searchQuery" class="conv-empty-search">
+      <div v-else-if="filteredConversations.length === 0 && searchKeyword" class="conv-empty-search">
         未找到相关会话
       </div>
 
@@ -264,11 +278,32 @@ onMounted(async () => {
 }
 .conv-title { font-size: var(--text-base); font-weight: 700; color: var(--color-text-primary); }
 .conv-search { padding: var(--space-2) var(--space-3); }
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .search-input {
-  width: 100%; padding: 6px var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 6px var(--space-2);
   border: 1px solid var(--color-card-border); border-radius: var(--radius-md);
   background: var(--color-page-bg); color: var(--color-text-primary);
   font-size: var(--text-sm); box-sizing: border-box; outline: none;
+}
+.search-btn {
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.search-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-accent, #2563eb);
 }
 .conv-loading, .conv-empty-search {
   padding: var(--space-4);

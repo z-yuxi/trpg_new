@@ -7,6 +7,8 @@ declare module 'vue-router' {
     requiresAuth?: boolean;
     requiresCreator?: boolean;
     title?: string;
+    disableBack?: boolean;
+    isPrimaryTab?: boolean;
   }
 }
 
@@ -16,11 +18,11 @@ const routes = [
     component: () => import('../layouts/MainLayout.vue'),
     children: [
       // 根路径：未登录显示首页，已登录跳探索（由 beforeEach 处理）
-      { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页' } },
+      { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页', disableBack: true } },
       // 探索
-      { path: 'explore', name: 'Explore', component: () => import('../views/AssetLibrary.vue'), meta: { title: '探索' } },
+      { path: 'explore', name: 'Explore', component: () => import('../views/AssetLibrary.vue'), meta: { title: '探索', isPrimaryTab: true } },
       // 招募
-      { path: 'recruit', name: 'Recruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募' } },
+      { path: 'recruit', name: 'Recruit', component: () => import('../views/community/RecruitSection.vue'), meta: { title: '招募', isPrimaryTab: true } },
       { path: 'recruit/:id', name: 'RecruitDetail', component: () => import('../views/community/RecruitmentDetail.vue'), meta: { title: '招募详情' } },
       // 房间（原我的团）
       { path: 'rooms', name: 'Rooms', component: () => import('../views/MyCampaigns.vue'), meta: { title: '房间' } },
@@ -28,15 +30,16 @@ const routes = [
       {
         path: 'discuss',
         component: () => import('../views/Community.vue'),
-        meta: { title: '讨论' },
+        meta: { title: '讨论', isPrimaryTab: true },
         children: [
           { path: '', redirect: { path: '/discuss/tips' } },
-          { path: ':board', name: 'DiscussBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
+          { path: ':board', name: 'DiscussBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区', isPrimaryTab: true } },
         ],
       },
       { path: 'discuss/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
       // 团途（原个人中心）
-      { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Personal.vue'), meta: { title: '团途' } },
+      { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Personal.vue'), meta: { title: '团途', isPrimaryTab: true } },
+      { path: 'journey', redirect: '/tuantu' },
       { path: 'tuantu/characters', name: 'TuantuCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '角色档案' } },
       { path: 'tuantu/assets', name: 'TuantuAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '个人馆藏', requiresAuth: true } },
       // 通知中心（独立页）
@@ -74,16 +77,10 @@ const routes = [
     ],
   },
   {
-    path: '/module/:id',
-    name: 'ModuleViewer',
-    component: () => import('../views/ModuleViewer.vue'),
-    meta: { title: '模组阅览' },
-  },
-  {
     path: '/ruleset/:id',
     name: 'RulesetDetail',
     component: () => import('../views/RulesetDetail.vue'),
-    meta: { title: '规则包阅览' },
+    meta: { title: '规则集详情' },
   },
   {
     path: '/room/:id',
@@ -128,7 +125,7 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
-    meta: { title: '登录' },
+    meta: { title: '登录', disableBack: true },
   },
   {
     path: '/403',
