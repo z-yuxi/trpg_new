@@ -6,6 +6,7 @@ import { socketClient } from '../../socket/socket-client';
 import { listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount } from '../../api/notifications';
 import type { UserNotification } from '@trpg/shared';
 import { useRouter } from 'vue-router';
+import { useNotificationStore } from '../../stores/notification-store';
 
 type Category = 'all' | 'trpg' | 'community' | 'system';
 
@@ -15,6 +16,7 @@ const total = ref(0);
 const loading = ref(false);
 const unreadCount = ref(0);
 const router = useRouter();
+const notifStore = useNotificationStore();
 
 const tabs: { label: string; value: Category }[] = [
   { label: '全部', value: 'all' },
@@ -28,18 +30,18 @@ const JUMP_MAP: Record<string, string> = {
   apply_approved: '/recruit',
   apply_rejected: '/recruit',
   waitlist_promoted: '/recruit',
-  group_success: '/rooms',
-  group_dissolved: '/rooms',
-  move_approved: '/rooms',
-  move_rejected: '/rooms',
-  move_cancelled: '/rooms',
+  group_success: '/my-campaigns',
+  group_dissolved: '/my-campaigns',
+  move_approved: '/my-campaigns',
+  move_rejected: '/my-campaigns',
+  move_cancelled: '/my-campaigns',
   comment_floor: '/discuss',
   comment_reply: '/discuss',
   at_mention: '/discuss',
   post_featured: '/discuss',
   feature_rejected: '/discuss',
-  achievement_unlocked: '/tuantu',
-  badge_earned: '/tuantu',
+  achievement_unlocked: '/personal',
+  badge_earned: '/personal',
 };
 
 async function fetchNotifications() {
@@ -67,6 +69,7 @@ async function markAsRead(n: UserNotification) {
     await markNotificationRead(n.id).catch(() => {});
     n.is_read = true;
     unreadCount.value = Math.max(0, unreadCount.value - 1);
+    notifStore.setUnreadCount(Math.max(0, notifStore.unreadCount - 1));
   }
   // 跳转关联内容
   const target = JUMP_MAP[n.type] ?? null;
@@ -83,8 +86,13 @@ async function markAllAsRead() {
   try {
     await markAllNotificationsRead(activeCategory.value !== 'all' ? { category: activeCategory.value } : {});
     notifications.value.forEach(n => { n.is_read = true; });
-    if (activeCategory.value === 'all') unreadCount.value = 0;
-    else await fetchUnreadCount();
+    if (activeCategory.value === 'all') {
+      unreadCount.value = 0;
+      notifStore.setUnreadCount(0);
+    } else {
+      await fetchUnreadCount();
+      notifStore.fetchUnreadCount();
+    }
     ElMessage.success('已全部标为已读');
   } catch { /* ignore */ }
 }

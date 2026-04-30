@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
+import { paymentService, PaymentError } from '../services/payment-service';
 
 const router: IRouter = Router();
 
@@ -196,29 +197,70 @@ router.post('/webhook/:channel', async (req, res) => {
     status?: string;
   };
 
+  if (!order_id || !transaction_id) {
+    res.status(400).json({ error: 'Missing order_id or transaction_id' });
+    return;
+  }
+
+  // 标准化渠道状态字段（微信用 SUCCESS/FAIL，支付宝用 paid/failed）
+  const callbackStatus: 'paid' | 'failed' =
+    status === 'paid' || status === 'SUCCESS' ? 'paid' : 'failed';
+
+  try {
+    const result = await paymentService.handleCallback({
+      orderId: order_id,
+      transactionId: transaction_id,
+      callbackStatus,
+      rawPayload: req.body as Record<string, unknown>,
+    });
+    res.json({ ok: result.ok, idempotent: result.idempotent ?? false });
+  } catch (err: unknown) {
+    if (err instanceof PaymentError) {
+      res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Webhook processing failed' });
+  }
+});
+
+// GET /api/payments/access/:type/:id — 检查当前用户是否有内容访问权限
+router.get('/access/:type/:id', authMiddleware, async (req, res) => {
+  const { type, id } = req.params;
+  if (type !== 'module' && type !== 'ruleset') {
+    res.status(400).json({ error: 'Invalid content type' });
+    return;
+  }
+  try {
+    const hasAccess = await paymentService.hasContentAccess(
+      req.user!.id,
+      type as 'module' | 'ruleset',
+      id,
+    );
+    res.json({ has_access: hasAccess });
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Query failed' });
+  }
+});
+
+// POST /api/payments/admin/manual-grant — 运营补单（需 admin 权限）
+router.post('/admin/manual-grant', authMiddleware, async (req, res) => {
+  const user = req.user!;
+  if (!Array.isArray(user.user_type) || !user.user_type.includes('admin')) {
+    res.status(403).json({ error: 'Admin only' });
+    return;
+  }
+  const { order_id, note } = req.body as { order_id?: string; note?: string };
   if (!order_id) { res.status(400).json({ error: 'Missing order_id' }); return; }
 
   try {
-    const row = await db('payment_orders').where({ id: order_id }).first();
-    if (!row) { res.status(404).json({ error: 'Order not found' }); return; }
-
-    // 幂等：已处理的订单直接返回成功
-    if (row.status === 'paid') { res.json({ ok: true }); return; }
-
-    if (status === 'paid' || status === 'SUCCESS') {
-      await db('payment_orders').where({ id: order_id }).update({
-        status: 'paid',
-        external_order_id: transaction_id ?? null,
-        paid_at: new Date(),
-      });
-      // TODO: 触发权益发放（content_access_grants 表，Phase 2 实现）
-    } else if (status === 'failed' || status === 'FAIL') {
-      await db('payment_orders').where({ id: order_id }).update({ status: 'failed' });
-    }
-
+    await paymentService.manualGrant({ orderId: order_id, operatorId: user.id, note });
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Webhook processing failed' });
+  } catch (err: unknown) {
+    if (err instanceof PaymentError) {
+      res.status(err.httpStatus).json({ error: err.message, code: err.code });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Manual grant failed' });
   }
 });
 
