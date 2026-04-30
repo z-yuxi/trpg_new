@@ -476,16 +476,39 @@ onMounted(async () => {
     if (data.character_id === characterId.value) {
       switchScene(data.to_scene_id);
     }
+  });
 
-    // 移动执行后，从 pendingMoves 中移除（已被审批/执行）
-    if (isGm.value && data.move_id) {
+  // 玩家自己的移动申请被批准
+  socketClient.onMoveApproved((data) => {
+    ElMessage.success('移动申请已批准，正在前往目标场景');
+    // pendingMoves 通过 position_changed 事件触发的 roomCharacters 更新来间接体现
+    // 这里额外从 GM 的 pendingMoves badge 列表中清除
+    if (isGm.value) {
       pendingMoves.value = pendingMoves.value.filter((m) => m.id !== data.move_id);
     }
   });
 
+  // 玩家自己的移动申请被拒绝
+  socketClient.onMoveRejected((data) => {
+    ElMessage.warning(data.reason ? `移动申请被拒绝：${data.reason}` : '移动申请已被 GM 拒绝');
+    if (isGm.value) {
+      pendingMoves.value = pendingMoves.value.filter((m) => m.id !== data.move_id);
+    }
+  });
+
+  // 消息发送频率限制
+  socketClient.onRateLimited((data) => {
+    ElMessage.warning(data.message ?? '发送过于频繁，请稍候再试');
+  });
+
+  // Socket 通用错误提示
+  const roomSocket = socketClient.getRoomSocket() as any;
+  roomSocket?.on?.('error_message', (data: { message: string }) => {
+    ElMessage.error(data?.message ?? '发生未知错误');
+  });
+
   // GM: 监听新移动申请到达，更新 badge
   if (isGm.value) {
-    const roomSocket = socketClient.getRoomSocket() as any;
     roomSocket?.on?.('move_requested', (data: any) => {
       if (data?.move) pendingMoves.value.push(data.move);
     });
@@ -494,19 +517,15 @@ onMounted(async () => {
     });
   }
 
-  // 角色状态同步（HP/MP/SAN 等）
-  (socketClient as any).on?.('character_state_sync', (data: {
-    character_id: string;
-    derived_current?: Record<string, { current: number; max: number }>;
-    truncated_fields?: string[];
-  }) => {
-    if (data.character_id === characterId.value && data.truncated_fields?.length) {
-      ElMessage.warning(`${data.truncated_fields.join('、')} 超过上限，已自动截断`);
+  // 角色状态同步（HP/MP/SAN 等属性超限截断提示）
+  socketClient.onCharacterStateSync((snapshot) => {
+    const data = snapshot as any;
+    if (data.character_id === characterId.value && Array.isArray(data.truncated_fields) && data.truncated_fields.length) {
+      ElMessage.warning(`${(data.truncated_fields as string[]).join('、')} 超过上限，已自动截断`);
     }
   });
 
   // 私密场 OB 授权变更通知（发给被授权/被撤销用户）
-  const roomSocket = socketClient.getRoomSocket() as any;
   roomSocket?.on?.('ob_permission_granted', async (data: { scene_id?: string; user_id?: string }) => {
     if (data?.user_id && data.user_id !== authStore.userId) return;
     ElMessage.info('你获得了一个私密场的 OB 旁听权限');
