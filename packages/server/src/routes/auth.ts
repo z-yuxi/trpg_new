@@ -5,6 +5,7 @@ import { userService } from '../services/user-service';
 import { authService } from '../services/auth-service';
 import { AppError } from '../utils/app-error';
 import { authMiddleware } from '../middleware/auth';
+import { metrics } from '../utils/business-metrics';
 
 const router: IRouter = Router();
 
@@ -51,6 +52,7 @@ router.post('/register', registerLimiter, async (req, res) => {
   try {
     const user = await userService.register(parsed.data);
     const tokens = authService.generateTokens(user);
+    metrics.inc('auth_register');
     res.status(201).json({ user: userService.toSafeUser(user), tokens });
   } catch (err: unknown) {
     // 统一返回 400 + 通用消息，避免通过不同状态码暴露手机号是否已注册
@@ -74,8 +76,10 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
   try {
     const { user, tokens } = await authService.login(parsed.data.phone, parsed.data.password);
+    metrics.inc('auth_login');
     res.json({ user: userService.toSafeUser(user), tokens });
   } catch {
+    metrics.inc('auth_login_failed');
     res.status(401).json({ error: '手机号或密码错误' });
   }
 });

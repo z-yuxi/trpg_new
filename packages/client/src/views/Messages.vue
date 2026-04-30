@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import SvgIcon from '../components/SvgIcon.vue';
-import { listConversations, getMessages, markConversationRead, sendMessage, createConversation } from '../api/messages';
+import { listConversations, getMessages, markConversationRead, sendMessage as sendDirectMessage, createConversation } from '../api/messages';
 import { showApiError } from '../utils/feedback';
 import { useAuthStore } from '../stores/auth-store';
 import { useRouter, useRoute } from 'vue-router';
@@ -97,10 +97,16 @@ async function sendMessage() {
   messages.value.push(tempMsg);
   sending.value = true;
   try {
-    const sent = await sendMessage(activeConv.value.id, { content });
+    const sent = await sendDirectMessage(activeConv.value.id, { content });
     // 替换临时消息
     const idx = messages.value.findIndex(m => m.id === tempMsg.id);
     if (idx !== -1) messages.value[idx] = sent;
+    // 更新会话列表预览
+    const conv = conversations.value.find(c => c.id === activeConv.value!.id);
+    if (conv) {
+      conv.last_message = content;
+      conv.last_message_at = sent.created_at;
+    }
   } catch (error) {
     // 标记发送失败
     const idx = messages.value.findIndex(m => m.id === tempMsg.id);

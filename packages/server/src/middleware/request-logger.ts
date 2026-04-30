@@ -45,7 +45,10 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
   res.on('finish', () => {
     const duration_ms = Date.now() - start;
     const status = res.statusCode;
-    const data = { method: req.method, path: req.path, status, duration_ms, ip };
+    // request_id 由 requestIdMiddleware 注入（需在本中间件之前注册）
+    const request_id = req.requestId;
+    const data: Record<string, unknown> = { method: req.method, path: req.path, status, duration_ms, ip };
+    if (request_id) data.request_id = request_id;
 
     if (status >= 500) {
       logLine('ERROR', data);

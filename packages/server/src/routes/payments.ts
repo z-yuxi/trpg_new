@@ -17,6 +17,8 @@ import { authMiddleware } from '../middleware/auth';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import { paymentService, PaymentError } from '../services/payment-service';
+import { metrics } from '../utils/business-metrics';
+import { paymentCreateLimiter, paymentWebhookLimiter } from '../middleware/rate-limiter';
 
 const router: IRouter = Router();
 
@@ -28,7 +30,7 @@ const createOrderSchema = z.object({
 });
 
 // POST /api/payments/orders — 创建内容购买订单
-router.post('/orders', authMiddleware, async (req, res) => {
+router.post('/orders', authMiddleware, paymentCreateLimiter, async (req, res) => {
   const parsed = createOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
@@ -95,6 +97,7 @@ router.post('/orders', authMiddleware, async (req, res) => {
       pay_url: null, // 公测期间不接入真实支付
       created_at: new Date().toISOString(),
     });
+    metrics.inc('order_created');
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Order creation failed' });
   }
@@ -172,7 +175,7 @@ router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
 
 // POST /api/payments/webhook/:channel — 三方支付回调
 // WARNING: 生产上线前必须替换为真实签名验证逻辑，当前仅骨架示例。
-router.post('/webhook/:channel', async (req, res) => {
+router.post('/webhook/:channel', paymentWebhookLimiter, async (req, res) => {
   const channel = req.params.channel;
   if (!['alipay', 'wechat'].includes(channel)) {
     res.status(400).json({ error: 'Unknown channel' });
@@ -213,8 +216,16 @@ router.post('/webhook/:channel', async (req, res) => {
       callbackStatus,
       rawPayload: req.body as Record<string, unknown>,
     });
+    metrics.inc('payment_callback');
+    if (callbackStatus === 'paid') {
+      metrics.inc(result.idempotent ? 'payment_callback' : 'payment_succeeded');
+      if (!result.idempotent) metrics.inc('grant_success');
+    } else {
+      metrics.inc('payment_failed');
+    }
     res.json({ ok: result.ok, idempotent: result.idempotent ?? false });
   } catch (err: unknown) {
+    metrics.inc('grant_failed');
     if (err instanceof PaymentError) {
       res.status(err.httpStatus).json({ error: err.message, code: err.code });
       return;

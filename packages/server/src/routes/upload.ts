@@ -3,6 +3,7 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth';
+import { uploadLimiter } from '../middleware/rate-limiter';
 
 const router: IRouter = Router();
 const uploadsDir = path.resolve(process.cwd(), 'uploads');

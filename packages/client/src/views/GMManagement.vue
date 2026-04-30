@@ -8,6 +8,7 @@ import SvgIcon from '../components/SvgIcon.vue';
 import { useCampaignStore } from '../stores/campaign-store';
 import { useTheme } from '../composables/useTheme';
 import { api } from '../utils/api';
+import { listPendingMoves } from '../api/campaigns';
 import type { StoryTime, Scene, CampaignNpc, Campaign } from '@trpg/shared';
 
 type DirectorModule = 'now' | 'scenes' | 'npcs' | 'clues' | 'timeline' | 'settings';
@@ -67,11 +68,12 @@ function goBack() {
 async function loadData() {
   loading.value = true;
   try {
-    const [campaign, scenesData, npcsData, charsData] = await Promise.all([
+    const [campaign, scenesData, npcsData, charsData, pendingData] = await Promise.all([
       api.get<Campaign>(`/campaigns/${campaignId.value}`),
       api.get<Scene[]>(`/campaigns/${campaignId.value}/scenes`),
       api.get<CampaignNpc[]>(`/campaigns/${campaignId.value}/npcs`),
       api.get<Record<string, unknown>[]>(`/campaigns/${campaignId.value}/characters`),
+      listPendingMoves(campaignId.value).catch(() => []),
     ]);
 
     campaignStore.setCurrentCampaign(campaign);
@@ -85,6 +87,7 @@ async function loadData() {
       name: c['name'] as string,
       sceneId: c['scene_id'] as string | undefined,
     }));
+    pendingMovesCount.value = pendingData.length;
   } catch {
     ElMessage.error('数据加载失败');
   } finally {

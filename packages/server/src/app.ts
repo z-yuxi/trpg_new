@@ -6,8 +6,10 @@ import cors from 'cors';
 import routes from './routes/index';
 import { createSocketServer } from './socket';
 import { globalErrorHandler } from './utils/error-response';
+import { requestIdMiddleware } from './middleware/request-id';
 import { requestLogger } from './middleware/request-logger';
 import { auditLogger } from './middleware/audit-log';
+import { globalApiLimiter } from './middleware/rate-limiter';
 
 const app: Application = express();
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
@@ -20,6 +22,7 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').sp
 app.use(helmet());
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
+app.use(requestIdMiddleware); // 必须在 requestLogger 之前，注入 req.requestId
 app.use(requestLogger);
 app.use(auditLogger);
 app.use('/uploads', express.static(uploadsDir, {
@@ -28,7 +31,7 @@ app.use('/uploads', express.static(uploadsDir, {
     res.setHeader('Content-Disposition', 'inline');
   },
 }));
-app.use('/api', routes);
+app.use('/api', globalApiLimiter, routes);
 app.use(globalErrorHandler);
 
 export const httpServer = createServer(app);

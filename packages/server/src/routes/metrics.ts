@@ -3,6 +3,7 @@
  *
  * 所有端点均需 JWT 认证（生产环境建议加 IP 白名单或管理员角色校验）。
  *
+ * GET  /api/metrics/business                      进程级业务指标快照（5m 窗口 + 累计）
  * GET  /api/metrics/recruitment/funnel?days=7     漏斗快照
  * GET  /api/metrics/recruitment/daily?days=30     每日日报
  * GET  /api/metrics/recruitment/alerts?days=7     异常告警
@@ -11,6 +12,7 @@
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { recruitmentMetricsService } from '../services/recruitment-metrics-service';
+import { metrics } from '../utils/business-metrics';
 
 const router: IRouter = Router();
 
@@ -66,6 +68,11 @@ router.post('/recruitment/cache/invalidate', authMiddleware, adminMiddleware, as
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Invalidate failed' });
   }
+});
+
+// ── 进程级业务指标快照 ─────────────────────────────────────────────────────────
+router.get('/business', authMiddleware, adminMiddleware, (_req, res) => {
+  res.json(metrics.snapshot());
 });
 
 export default router;
