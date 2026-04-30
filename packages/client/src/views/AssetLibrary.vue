@@ -153,7 +153,7 @@ function ratingLabel(r?: number) {
         规则包
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'stories' }" @click="activeTab = 'stories'">
-        故事坊
+        故事录
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'announcements' }" @click="activeTab = 'announcements'">
         公示处
@@ -277,12 +277,12 @@ function ratingLabel(r?: number) {
       </div>
     </template>
 
-    <!-- 故事坊 -->
+    <!-- 故事录 -->
     <template v-else-if="activeTab === 'stories'">
       <EmptyState
         icon-name=""
         illustration-name="illust-empty"
-        title="故事坊"
+        title="故事录"
         description="跑完一段故事？把它记录下来，分享给其他玩家。（功能建设中）"
       />
     </template>

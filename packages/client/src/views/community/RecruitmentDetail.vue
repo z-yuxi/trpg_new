@@ -114,7 +114,7 @@ const appStatusMap: Record<string, string> = {
   pending:   '审核中',
   invited:   '已邀请',
   confirmed: '已确认',
-  waiting:   '候补中',
+  waiting:   '排队等候',
   rejected:  '已拒绝',
 };
 
@@ -321,7 +321,7 @@ onMounted(async () => {
         <!-- 玩家操作区 -->
         <div class="actions" v-if="!isOwner">
           <TButton v-if="canApply" type="primary" @click="showApplyDialog = true">
-            {{ detail.status === 'full' ? '加入候补' : '申请加入' }}
+            {{ detail.status === 'full' ? '加入候补' : '我想加入' }}
           </TButton>
           <TButton v-if="canConfirm" type="primary" @click="confirmJoin">确认入团</TButton>
           <div v-if="myApplication" class="my-status-row">
@@ -399,7 +399,7 @@ onMounted(async () => {
     </div>
 
     <!-- 申请对话框 -->
-    <ElDialog v-model="showApplyDialog" :title="detail?.status === 'full' ? '加入候补名单' : '申请加入'" width="520px">
+    <ElDialog v-model="showApplyDialog" :title="detail?.status === 'full' ? '加入候补名单' : '我想加入'" width="520px">
       <div class="apply-hint">仅显示与当前招募规则集一致的角色卡。</div>
       <ElSelect v-model="applyCharacterId" placeholder="选择角色卡（可选）" clearable style="width:100%;margin-bottom:12px">
         <ElOption v-for="ch in filteredCharacters" :key="ch.id" :label="`${ch.name} (${ch.ruleset_id})`" :value="ch.id" />
