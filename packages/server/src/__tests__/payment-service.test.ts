@@ -16,6 +16,7 @@ const mockDb = vi.mocked(db);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any {
   const rowsPromise = Promise.resolve(resolveRows);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const chain: Record<string, any> = {
     where:      vi.fn(),
     andWhere:   vi.fn(),
@@ -25,17 +26,22 @@ function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any
     limit:      vi.fn(),
     first:      vi.fn().mockResolvedValue(firstValue),
     update:     vi.fn().mockResolvedValue(1),
-    insert:     vi.fn().mockResolvedValue([1]),
+    // insert/onConflict/ignore 必须返回 chain 以支持链式
+    insert:     vi.fn(),
     onConflict: vi.fn(),
-    ignore:     vi.fn().mockResolvedValue(undefined),
+    ignore:     vi.fn(),
     returning:  vi.fn(),
     raw:        vi.fn().mockReturnValue('free_coins + 100'),
     then:       rowsPromise.then.bind(rowsPromise),
     catch:      rowsPromise.catch.bind(rowsPromise),
   };
-  for (const key of ['where', 'andWhere', 'whereRaw', 'select', 'orderBy', 'limit', 'onConflict', 'returning']) {
+  for (const key of ['where', 'andWhere', 'whereRaw', 'select', 'orderBy', 'limit', 'returning']) {
     chain[key].mockReturnValue(chain);
   }
+  // insert().onConflict().ignore() 链：每个都返回 chain（thenable）
+  chain.insert.mockReturnValue(chain);
+  chain.onConflict.mockReturnValue(chain);
+  chain.ignore.mockReturnValue(chain);
   return chain;
 }
 
@@ -152,12 +158,9 @@ describe('PaymentService', () => {
 
       mockTransaction((table: string) => {
         const chain = makeChain();
-        chain.insert.mockImplementation((data: Record<string, unknown>) => {
+        chain.insert.mockImplementation(() => {
           insertCalls.push(table);
-          if (table === 'content_access_grants') {
-            chain.onConflict.mockReturnValue(chain);
-          }
-          return Promise.resolve([1]);
+          return chain; // 保持可链式（支持 .onConflict().ignore()）
         });
         chain.update.mockImplementation(() => {
           updateCalls.push(table);
