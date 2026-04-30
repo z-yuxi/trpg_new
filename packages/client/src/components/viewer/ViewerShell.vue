@@ -285,10 +285,104 @@ const previewPercent = computed<number>(() => {
   return Math.round(ratio * 100);
 });
 
+// ─── 划线笔记 §14.6 ─────────────────────────────────────────────────────────
+
+interface Annotation {
+  id: string;
+  selected_text: string;
+  color: 'yellow' | 'green' | 'blue' | 'red';
+  note: string | null;
+  range_start: number;
+  range_end: number;
+}
+
+const annotations = ref<Annotation[]>([]);
+const annotationPanelOpen = ref(false);
+// 浮动工具栏
+const selectionToolbar = ref<{ visible: boolean; x: number; y: number; text: string; start: number; end: number }>({
+  visible: false, x: 0, y: 0, text: '', start: 0, end: 0,
+});
+// 编辑中的笔记
+const editingAnnotationId = ref<string | null>(null);
+const editingNote = ref('');
+
+async function loadAnnotations() {
+  if (!authStore.isLoggedIn) return;
+  try {
+    const rows = await api.get<Annotation[]>(
+      `/annotations?asset_type=${props.assetType}&asset_id=${props.assetId}`
+    );
+    annotations.value = rows;
+  } catch { /* ignore */ }
+}
+
+async function createAnnotation(color: Annotation['color'] = 'yellow') {
+  const { text, start, end } = selectionToolbar.value;
+  if (!text || !authStore.isLoggedIn) return;
+  try {
+    const row = await api.post<Annotation>('/annotations', {
+      asset_type: props.assetType,
+      asset_id: props.assetId,
+      selected_text: text,
+      color,
+      range_start: start,
+      range_end: end,
+    });
+    annotations.value.push(row);
+  } catch { /* ignore */ }
+  selectionToolbar.value.visible = false;
+  window.getSelection()?.removeAllRanges();
+}
+
+async function updateAnnotationNote(id: string) {
+  try {
+    const updated = await api.patch<Annotation>(`/annotations/${id}`, { note: editingNote.value });
+    const idx = annotations.value.findIndex(a => a.id === id);
+    if (idx !== -1) annotations.value[idx] = updated;
+  } catch { /* ignore */ }
+  editingAnnotationId.value = null;
+}
+
+async function deleteAnnotation(id: string) {
+  try {
+    await api.delete(`/annotations/${id}`);
+    annotations.value = annotations.value.filter(a => a.id !== id);
+  } catch { /* ignore */ }
+}
+
+function onContentMouseup(e: MouseEvent) {
+  if (!pluginFlags.value.annotation) return;
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+    selectionToolbar.value.visible = false;
+    return;
+  }
+  const text = sel.toString().trim().slice(0, 500);
+  // 计算字符偏移（基于内容区纯文本）
+  const contentEl = (e.currentTarget as HTMLElement);
+  const range = sel.getRangeAt(0);
+  const preRange = document.createRange();
+  preRange.setStart(contentEl, 0);
+  preRange.setEnd(range.startContainer, range.startOffset);
+  const start = preRange.toString().length;
+  const end = start + text.length;
+  // 工具栏定位
+  const rect = range.getBoundingClientRect();
+  selectionToolbar.value = {
+    visible: true,
+    x: rect.left + rect.width / 2,
+    y: rect.top + window.scrollY - 46,
+    text,
+    start,
+    end,
+  };
+}
+
 // ─── 生命周期 ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await loadAsset();
   await loadReadingProgress();
+  await loadAnnotations();
   window.addEventListener('scroll', onScroll, { passive: true });
   document.addEventListener('selectionchange', handleSelectionChange);
 });
@@ -367,6 +461,17 @@ function goBack() {
           <button v-if="pluginFlags.share" class="viewer-topbar__btn" aria-label="分享" @click="handleShare">
             <!-- TODO: 需要图标 share -->
             <SvgIcon name="icon-share" :size="20" />
+          </button>
+
+          <!-- 划线笔记 -->
+          <button
+            v-if="pluginFlags.annotation"
+            class="viewer-topbar__btn"
+            :class="{ 'viewer-topbar__btn--active': annotationPanelOpen }"
+            aria-label="我的笔记"
+            @click="annotationPanelOpen = !annotationPanelOpen"
+          >
+            <SvgIcon name="icon-annotation" :size="20" />
           </button>
 
           <!-- 更多操作 -->
@@ -489,6 +594,7 @@ function goBack() {
             :class="{ 'viewer-content--watermark': !!watermarkText }"
             :style="watermarkText ? { '--watermark-text': JSON.stringify(watermarkText) } : undefined"
             v-html="visibleContent"
+            @mouseup="onContentMouseup"
           />
 
           <!-- 试读边界提示 §14.3 §14.4 — 文案见 G01.16 -->
@@ -536,6 +642,30 @@ function goBack() {
 
         <!-- 品类专属右侧插件 -->
         <slot name="plugin-sidebar" :asset="asset" :perm="permLevel" />
+
+        <!-- 划线笔记面板 §14.6 -->
+        <div v-if="annotationPanelOpen && pluginFlags.annotation" class="viewer-annotation-panel">
+          <div class="annotation-panel__head">
+            <span>我的笔记 ({{ annotations.length }})</span>
+            <button class="annotation-panel__close" @click="annotationPanelOpen = false">×</button>
+          </div>
+          <div v-if="annotations.length === 0" class="annotation-panel__empty">选中正文文字开始划线</div>
+          <div v-for="ann in annotations" :key="ann.id" class="annotation-item" :class="`annotation-item--${ann.color}`">
+            <p class="annotation-item__text">“{{ ann.selected_text }}”</p>
+            <div v-if="editingAnnotationId === ann.id" class="annotation-item__edit">
+              <textarea v-model="editingNote" rows="3" class="annotation-item__textarea" />
+              <div class="annotation-item__edit-actions">
+                <button class="annotation-btn" @click="updateAnnotationNote(ann.id)">保存</button>
+                <button class="annotation-btn annotation-btn--ghost" @click="editingAnnotationId = null">取消</button>
+              </div>
+            </div>
+            <p v-else-if="ann.note" class="annotation-item__note">{{ ann.note }}</p>
+            <div class="annotation-item__actions">
+              <button class="annotation-btn annotation-btn--ghost" @click="() => { editingAnnotationId = ann.id; editingNote = ann.note ?? ''; }">编辑笔记</button>
+              <button class="annotation-btn annotation-btn--danger" @click="deleteAnnotation(ann.id)">删除</button>
+            </div>
+          </div>
+        </div>
       </aside>
 
     </div>
@@ -547,6 +677,26 @@ function goBack() {
 
     <!-- 遮罩（更多菜单打开时关闭用） -->
     <div v-if="moreMenuOpen" class="viewer-overlay" @click="closeMoreMenu" />
+
+    <!-- 划线浮动工具栏 §14.6 -->
+    <Teleport to="body">
+      <div
+        v-if="selectionToolbar.visible"
+        class="annotation-toolbar"
+        :style="{ left: selectionToolbar.x + 'px', top: selectionToolbar.y + 'px' }"
+        @mousedown.prevent
+      >
+        <button
+          v-for="color in ['yellow','green','blue','red'] as const"
+          :key="color"
+          class="annotation-toolbar__dot"
+          :class="`annotation-toolbar__dot--${color}`"
+          :title="{ yellow:'黄色标注', green:'绿色标注', blue:'蓝色标注', red:'红色标注' }[color]"
+          @click="createAnnotation(color)"
+        />
+        <button class="annotation-toolbar__cancel" @click="selectionToolbar.visible = false">✕</button>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1086,6 +1236,140 @@ function goBack() {
     border-color: var(--btn-primary-bg);
 
     &:hover { background: var(--btn-primary-hover); }
+  }
+}
+
+/* ── 划线笔记 §14.6 ─────────────────────────────────────────── */
+.annotation-toolbar {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-elevated, #fff);
+  border: 1px solid var(--border-light, #e0e0e0);
+  border-radius: 999px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  z-index: 9999;
+}
+
+.annotation-toolbar__dot {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform .1s;
+
+  &:hover { transform: scale(1.2); }
+  &--yellow { background: #fde68a; border-color: #f59e0b; }
+  &--green  { background: #bbf7d0; border-color: #10b981; }
+  &--blue   { background: #bfdbfe; border-color: #3b82f6; }
+  &--red    { background: #fecaca; border-color: #ef4444; }
+}
+
+.annotation-toolbar__cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary, #888);
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.viewer-annotation-panel {
+  background: var(--surface-page, #fafafa);
+  border-left: 1px solid var(--border-light, #eee);
+  padding: 12px;
+  overflow-y: auto;
+  max-height: calc(100vh - 80px);
+  position: sticky;
+  top: 70px;
+}
+
+.annotation-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.annotation-panel__close {
+  background: none; border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text-secondary, #888);
+}
+
+.annotation-panel__empty {
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.annotation-item {
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-left: 3px solid transparent;
+
+  &--yellow { background: #fffbeb; border-left-color: #f59e0b; }
+  &--green  { background: #f0fdf4; border-left-color: #10b981; }
+  &--blue   { background: #eff6ff; border-left-color: #3b82f6; }
+  &--red    { background: #fef2f2; border-left-color: #ef4444; }
+}
+
+.annotation-item__text {
+  font-size: 13px;
+  color: var(--text-secondary, #555);
+  margin: 0 0 4px;
+  font-style: italic;
+}
+
+.annotation-item__note {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  white-space: pre-wrap;
+}
+
+.annotation-item__textarea {
+  width: 100%;
+  border: 1px solid var(--border-light, #ddd);
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.annotation-item__edit-actions,
+.annotation-item__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.annotation-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--color-primary, #6c63ff);
+  background: var(--color-primary, #6c63ff);
+  color: #fff;
+  cursor: pointer;
+
+  &--ghost {
+    background: none;
+    color: var(--color-primary, #6c63ff);
+  }
+
+  &--danger {
+    border-color: #ef4444;
+    background: none;
+    color: #ef4444;
   }
 }
 </style>

@@ -14,7 +14,8 @@ import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
 import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
 import { deserializeFromGraph } from '../../utils/canvas-serializer';
 import { api, getToken } from '../../utils/api';
-import type { CommandGraph, RulesetRecipeSource } from '@trpg/shared';
+import type { CommandGraph, RulesetRecipeSource, ReaderSettings } from '@trpg/shared';
+import { READER_SETTINGS_PRESETS } from '@trpg/shared';
 
 interface SchemaField {
   name: string;
@@ -111,6 +112,55 @@ function onRecipeSaved(newSource: RulesetRecipeSource) {
 
 // ── form data ─────────────────────────────────────────────────────────
 const formName = ref(isNew ? (route.query.name as string) ?? '新规则包' : '');
+
+// ── 叙阅器设置 ───────────────────────────────────────────
+const readerSettingsPanelOpen = ref(false);
+const rsSaving = ref(false);
+
+function defaultReaderSettings(): ReaderSettings {
+  return {
+    plugin_flags: {
+      toc: true,
+      reading_progress: true,
+      share: true,
+      annotation: true,
+      import_campaign: false,
+      export_structured_data: false,
+      quote_house_rules: true,
+    },
+    protection_flags: {
+      anti_bulk_copy: false,
+      disable_public_comments: false,
+      disable_pdf_export: false,
+      trace_watermark: false,
+      embed_copyright_notice: false,
+      forbid_redistribution: false,
+    },
+    preview_policy: { preview_ratio: 0 },
+    appearance: { line_height: 'comfortable' },
+  };
+}
+
+const rsDraft = ref<ReaderSettings>(defaultReaderSettings());
+
+function applyPreset(key: keyof typeof READER_SETTINGS_PRESETS) {
+  rsDraft.value = JSON.parse(JSON.stringify(READER_SETTINGS_PRESETS[key]));
+}
+
+async function saveReaderSettings() {
+  if (!rulesetId || isNew) { ElMessage.warning('请先保存规则包'); return; }
+  rsSaving.value = true;
+  try {
+    await api.put(`/rulesets/${rulesetId}`, { reader_settings: rsDraft.value });
+    ElMessage.success('叙阅器设置已保存');
+    readerSettingsPanelOpen.value = false;
+  } catch (err) {
+    ElMessage.error('保存失败');
+    console.error(err);
+  } finally {
+    rsSaving.value = false;
+  }
+}
 const formVersion = ref('0.1.0');
 const formStatus = ref<'draft' | 'published' | 'deprecated'>('draft');
 const checkMode = ref<'roll_under' | 'roll_over' | 'dice_pool'>('roll_under');
@@ -333,6 +383,11 @@ async function fetchRuleset() {
         // legacy=false 的规则集默认进入 recipe 编辑模式
         if ((rs as any).legacy === false) editorMode.value = 'recipe';
       }
+      // 恢复叙阅器设置
+      const readerSettings = (rs as any).reader_settings;
+      if (readerSettings) {
+        rsDraft.value = JSON.parse(JSON.stringify(readerSettings));
+      }
       formData.value = rs;
   } catch { /* ignore */ }
 }
@@ -441,6 +496,7 @@ async function save() {
       supported_commands: supportedCommands.value,
     },
     ...graphPayload,
+    reader_settings: rsDraft.value,
   };
   try {
     if (isNew) {
@@ -513,6 +569,7 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
           <template v-if="yamlImporting">导入…</template>
           <template v-else><SvgIcon name="icon-upload" :size="12" /> 导入</template>
         </button>
+        <button class="action-btn" @click="readerSettingsPanelOpen = true">叙阅器设置</button>
         <button class="save-btn" @click="save" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button>
       </div>
     </div>
@@ -864,6 +921,77 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
       </section>
     </div>
   </div>
+
+  <!-- 叙阅器设置抽屉 -->
+  <Teleport to="body">
+    <div v-if="readerSettingsPanelOpen" class="rs-drawer" @click.self="readerSettingsPanelOpen = false">
+      <div class="rs-drawer__panel">
+        <div class="rs-drawer__head">
+          <h2>叙阅器设置</h2>
+          <button class="rs-drawer__close" @click="readerSettingsPanelOpen = false">×</button>
+        </div>
+        <div class="rs-drawer__body">
+          <!-- 快速预设 -->
+          <section>
+            <p class="rs-section__label">快速预设</p>
+            <div class="rs-presets">
+              <button class="rs-preset-btn" @click="applyPreset('paid_strict')">付费作品严保护</button>
+              <button class="rs-preset-btn" @click="applyPreset('free_open')">免费作品开放</button>
+              <button class="rs-preset-btn" @click="applyPreset('private')">纯私密创作</button>
+            </div>
+          </section>
+          <!-- 功能开关 -->
+          <section>
+            <p class="rs-section__label">功能开关</p>
+            <div class="rs-toggles">
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.annotation" />划线笔记</label>
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.toc" />章节目录</label>
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.reading_progress" />阅读进度记录</label>
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.share" />分享按钮</label>
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.quote_house_rules" />房规引用（规则包专属）</label>
+              <label><input type="checkbox" v-model="rsDraft.plugin_flags.export_structured_data" />结构化数据导出</label>
+            </div>
+          </section>
+          <!-- 内容保护 -->
+          <section>
+            <p class="rs-section__label">内容保护</p>
+            <div class="rs-toggles">
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.anti_bulk_copy" />防批量复制（≤200字）</label>
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.trace_watermark" />溯源水印（含 UID）</label>
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.disable_pdf_export" />禁止 PDF 导出</label>
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.disable_public_comments" />禁止公开划线评论</label>
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.embed_copyright_notice" />版权声明自动嵌入</label>
+              <label><input type="checkbox" v-model="rsDraft.protection_flags.forbid_redistribution" />禁止二次分发</label>
+            </div>
+          </section>
+          <!-- 游客试读 -->
+          <section>
+            <p class="rs-section__label">游客试读比例</p>
+            <div class="rs-field">
+              <input type="range" min="0" max="100" step="5"
+                :value="Math.round((rsDraft.preview_policy.preview_ratio ?? 0) * 100)"
+                @input="rsDraft.preview_policy.preview_ratio = +($event.target as HTMLInputElement).value / 100" />
+              <span class="rs-field__hint">{{ Math.round((rsDraft.preview_policy.preview_ratio ?? 0) * 100) }}%</span>
+            </div>
+          </section>
+          <!-- 正文行距 -->
+          <section>
+            <p class="rs-section__label">正文行距</p>
+            <div class="rs-radio-group">
+              <label v-for="opt in [['compact','紧凑'],['comfortable','适中'],['relaxed','宽松']]" :key="opt[0]">
+                <input type="radio" :value="opt[0]" v-model="rsDraft.appearance!.line_height" />
+                {{ opt[1] }}
+              </label>
+            </div>
+          </section>
+        </div>
+        <div class="rs-drawer__footer">
+          <button class="action-btn" @click="readerSettingsPanelOpen = false">取消</button>
+          <button class="save-btn" :disabled="rsSaving" @click="saveReaderSettings">{{ rsSaving ? '保存中…' : '保存设置' }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -1003,4 +1131,60 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .log-type { color: var(--text-muted); min-width: 120px; }
 .log-output { color: var(--text-primary); word-break: break-all; }
 .error-msg { font-size: var(--text-xs); color: #dc2626; font-family: var(--font-mono); }
+
+/* ── 叙阅器设置抽屉 ─────────────────────────────────────── */
+.rs-drawer {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1000;
+  display: flex; justify-content: flex-end;
+}
+.rs-drawer__panel {
+  background: var(--color-surface, #fff);
+  width: 420px; max-width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,.15);
+}
+.rs-drawer__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-default, #eee);
+}
+.rs-drawer__head h2 { margin: 0; font-size: 16px; }
+.rs-drawer__close {
+  background: none; border: none; font-size: 22px;
+  cursor: pointer; color: var(--text-secondary, #888); line-height: 1;
+}
+.rs-drawer__body {
+  flex: 1; overflow-y: auto;
+  padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+.rs-drawer__footer {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-default, #eee);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.rs-section__label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-secondary, #888);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin: 0 0 8px;
+}
+.rs-presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.rs-preset-btn {
+  padding: 4px 12px; font-size: 13px;
+  border: 1px solid var(--color-primary, #6c63ff);
+  border-radius: 999px; background: none;
+  color: var(--color-primary, #6c63ff);
+  cursor: pointer; transition: background .15s;
+}
+.rs-preset-btn:hover { background: color-mix(in srgb, var(--color-primary, #6c63ff) 10%, transparent); }
+.rs-toggles { display: flex; flex-direction: column; gap: 8px; }
+.rs-toggles label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.rs-field { display: flex; align-items: center; gap: 10px; }
+.rs-field input[type=range] { flex: 1; }
+.rs-field__hint { font-size: 13px; color: var(--text-secondary, #888); white-space: nowrap; }
+.rs-radio-group { display: flex; gap: 16px; }
+.rs-radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
 </style>

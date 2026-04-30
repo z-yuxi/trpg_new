@@ -22,6 +22,7 @@ import creatorEarningsRoutes from './creator-earnings';
 import directMessagesRoutes from './direct-messages';
 import aiRoutes from './ai';
 import readingProgressRoutes from './reading-progress';
+import annotationsRoutes from './annotations';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -82,5 +83,6 @@ router.use('/creator', creatorEarningsRoutes);
 router.use('/messages', directMessagesRoutes);
 router.use('/ai', aiRoutes);
 router.use('/reading-progress', readingProgressRoutes);
+router.use('/annotations', annotationsRoutes);
 
 export default router;
