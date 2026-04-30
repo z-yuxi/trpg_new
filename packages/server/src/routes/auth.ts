@@ -54,8 +54,10 @@ router.post('/register', registerLimiter, async (req, res) => {
     res.status(201).json({ user: userService.toSafeUser(user), tokens });
   } catch (err: unknown) {
     // 统一返回 400 + 通用消息，避免通过不同状态码暴露手机号是否已注册
-    const internalMsg = err instanceof Error ? err.message : String(err);
-    console.error(`[Register-DEBUG] err:`, internalMsg, (err as any)?.stack?.slice(0, 300));
+    if (process.env.NODE_ENV !== 'production') {
+      const internalMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[Register-DEBUG] err:`, internalMsg, (err as any)?.stack?.slice(0, 300));
+    }
     if (err instanceof AppError) {
       console.error(`[Register] ${err.userMessage}`);
     }

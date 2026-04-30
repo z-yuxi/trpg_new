@@ -45,12 +45,6 @@ export interface ServerToClientEvents {
     time_label: string;          // HH:MM 格式
     message_id: string;          // 插入聊天流的消息ID
   }) => void;
-  /** @deprecated 旧事件，保留兼容性 */
-  time_advanced: (data: {
-    old_time: StoryTime;
-    new_time: StoryTime;
-    triggered_moves: { move_id: string; character_id: string; to_scene_id: string }[];
-  }) => void;
   position_changed: (data: {
     character_id: string;
     from_scene_id: string;

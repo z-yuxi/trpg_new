@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import multer from 'multer';
+import path from 'path';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
 import { moduleService } from '../services/module-service';
@@ -8,9 +9,26 @@ import { db } from '../db';
 import type { CreateModuleRequest, UpdateModuleRequest, AutoSaveModuleRequest } from '@trpg/shared';
 
 const router: IRouter = Router();
+// 模组导入允许的扩展名与 MIME 类型（fileFilter 仅做前置过滤，Magic Bytes 校验在 handler 内完成）
+const IMPORT_ALLOWED_EXTS = new Set(['.md', '.txt', '.json', '.docx']);
+const IMPORT_ALLOWED_MIME_PREFIXES = ['text/', 'application/json', 'application/vnd.openxmlformats'];
+
 const importUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!IMPORT_ALLOWED_EXTS.has(ext)) {
+      cb(new Error('仅支持 .md、.txt、.json、.docx 格式的模组文件'));
+      return;
+    }
+    const mimeOk = IMPORT_ALLOWED_MIME_PREFIXES.some((p) => file.mimetype.startsWith(p));
+    if (!mimeOk) {
+      cb(new Error('文件 MIME 类型不被支持'));
+      return;
+    }
+    cb(null, true);
+  },
 });
 const importConfirmSchema = z.object({
   name: z.string().min(1).optional(),

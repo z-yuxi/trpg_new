@@ -378,7 +378,46 @@ interface CharacterInstance {
 }
 ```
 
-### 2.6 通用类型定义
+### 2.6 叙阅器配置结构
+
+```typescript
+interface ReaderSettings {
+  plugin_flags: {
+    annotation: boolean;
+    toc: boolean;
+    reading_progress: boolean;
+    share: boolean;
+    import_campaign?: boolean;
+    export_structured_data?: boolean;
+    quote_house_rules?: boolean;
+  };
+  protection_flags: {
+    anti_bulk_copy: boolean;
+    disable_public_comments: boolean;
+    disable_pdf_export: boolean;
+    trace_watermark: boolean;
+    embed_copyright_notice: boolean;
+    forbid_redistribution?: boolean;
+  };
+  preview_policy: {
+    preview_ratio?: number;
+    preview_section_ids?: string[];
+  };
+  appearance?: {
+    theme_color?: string;
+    font_family?: string;
+    line_height?: 'compact' | 'comfortable' | 'relaxed';
+  };
+}
+```
+
+说明：
+
+1. `ReaderSettings` 适用于模组、规则包、故事录等所有可阅览作品。
+2. 作品未显式配置时，前端按叙阅器默认策略渲染，后端按最严格权限校验兜底。
+3. 品类专属插件字段可为空，未配置即视为关闭。
+
+### 2.7 通用类型定义
 
 TypeScript
 
@@ -396,7 +435,7 @@ interface StoryTime {
 type SnowflakeId = string;  // 如 "1234567890123456789"
 ```
 
-### 2.7 社区反馈与作品互动结构
+### 2.8 社区反馈与作品互动结构
 
 ```typescript
 interface CampaignFeedback {
@@ -719,3 +758,21 @@ CREATE TABLE comment_likes (
 | created_at | timestamp | 是 | 收藏时间 |
 
 约束：`UNIQUE(user_id, product_id)`，同一用户对同一商品只能收藏一次。
+
+#### 5.5.5 作品叙阅器配置字段
+
+适用范围：挂载于 `modules`、`rulesets`、`story_posts` 等可阅览作品主表。
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:---:|------|
+| reader_settings | json | 否 | 叙阅器配置，结构见 `ReaderSettings` |
+| preview_ratio | decimal(4,3) | 否 | 试读比例，0-1；为空表示仅按章节白名单控制 |
+| watermark_enabled | boolean | 是 | 是否开启溯源水印，默认 `true`（付费作品） |
+| copy_limit_chars | int | 否 | 单次允许选中的最大字符数，默认 `200` |
+| copyright_notice | text | 否 | 自动嵌入的版权声明文本 |
+
+约束：
+
+1. `reader_settings` 为作品阅览能力的唯一配置入口，前后端不得再为单一品类另建独立阅览配置结构。
+2. `watermark_enabled=true` 时，叙阅器渲染层必须输出与当前访问用户关联的可追溯标识。
+3. `copy_limit_chars` 仅控制前台单次选中上限，不替代后台权限校验。

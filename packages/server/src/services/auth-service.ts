@@ -13,8 +13,8 @@ const _JWT_SECRET: string = JWT_SECRET;
 const _JWT_REFRESH_SECRET: string = (process.env.JWT_REFRESH_SECRET ?? _JWT_SECRET + '-refresh');
 
 const JWT_EXPIRES_IN = '15m';
-const JWT_REFRESH_EXPIRES_IN = '30d';
-const REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60; // 30 天，秒
+const JWT_REFRESH_EXPIRES_IN = '7d';
+const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 天，秒
 
 export interface TokenPayload {
   userId: string;
