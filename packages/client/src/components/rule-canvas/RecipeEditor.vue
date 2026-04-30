@@ -6,7 +6,7 @@
  */
 import { ref, computed, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { api, getToken } from '../../utils/api';
+import { api } from '../../utils/api';
 import type { Recipe, RulesetRecipeSource } from '@trpg/shared';
 
 // ── Props / Emits ────────────────────────────────────────────────────────────
@@ -99,12 +99,11 @@ async function save() {
       recipes: localRecipes.value,
       command_recipe_map: localCommandMap.value,
     };
-    const res = await api.put(
+    const res = await api.put<{ recipe_source: RulesetRecipeSource }>(
       `/rulesets/${props.rulesetId}`,
       { recipe_source: newSource },
-      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    emit('saved', res.data.recipe_source ?? newSource);
+    emit('saved', res.recipe_source ?? newSource);
     ElMessage.success('Recipe 已保存');
     testResult.value = null;
   } catch (err: any) {
@@ -123,16 +122,15 @@ async function testCurrentRecipe() {
   testLoading.value = true;
   testResult.value = null;
   try {
-    const res = await api.post(
+    const res = await api.post<NonNullable<typeof testResult.value>>(
       `/rulesets/${props.rulesetId}/test-recipe`,
       {
         recipe: activeRecipe.value,
         test_inputs: {},
         mock_context: { attributes: {}, skills: { [String((activeRecipe.value.params as any).target_ref ?? '')]: 60 }, resources: {} },
       },
-      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    testResult.value = res.data;
+    testResult.value = res;
   } catch (err: any) {
     ElMessage.error(`测试请求失败：${err?.response?.data?.error ?? err.message}`);
   } finally {
@@ -148,12 +146,11 @@ async function migrateFromLegacy() {
       '迁移至 Recipe 格式',
       { confirmButtonText: '确认迁移', cancelButtonText: '取消', type: 'warning' },
     );
-    const res = await api.post(
+    const res = await api.post<{ recipe_source: RulesetRecipeSource }>(
       `/rulesets/${props.rulesetId}/migrate-to-recipe`,
       {},
-      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    emit('saved', res.data.recipe_source);
+    emit('saved', res.recipe_source);
     ElMessage.success('迁移成功');
   } catch (err: any) {
     if (err === 'cancel') return;
