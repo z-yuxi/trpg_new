@@ -10,6 +10,7 @@
  */
 import type { Request, Response, NextFunction } from 'express';
 import { db } from '../db';
+import { metrics } from '../utils/business-metrics';
 import type { TaskType } from '../services/ai-service';
 
 type MembershipType = 'free' | 'pro' | 'creator';
@@ -53,6 +54,7 @@ export function checkAiQuota(taskType: TaskType) {
     const used = Number(row?.c ?? 0);
 
     if (used >= quota) {
+      metrics.inc('ai_quota_exceeded');
       res.status(429).json({
         error: 'AI_QUOTA_EXCEEDED',
         message: `本月 AI 使用次数已达上限（${used}/${quota}），下月自动重置`,
@@ -62,6 +64,7 @@ export function checkAiQuota(taskType: TaskType) {
       return;
     }
 
+    metrics.inc('ai_request');
     next();
   };
 }

@@ -11,6 +11,7 @@
  */
 import { forumService, type ForumBoard, type ForumThread, type ForumPost } from '../services/forum-service';
 import { botService } from './bot-service';
+import { contentQualityFilter } from './content-quality-filter';
 import { db } from '../db';
 
 export interface PublishThreadResult {
@@ -43,6 +44,12 @@ export class Publisher {
     const bot = await botService.getBotById(botId);
     if (!bot) throw new Error(`机器人账号 ${botId} 不存在`);
     if (bot.bot_status !== 'active') throw new Error(`机器人 ${bot.nickname} 处于休眠状态`);
+
+    // 质量过滤：敏感词 / 过短 / 重复率
+    const quality = await contentQualityFilter.check({ title, content });
+    if (!quality.passed) {
+      throw new Error(`内容质量未通过 [${quality.reason}]: ${quality.detail}`);
+    }
 
     const thread = await forumService.createThread({
       board,

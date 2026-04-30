@@ -5,6 +5,14 @@
  *   modules : reaction_count×1 + comment_count×2 + is_featured×3
  *   stories : like_count×1    + reply_count×2   + is_featured×3
  *
+ * 内容质量阈值（热度必须 > MIN_HOT_SCORE 才进入前台）：
+ *   default MIN_HOT_SCORE = 1（即至少有一次互动）
+ *   可通过环境变量 TRENDING_MIN_HOT_SCORE 覆盖
+ *
+ * 降级策略：
+ *   - 0 条符合阈值 → 该区块整体隐藏（返回空数组，前端判断隐藏）
+ *   - 少量符合阈值 → 不凑数，原样返回（不做数量补全）
+ *
  * 缓存：每日凌晨 00:01 通过 cron 调用 refreshCache()，
  *       结果以 JSON 写入 Redis (trending:modules / trending:stories)，
  *       TTL = TRENDING_CACHE_TTL_SEC（默认 90000s = 25h，保底覆盖单日）。
@@ -38,6 +46,16 @@ export interface TrendingStory {
   top_badge: { type: 'featured' | 'comment' | 'reaction'; count: number };
 }
 
+/** getTrendingModules / getTrendingStories 的响应信封 */
+export interface TrendingResult<T> {
+  /** 符合质量阈值的条目列表 */
+  data: T[];
+  /** true 表示数据为 0 条，前端应整体隐藏该区块 */
+  hidden: boolean;
+  /** 实际写入缓存/返回的条数（可能少于 limit，不凑数） */
+  count: number;
+}
+
 // ─── 常量 ────────────────────────────────────────────────────────────────────
 
 const CACHE_KEY_MODULES = 'trending:modules';
@@ -46,6 +64,12 @@ const CACHE_KEY_STORIES = 'trending:stories';
 const CACHE_TTL_SEC = Number(process.env.TRENDING_CACHE_TTL_SEC ?? 90000);
 /** 默认每次最多返回条数上限 */
 const MAX_LIMIT = 20;
+/**
+ * 内容质量阈值：hot_score 必须 > MIN_HOT_SCORE 才进入前台展示。
+ * 设为 1 表示至少有 1 次互动（点赞/评论/精选任意一项）。
+ * 可通过环境变量 TRENDING_MIN_HOT_SCORE 调整。
+ */
+export const MIN_HOT_SCORE = Number(process.env.TRENDING_MIN_HOT_SCORE ?? 1);
 
 // ─── 热度徽标辅助 ────────────────────────────────────────────────────────────
 
@@ -67,20 +91,21 @@ export class TrendingService {
   // 公开读取方法
   // ──────────────────────────────────────────────────────────────────────────
 
-  async getTrendingModules(limit: number = 4): Promise<TrendingModule[]> {
+  async getTrendingModules(limit: number = 4): Promise<TrendingResult<TrendingModule>> {
     const safeLimit = Math.min(Math.max(1, limit), MAX_LIMIT);
     const cached = await this._getCache<TrendingModule[]>(CACHE_KEY_MODULES);
-    if (cached) return cached.slice(0, safeLimit);
-    const data = await this._queryTrendingModules(safeLimit);
-    return data;
+    const raw = cached ?? await this._queryTrendingModules(MAX_LIMIT);
+    // 降级：应用质量阈值后不凑数，0 条则隐藏
+    const filtered = raw.filter((m) => m.hot_score >= MIN_HOT_SCORE).slice(0, safeLimit);
+    return { data: filtered, hidden: filtered.length === 0, count: filtered.length };
   }
 
-  async getTrendingStories(limit: number = 4): Promise<TrendingStory[]> {
+  async getTrendingStories(limit: number = 4): Promise<TrendingResult<TrendingStory>> {
     const safeLimit = Math.min(Math.max(1, limit), MAX_LIMIT);
     const cached = await this._getCache<TrendingStory[]>(CACHE_KEY_STORIES);
-    if (cached) return cached.slice(0, safeLimit);
-    const data = await this._queryTrendingStories(safeLimit);
-    return data;
+    const raw = cached ?? await this._queryTrendingStories(MAX_LIMIT);
+    const filtered = raw.filter((s) => s.hot_score >= MIN_HOT_SCORE).slice(0, safeLimit);
+    return { data: filtered, hidden: filtered.length === 0, count: filtered.length };
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -98,8 +123,10 @@ export class TrendingService {
       redis.setex(CACHE_KEY_STORIES, CACHE_TTL_SEC, JSON.stringify(stories)),
     ]);
 
+    const mAboveThreshold = modules.filter((m) => m.hot_score >= MIN_HOT_SCORE).length;
+    const sAboveThreshold = stories.filter((s) => s.hot_score >= MIN_HOT_SCORE).length;
     console.log(
-      `[Trending] 缓存刷新完成：modules=${modules.length} stories=${stories.length}`,
+      `[Trending] 缓存刷新完成：modules=${modules.length}(质量通过=${mAboveThreshold}) stories=${stories.length}(质量通过=${sAboveThreshold})`,
     );
   }
 
@@ -111,6 +138,11 @@ export class TrendingService {
     const rows = await db('modules as m')
       .leftJoin('users as u', 'u.id', 'm.author_id')
       .where('m.status', 'public')
+      .where(
+        db.raw('(`m`.`reaction_count` + `m`.`comment_count` * 2 + `m`.`is_featured` * 3)'),
+        '>=',
+        MIN_HOT_SCORE,
+      )
       .select(
         'm.id',
         'm.name',
@@ -147,6 +179,11 @@ export class TrendingService {
     const rows = await db('forum_threads as t')
       .leftJoin('users as u', 'u.id', 't.author_id')
       .where('t.board', 'share')
+      .where(
+        db.raw('(`t`.`like_count` + `t`.`reply_count` * 2 + `t`.`is_featured` * 3)'),
+        '>=',
+        MIN_HOT_SCORE,
+      )
       .select(
         't.id',
         't.title',

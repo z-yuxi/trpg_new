@@ -51,7 +51,9 @@ export type AuditEventType =
   | 'grant_success'
   | 'grant_failed'
   | 'idempotent_skip'
-  | 'manual_grant';
+  | 'manual_grant'
+  | 'admin_refund'
+  | 'reconcile_timeout';
 
 export interface PaymentCallbackParams {
   orderId: string;
@@ -327,8 +329,80 @@ export class PaymentService {
     });
   }
 
-  // ── 私有工具 ──────────────────────────────────────────────────────────────
+  // ── 管理员退款（最小闭环：状态变更 + 访问权撤销 + 审计） ─────────────────────
 
+  /**
+   * 运营退款：将已支付订单退回，可选撤销内容访问权
+   *
+   * 限制：
+   *   - 只能退 status=paid 的订单（pending/failed/refunded 均拒绝）
+   *   - 不调用支付渠道退款 API（当前阶段需在支付渠道后台另行操作，本方法仅做系统侧状态收口）
+   *   - 审计日志含操作人、原因，完整可溯源
+   */
+  async adminRefund(params: {
+    orderId: string;
+    operatorId: string;
+    reason: string;
+    revokeAccess: boolean;
+  }): Promise<void> {
+    const order = await db('payment_orders').where({ id: params.orderId }).first();
+    if (!order) {
+      throw new PaymentError(`Order ${params.orderId} not found`, 'ORDER_NOT_FOUND', 404);
+    }
+    if (order.status !== 'paid') {
+      throw new PaymentError(
+        `Only paid orders can be refunded (current status: ${order.status as string})`,
+        'ORDER_ALREADY_CANCELLED',
+        400,
+      );
+    }
+
+    const metadata: Record<string, unknown> =
+      typeof order.metadata === 'string'
+        ? JSON.parse(order.metadata)
+        : (order.metadata as Record<string, unknown>) ?? {};
+
+    await db.transaction(async (trx) => {
+      // 1. 标记订单为已退款
+      await trx('payment_orders').where({ id: params.orderId }).update({
+        status: 'refunded',
+        updated_at: new Date(),
+      });
+
+      // 2. 可选：撤销内容访问权限
+      if (params.revokeAccess) {
+        const contentType = order.product_type as string;
+        if (contentType === 'module' || contentType === 'ruleset') {
+          const contentId = (metadata.product_id as string | undefined) ?? '';
+          if (contentId) {
+            await trx('content_access_grants')
+              .where({ user_id: order.user_id as string, content_type: contentType, content_id: contentId })
+              .delete();
+          }
+        }
+      }
+
+      // 3. 审计日志（操作人、原因、revokeAccess 决策均写入）
+      await trx('payment_audit_log').insert({
+        id: generateId(),
+        order_id: params.orderId,
+        user_id: order.user_id as string,
+        event_type: 'admin_refund',
+        transaction_id: (order.external_order_id as string | null) ?? null,
+        channel: order.channel as string,
+        raw_payload: JSON.stringify({
+          operator_id: params.operatorId,
+          reason: params.reason,
+          revoke_access: params.revokeAccess,
+        }),
+        callback_status: 'refunded',
+        error: null,
+        created_at: new Date(),
+      });
+    });
+  }
+
+  // ── 私有工具 ──────────────────────────────────────────────────────────────
   private async writeAuditLog(params: {
     orderId: string;
     userId: string;

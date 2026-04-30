@@ -19,10 +19,17 @@ export interface TrendingStory {
   top_badge: { type: 'featured' | 'comment' | 'reaction'; count: number };
 }
 
-export function getTrendingModules(limit = 4): Promise<{ data: TrendingModule[] }> {
+export interface TrendingResult<T> {
+  data: T[];
+  /** true 表示无符合质量阈值的内容，前端应隐藏整个区块 */
+  hidden: boolean;
+  count: number;
+}
+
+export function getTrendingModules(limit = 4): Promise<TrendingResult<TrendingModule>> {
   return api.get(`/trending/modules?limit=${limit}`);
 }
 
-export function getTrendingStories(limit = 4): Promise<{ data: TrendingStory[] }> {
+export function getTrendingStories(limit = 4): Promise<TrendingResult<TrendingStory>> {
   return api.get(`/trending/stories?limit=${limit}`);
 }

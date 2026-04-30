@@ -14,6 +14,8 @@ import type { Knex } from 'knex';
  *               grant_failed       权益发放失败（含异常堆栈）
  *               idempotent_skip    幂等跳过（transaction_id 已处理）
  *               manual_grant       运营手动补单
+ *               admin_refund       运营退款
+ *               reconcile_timeout  对账扫描发现超时挂起
  */
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('payment_audit_log', (t) => {
@@ -26,6 +28,8 @@ export async function up(knex: Knex): Promise<void> {
       'grant_failed',
       'idempotent_skip',
       'manual_grant',
+      'admin_refund',
+      'reconcile_timeout',
     ]).notNullable();
     /** 三方流水号（回调携带） */
     t.string('transaction_id', 128).nullable();

@@ -13,6 +13,7 @@ import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
 import { recruitmentMetricsService } from '../services/recruitment-metrics-service';
 import { metrics } from '../utils/business-metrics';
+import { alertManager } from '../utils/alert-manager';
 
 const router: IRouter = Router();
 
@@ -73,6 +74,22 @@ router.post('/recruitment/cache/invalidate', authMiddleware, adminMiddleware, as
 // ── 进程级业务指标快照 ─────────────────────────────────────────────────────────
 router.get('/business', authMiddleware, adminMiddleware, (_req, res) => {
   res.json(metrics.snapshot());
+});
+
+// ── 实时告警状态（P0/P1 规则评估结果） ────────────────────────────────────────
+// 返回每条规则的当前状态：ok | firing | cooldown
+// 用于 Grafana / 企业微信机器人 / 发布门禁轮询
+router.get('/alerts', authMiddleware, adminMiddleware, (_req, res) => {
+  const snapshot = metrics.snapshot();
+  const rules = alertManager.evaluateSync(snapshot);
+  const firing = rules.filter((r) => r.status === 'firing');
+  res.json({
+    timestamp: new Date().toISOString(),
+    has_p0: firing.some((r) => r.level === 'P0'),
+    has_p1: firing.some((r) => r.level === 'P1'),
+    firing_count: firing.length,
+    rules,
+  });
 });
 
 export default router;

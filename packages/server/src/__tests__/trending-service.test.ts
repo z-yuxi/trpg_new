@@ -72,7 +72,7 @@ vi.mock('../db', () => {
 });
 
 // ── Import SUT after mocks ────────────────────────────────────────────────────
-import { TrendingService } from '../services/trending-service';
+import { TrendingService, MIN_HOT_SCORE } from '../services/trending-service';
 
 describe('TrendingService', () => {
   let svc: TrendingService;
@@ -90,7 +90,8 @@ describe('TrendingService', () => {
       mockGet.mockResolvedValueOnce(JSON.stringify(cached));
 
       const result = await svc.getTrendingModules(4);
-      expect(result).toEqual(cached);
+      expect(result.data).toEqual(cached);
+      expect(result.hidden).toBe(false);
       expect(mockGet).toHaveBeenCalledWith('trending:modules');
     });
 
@@ -100,7 +101,8 @@ describe('TrendingService', () => {
       mockGet.mockResolvedValueOnce(JSON.stringify(cached));
 
       const result = await svc.getTrendingStories(4);
-      expect(result).toEqual(cached);
+      expect(result.data).toEqual(cached);
+      expect(result.hidden).toBe(false);
     });
 
     it('缓存数据条数 > limit 时只返回 limit 条', async () => {
@@ -111,7 +113,18 @@ describe('TrendingService', () => {
       mockGet.mockResolvedValueOnce(JSON.stringify(cached));
 
       const result = await svc.getTrendingModules(3);
-      expect(result).toHaveLength(3);
+      expect(result.data).toHaveLength(3);
+    });
+
+    it('缓存数据全部 hot_score < MIN_HOT_SCORE 时 hidden=true', async () => {
+      const cached = [{ id: 'm-zero', name: '零热度', hot_score: 0,
+        top_badge: { type: 'reaction', count: 0 } }];
+      mockGet.mockResolvedValueOnce(JSON.stringify(cached));
+
+      const result = await svc.getTrendingModules(4);
+      // MIN_HOT_SCORE 默认 1，hot_score=0 不符合
+      expect(result.data).toHaveLength(0);
+      expect(result.hidden).toBe(true);
     });
   });
 
@@ -121,28 +134,27 @@ describe('TrendingService', () => {
       mockGet.mockResolvedValueOnce(null);
 
       const result = await svc.getTrendingModules(4);
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('m1');
-      expect(result[0].hot_score).toBe(20);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].id).toBe('m1');
+      expect(result.data[0].hot_score).toBe(20);
+      expect(result.hidden).toBe(false);
     });
 
     it('getTrendingStories 缓存 miss 时从 DB 查询并返回', async () => {
       mockGet.mockResolvedValueOnce(null);
 
       const result = await svc.getTrendingStories(4);
-      expect(result).toHaveLength(2);
-      expect(result[0].id).toBe('s1');
-      expect(result[0].hot_score).toBe(20);
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].id).toBe('s1');
+      expect(result.data[0].hot_score).toBe(20);
     });
 
-    it('DB 返回空列表时 getTrendingModules 返回 []', async () => {
-      // 覆盖 DB mock 返回空 — 利用 beforeEach 清空的 mockModuleRows 代理：
-      // 直接用空 rows 测试映射逻辑（DB mock 已返回 mockModuleRows，此场景略过）
-      // 改为验证缓存返回空数组时透传正确。
+    it('DB 返回空列表时 hidden=true', async () => {
       mockGet.mockResolvedValueOnce(JSON.stringify([]));
 
       const result = await svc.getTrendingModules(4);
-      expect(result).toEqual([]);
+      expect(result.data).toEqual([]);
+      expect(result.hidden).toBe(true);
     });
   });
 
@@ -151,7 +163,7 @@ describe('TrendingService', () => {
     it('is_featured=1 时 top_badge.type = featured', async () => {
       mockGet.mockResolvedValueOnce(null);
       const result = await svc.getTrendingModules(4);
-      const featuredItem = result.find((r: TrendingModule) => r.id === 'm2');
+      const featuredItem = result.data.find((r: TrendingModule) => r.id === 'm2');
       expect(featuredItem?.top_badge.type).toBe('featured');
     });
 
@@ -159,7 +171,7 @@ describe('TrendingService', () => {
       mockGet.mockResolvedValueOnce(null);
       // m1: reaction=10, comment=5 → comment*2=10 >= reaction=10 → comment
       const result = await svc.getTrendingModules(4);
-      const item = result.find((r: TrendingModule) => r.id === 'm1');
+      const item = result.data.find((r: TrendingModule) => r.id === 'm1');
       expect(item?.top_badge.type).toBe('comment');
       expect(item?.top_badge.count).toBe(5);
     });
@@ -167,7 +179,7 @@ describe('TrendingService', () => {
     it('story: is_featured=1 时 top_badge.type = featured', async () => {
       mockGet.mockResolvedValueOnce(null);
       const result = await svc.getTrendingStories(4);
-      const featuredItem = result.find((r: TrendingStory) => r.id === 's2');
+      const featuredItem = result.data.find((r: TrendingStory) => r.id === 's2');
       expect(featuredItem?.top_badge.type).toBe('featured');
     });
   });
@@ -176,19 +188,26 @@ describe('TrendingService', () => {
   describe('limit 边界', () => {
     it('limit=0 时被修正为 1', async () => {
       mockGet.mockResolvedValueOnce(JSON.stringify([]));
-      // 只要不报错且返回数组即通过
       const result = await svc.getTrendingModules(0);
-      expect(Array.isArray(result)).toBe(true);
+      expect(Array.isArray(result.data)).toBe(true);
     });
 
     it('limit=100 时被限制为 ≤ 20', async () => {
       const cached = Array.from({ length: 25 }, (_, i) => ({
-        id: `m${i}`, name: `模组${i}`, hot_score: i,
+        id: `m${i}`, name: `模组${i}`, hot_score: i + 1,
         top_badge: { type: 'reaction', count: i },
       }));
       mockGet.mockResolvedValueOnce(JSON.stringify(cached));
       const result = await svc.getTrendingModules(100);
-      expect(result.length).toBeLessThanOrEqual(20);
+      expect(result.data.length).toBeLessThanOrEqual(20);
+    });
+  });
+
+  // ── MIN_HOT_SCORE 导出常量 ────────────────────────────────────────────────
+  describe('MIN_HOT_SCORE', () => {
+    it('MIN_HOT_SCORE 为数字且 >= 0', () => {
+      expect(typeof MIN_HOT_SCORE).toBe('number');
+      expect(MIN_HOT_SCORE).toBeGreaterThanOrEqual(0);
     });
   });
 

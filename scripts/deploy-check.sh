@@ -100,3 +100,28 @@ echo -e "${GREEN}========================================================"
 echo -e "  ✓ 所有门禁检查通过，可以发布"
 echo -e "========================================================${NC}"
 echo ""
+
+# ── 可选 Step 7：发布后健康探针（需在生产环境执行，CI 跳过） ─────────────────
+# 用法：HEALTH_CHECK_URL=https://api.yourdomain.com bash scripts/deploy-check.sh
+if [[ -n "${HEALTH_CHECK_URL:-}" ]]; then
+  info "Step 7（可选）: 发布后告警探针（P0/P1 健康检查）"
+  ALERTS_URL="${HEALTH_CHECK_URL}/api/metrics/alerts"
+  # 最多等待 60 秒，每 5 秒轮询一次
+  MAX_WAIT=60; INTERVAL=5; ELAPSED=0
+  while [[ $ELAPSED -lt $MAX_WAIT ]]; do
+    RESPONSE=$(curl -sf -H "Authorization: Bearer ${HEALTH_CHECK_TOKEN:-}" "$ALERTS_URL" 2>/dev/null || echo "")
+    if [[ -z "$RESPONSE" ]]; then
+      info "  等待服务就绪... (${ELAPSED}s/${MAX_WAIT}s)"
+      sleep $INTERVAL; ELAPSED=$((ELAPSED + INTERVAL)); continue
+    fi
+    HAS_P0=$(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print(str(d.get('has_p0',False)).lower())" 2>/dev/null || echo "unknown")
+    if [[ "$HAS_P0" == "true" ]]; then
+      fail "发布后 P0 告警触发！请立即检查 ${ALERTS_URL}"
+    fi
+    ok "告警探针通过，无 P0 告警"
+    break
+  done
+  if [[ $ELAPSED -ge $MAX_WAIT ]]; then
+    echo -e "${YELLOW}  ⚠ 健康探针超时（服务可能尚未就绪），跳过${NC}"
+  fi
+fi

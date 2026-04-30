@@ -8,6 +8,7 @@ import { recruitmentMetricsService } from './services/recruitment-metrics-servic
 import { runDailyDataCheck } from './services/daily-check-service';
 import { repairOpenPositionHistory } from './services/scene-participation';
 import { trendingService } from './services/trending-service';
+import { startPaymentScheduler, stopPaymentScheduler } from './services/payment-scheduler';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 
@@ -25,9 +26,13 @@ httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 // ── AI 异步任务 Worker ────────────────────────────────────────────────────────
 startAiWorker(io);
 
+// ── 支付对账 & 业务告警调度器 ─────────────────────────────────────────────────
+startPaymentScheduler();
+
 // ── 优雅关闭 ────────────────────────────────────────────────────────────────
 async function gracefulShutdown(signal: string) {
   console.log(`[Shutdown] 收到 ${signal}，开始优雅关闭...`);
+  stopPaymentScheduler();
   httpServer.close(async () => {
     try {
       await Promise.all([

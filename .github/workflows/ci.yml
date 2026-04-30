@@ -192,18 +192,43 @@ jobs:
     needs: [acceptance-gate, contract-tests, unit-tests, deploy-script-gate]
     if: always()
     steps:
-      - name: 检查所有关键 job 状态
+      - name: 检查所有关键 job 状态（P0 阻断判定）
         run: |
           echo "acceptance-gate:    ${{ needs.acceptance-gate.result }}"
           echo "contract-tests:     ${{ needs.contract-tests.result }}"
           echo "unit-tests:         ${{ needs.unit-tests.result }}"
           echo "deploy-script-gate: ${{ needs.deploy-script-gate.result }}"
 
-          if [[ "${{ needs.acceptance-gate.result }}" != "success" || \
-                "${{ needs.contract-tests.result }}" != "success" || \
-                "${{ needs.unit-tests.result }}"     != "success" || \
-                "${{ needs.deploy-script-gate.result }}" != "success" ]]; then
-            echo "❌ 发布门禁未通过，不允许合并/发布"
+          # P0 阻断：任意关键 job 失败立即拒绝发布
+          FAILED=false
+          FAILED_JOBS=""
+          if [[ "${{ needs.acceptance-gate.result }}" != "success" ]]; then
+            FAILED=true; FAILED_JOBS="$FAILED_JOBS acceptance-gate"
+          fi
+          if [[ "${{ needs.contract-tests.result }}" != "success" ]]; then
+            FAILED=true; FAILED_JOBS="$FAILED_JOBS contract-tests"
+          fi
+          if [[ "${{ needs.unit-tests.result }}" != "success" ]]; then
+            FAILED=true; FAILED_JOBS="$FAILED_JOBS unit-tests"
+          fi
+          if [[ "${{ needs.deploy-script-gate.result }}" != "success" ]]; then
+            FAILED=true; FAILED_JOBS="$FAILED_JOBS deploy-script-gate"
+          fi
+
+          if [[ "$FAILED" == "true" ]]; then
+            echo "::error::[P0] CI 门禁未通过，失败 job：$FAILED_JOBS，禁止合并/发布"
             exit 1
           fi
           echo "✅ 所有关键检查通过，可以发布"
+
+      # P0 告警：CI 门禁失败时向 webhook 推送（企业微信机器人 / 飞书 / 钉钉）
+      - name: P0 告警 — 推送 CI 失败通知
+        if: failure() && env.ALERT_P0_WEBHOOK_URL != ''
+        run: |
+          FAILED_JOBS="acceptance-gate(${{ needs.acceptance-gate.result }}) contract-tests(${{ needs.contract-tests.result }}) unit-tests(${{ needs.unit-tests.result }}) deploy-script-gate(${{ needs.deploy-script-gate.result }})"
+          curl -sS -X POST "$ALERT_P0_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"level\":\"P0\",\"key\":\"ci_gate_failed\",\"message\":\"[P0] CI 门禁失败，禁止发布 | branch=${{ github.ref_name }} commit=${{ github.sha }} jobs=${FAILED_JOBS}\",\"service\":\"trpg-ci\"}" \
+            || echo "::warning::P0 webhook 推送失败，请检查 ALERT_P0_WEBHOOK_URL secret"
+        env:
+          ALERT_P0_WEBHOOK_URL: ${{ secrets.ALERT_P0_WEBHOOK_URL }}
