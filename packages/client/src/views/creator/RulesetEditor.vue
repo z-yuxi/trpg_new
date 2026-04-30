@@ -486,7 +486,39 @@ async function save() {
     name: formName.value.trim(),
     version: formVersion.value,
     status: formStatus.value,
-    character_card_schema: { _l1_config: l1Config, _card_schema: cardSchema.value },
+    character_card_schema: (() => {
+      // 顶层规范化字段：供 CharacterEditor.vue（玩家创角）和 character-sheet-service（服务端派生值）消费
+      const attributesRecord: Record<string, { label?: string; roll_formula?: string }> = {};
+      for (const attr of l1Config.attributes) {
+        if (attr.name) {
+          attributesRecord[attr.name] = {
+            label: attr.name,
+            // 移除空格确保 CharacterEditor 内的 rollFormula() regex 能正确匹配
+            roll_formula: (attr.roll_formula ?? '').replace(/\s+/g, ''),
+          };
+        }
+      }
+      const skillsRecord: Record<string, { label?: string; base?: number }> = {};
+      for (const skill of (cardSchema.value.skills as Array<{ name?: string; label?: string; base?: number }>) ) {
+        const key = (skill.name ?? skill.label ?? '').trim();
+        if (key) skillsRecord[key] = { label: key, base: skill.base ?? 5 };
+      }
+      const derivedFormulasRecord: Record<string, { formula: string; label?: string }> = {};
+      for (const res of l1Config.resources) {
+        if (res.name && res.max_formula) {
+          derivedFormulasRecord[res.name] = { formula: res.max_formula, label: res.name };
+        }
+      }
+      return {
+        // 编辑器内部往返恢复用
+        _l1_config: l1Config,
+        _card_schema: cardSchema.value,
+        // 游戏引擎消费用（CharacterEditor.vue + character-sheet-service）
+        attributes: attributesRecord,
+        skills: skillsRecord,
+        derived_formulas: derivedFormulasRecord,
+      };
+    })(),
     recruitment_fields: recruitmentFields.value,
     command_overrides: commandOverrides.value,
     commands: {
