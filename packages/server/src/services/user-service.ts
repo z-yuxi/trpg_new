@@ -104,7 +104,7 @@ export class UserService {
   async getPublicProfile(uid: string): Promise<Record<string, unknown> | null> {
     const row = await db('users')
       .where({ uid: Number(uid) })
-      .select('id', 'uid', 'nickname', 'avatar_url', 'user_type', 'subscription_type', 'creator_level', 'created_at')
+      .select('id', 'uid', 'nickname', 'avatar_url', 'intro', 'user_type', 'subscription_type', 'creator_level', 'follower_count', 'following_count', 'created_at')
       .first();
     if (!row) return null;
 
@@ -117,12 +117,12 @@ export class UserService {
       uid: row['uid'],
       nickname: row['nickname'],
       avatar_url: row['avatar_url'] || '',
-      intro: '',
+      intro: (row['intro'] as string) || '',
       tags: userType,
       subscription_type: row['subscription_type'],
       creator_level: row['creator_level'],
-      follower_count: 0,
-      following_count: 0,
+      follower_count: Number(row['follower_count'] ?? 0),
+      following_count: Number(row['following_count'] ?? 0),
       created_at: row['created_at'],
     };
   }
@@ -201,9 +201,18 @@ export class UserService {
     recruit?: boolean;
     dm?: boolean;
     mention?: boolean;
+    in_app?: boolean;
+    email?: boolean;
+    push?: boolean;
   }): Promise<void> {
+    // 先读取现有值再合并，避免覆盖未传入的字段
+    const existing = await db('users').where({ id: userId }).select('notification_settings').first<{ notification_settings?: string }>();
+    const prev = existing?.notification_settings
+      ? JSON.parse(existing.notification_settings) as Record<string, unknown>
+      : {};
+    const merged = { ...prev, ...settings };
     await db('users').where({ id: userId }).update({
-      notification_settings: JSON.stringify(settings),
+      notification_settings: JSON.stringify(merged),
     });
   }
 

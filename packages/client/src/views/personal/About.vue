@@ -12,7 +12,6 @@ const links = [
 ];
 
 function openFeedback() {
-  // TODO: open feedback dialog or navigate to feedback form
   window.open('mailto:feedback@trpg.example.com?subject=反馈', '_blank');
 }
 </script>

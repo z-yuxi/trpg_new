@@ -77,19 +77,31 @@ async function loadProfile() {
     playerStats.value.totalSessions = playerCampaigns.value.length;
     gmStats.value.hostedCampaigns = hostedCampaigns.value.length;
     gmStats.value.totalPlayers = hostedCampaigns.value.length * 4;
+    // 获取当前登录用户对该 UID 的关注状态
+    if (authStore.isLoggedIn && !isOwnProfile()) {
+      const status = await api.get<{ following: boolean }>(`/users/${uid}/follow-status`).catch(() => ({ following: false }));
+      following.value = status.following;
+    }
   } catch {
     profile.value = { id: uid, nickname: `用户 ${uid}`, tags: [] };
   } finally { loading.value = false; }
 }
 
 async function toggleFollow() {
-  if (!authStore.token) { ElMessage.warning('请先登录'); return; }
+  if (!authStore.isLoggedIn) { ElMessage.warning('请先登录'); return; }
   followLoading.value = true;
   try {
-    // TODO: POST /api/users/:uid/follow when backend is implemented
-    await new Promise(r => setTimeout(r, 300)); // simulate
-    following.value = !following.value;
-    ElMessage.success(following.value ? '已关注' : '已取消关注');
+    if (following.value) {
+      await api.delete(`/users/${uid}/follow`);
+      following.value = false;
+      if (profile.value) profile.value.follower_count = Math.max(0, (profile.value.follower_count ?? 1) - 1);
+      ElMessage.success('已取消关注');
+    } else {
+      const res = await api.post<{ follower_count: number }>(`/users/${uid}/follow`, {});
+      following.value = true;
+      if (profile.value) profile.value.follower_count = res.follower_count;
+      ElMessage.success('已关注');
+    }
   } catch {
     ElMessage.error('操作失败');
   } finally { followLoading.value = false; }

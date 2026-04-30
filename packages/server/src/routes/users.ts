@@ -120,12 +120,69 @@ router.get('/me/activity', authMiddleware, async (req, res) => {
 
 router.get('/:uid/profile', async (req, res) => {
   try {
-    const profile = await userService.getPublicProfile(req.params.uid);
+    const profile = await userService.getPublicProfile(req.params['uid']!);
     if (!profile) { res.status(404).json({ error: 'User not found' }); return; }
     res.json(profile);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error)?.message ?? 'Query failed' });
   }
+});
+
+// POST /api/users/:uid/follow — 关注用户（幂等）
+router.post('/:uid/follow', authMiddleware, async (req, res) => {
+  const followerId = req.user!.id;
+  const followeeUid = req.params['uid']!;
+  if (followerId === followeeUid) return res.status(400).json({ error: 'CANNOT_FOLLOW_SELF' });
+
+  const target = await db('users').where({ uid: Number(followeeUid) }).select('id').first<{ id: string }>();
+  if (!target) return res.status(404).json({ error: 'USER_NOT_FOUND' });
+  const followeeId = target.id;
+
+  // 幂等 upsert
+  await db('user_follows')
+    .insert({ follower_id: followerId, followee_id: followeeId })
+    .onConflict(['follower_id', 'followee_id'])
+    .ignore();
+
+  // 更新缓存计数
+  const [fc, flc] = await Promise.all([
+    db('user_follows').where('followee_id', followeeId).count('follower_id as c').first<{ c: number | string }>(),
+    db('user_follows').where('follower_id', followerId).count('followee_id as c').first<{ c: number | string }>(),
+  ]);
+  await db('users').where('id', followeeId).update({ follower_count: Number(fc?.c ?? 0) });
+  await db('users').where('id', followerId).update({ following_count: Number(flc?.c ?? 0) });
+
+  res.json({ success: true, follower_count: Number(fc?.c ?? 0) });
+});
+
+// DELETE /api/users/:uid/follow — 取消关注
+router.delete('/:uid/follow', authMiddleware, async (req, res) => {
+  const followerId = req.user!.id;
+  const followeeUid = req.params['uid']!;
+
+  const target = await db('users').where({ uid: Number(followeeUid) }).select('id').first<{ id: string }>();
+  if (!target) return res.status(404).json({ error: 'USER_NOT_FOUND' });
+  const followeeId = target.id;
+
+  await db('user_follows').where({ follower_id: followerId, followee_id: followeeId }).delete();
+
+  const [fc, flc] = await Promise.all([
+    db('user_follows').where('followee_id', followeeId).count('follower_id as c').first<{ c: number | string }>(),
+    db('user_follows').where('follower_id', followerId).count('followee_id as c').first<{ c: number | string }>(),
+  ]);
+  await db('users').where('id', followeeId).update({ follower_count: Number(fc?.c ?? 0) });
+  await db('users').where('id', followerId).update({ following_count: Number(flc?.c ?? 0) });
+
+  res.json({ success: true, follower_count: Number(fc?.c ?? 0) });
+});
+
+// GET /api/users/:uid/follow-status — 当前用户是否已关注
+router.get('/:uid/follow-status', authMiddleware, async (req, res) => {
+  const followerId = req.user!.id;
+  const target = await db('users').where({ uid: Number(req.params['uid']!) }).select('id').first<{ id: string }>();
+  if (!target) return res.status(404).json({ error: 'USER_NOT_FOUND' });
+  const row = await db('user_follows').where({ follower_id: followerId, followee_id: target.id }).first();
+  res.json({ following: !!row });
 });
 
 router.get('/:uid/campaigns', async (req, res) => {
