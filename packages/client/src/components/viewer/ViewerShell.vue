@@ -344,6 +344,47 @@ async function nativeShare() {
   navigator.share(shareData).catch(() => {});
 }
 
+// ─── 管理员审核面板 §14.4 ────────────────────────────────────────────────────
+const adminPanelOpen = ref(false);
+const adminSuspendReason = ref('');
+const adminActionBusy = ref(false);
+
+async function adminApprove() {
+  if (!confirm('确认强制审核通过并公开发布？')) return;
+  adminActionBusy.value = true;
+  try {
+    const res = await api.post<{ status: string }>(
+      `/admin/content/${props.assetType === 'module' ? 'modules' : 'rulesets'}/${props.assetId}/approve`, {}
+    );
+    if (asset.value) (asset.value as any).status = res.status;
+    adminPanelOpen.value = false;
+    alert('已审核通过并公开发布');
+  } catch (e: any) {
+    alert(e?.message ?? '操作失败');
+  } finally {
+    adminActionBusy.value = false;
+  }
+}
+
+async function adminSuspend() {
+  if (!adminSuspendReason.value.trim()) { alert('请填写暂停原因'); return; }
+  if (!confirm(`确认暂停上架？原因：${adminSuspendReason.value}`)) return;
+  adminActionBusy.value = true;
+  try {
+    const res = await api.post<{ status: string }>(
+      `/admin/content/${props.assetType === 'module' ? 'modules' : 'rulesets'}/${props.assetId}/suspend`,
+      { reason: adminSuspendReason.value }
+    );
+    if (asset.value) (asset.value as any).status = res.status;
+    adminPanelOpen.value = false;
+    alert('已暂停上架');
+  } catch (e: any) {
+    alert(e?.message ?? '操作失败');
+  } finally {
+    adminActionBusy.value = false;
+  }
+}
+
 // ─── 加载数据 ─────────────────────────────────────────────────────────────────
 async function loadAsset() {
   loading.value = true;
@@ -736,9 +777,8 @@ function goBack() {
               </button>
               <!-- 管理员：审核入口 §14.4 -->
               <template v-if="permLevel === 'admin'">
-                <button class="viewer-more-menu__item" @click="closeMoreMenu">
+                <button class="viewer-more-menu__item" @click="() => { adminPanelOpen = true; closeMoreMenu(); }">
                   <SvgIcon name="icon-shield" :size="16" />
-                  <!-- TODO: 审核/违规处理功能待实现 -->
                   审核 / 违规处理
                 </button>
               </template>
@@ -948,6 +988,45 @@ function goBack() {
             <button class="share-modal__btn" @click="downloadPoster" :disabled="!sharePosterUrl">保存海报</button>
             <button class="share-modal__btn share-modal__btn--outline" @click="copyShareLink">复制链接</button>
             <button v-if="'share' in navigator" class="share-modal__btn share-modal__btn--primary" @click="nativeShare">分享</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 管理员审核面板 §14.4 -->
+    <Teleport to="body">
+      <div v-if="adminPanelOpen" class="share-modal" @click.self="adminPanelOpen = false">
+        <div class="share-modal__box" style="width:440px">
+          <div class="share-modal__head">
+            <span>管理员操作</span>
+            <button class="rs-drawer__close" @click="adminPanelOpen = false">×</button>
+          </div>
+          <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+            <div>
+              <p style="font-size:13px;color:var(--text-secondary);margin:0 0 8px">作品状态：<strong>{{ (asset as any)?.status ?? '—' }}</strong></p>
+              <button
+                class="share-modal__btn share-modal__btn--primary"
+                style="width:100%"
+                :disabled="adminActionBusy"
+                @click="adminApprove"
+              >强制审核通过（→ 公开发布）</button>
+            </div>
+            <hr style="border:none;border-top:1px solid var(--border-light,#eee);margin:0" />
+            <div>
+              <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">暂停原因</label>
+              <textarea
+                v-model="adminSuspendReason"
+                rows="3"
+                style="width:100%;border:1px solid var(--border-light,#ddd);border-radius:6px;padding:8px;font-size:13px;resize:vertical;"
+                placeholder="请填写违规/侵权原因…"
+              />
+              <button
+                class="share-modal__btn"
+                style="width:100%;margin-top:8px;border-color:#ef4444;color:#ef4444;"
+                :disabled="adminActionBusy || !adminSuspendReason.trim()"
+                @click="adminSuspend"
+              >暂停上架</button>
+            </div>
           </div>
         </div>
       </div>

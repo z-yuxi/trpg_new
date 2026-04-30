@@ -12,7 +12,9 @@
  */
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { db } from '../db';
 import { reputationAuditService } from '../services/reputation-audit-service';
 
 const router = Router();
@@ -191,3 +193,107 @@ router.post(
 );
 
 export default router;
+
+// ── 内容审核路由（模组 & 规则包）已在此路由器中注册，挂载路径 /admin ──
+
+/**
+ * POST /admin/content/modules/:id/approve
+ * 强制审核通过（reviewing / public_notice → public）
+ */
+router.post(
+  '/content/modules/:id/approve',
+  authMiddleware,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const row = await db('modules').where({ id }).first();
+      if (!row) { res.status(404).json({ error: 'Module not found' }); return; }
+      if (!['reviewing', 'public_notice'].includes(row.status)) {
+        res.status(400).json({ error: `Cannot approve module in status: ${row.status}` });
+        return;
+      }
+      await db('modules').where({ id }).update({ status: 'public', updated_at: new Date() });
+      res.json({ id, status: 'public' });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? 'Approve failed' });
+    }
+  }
+);
+
+/**
+ * POST /admin/content/modules/:id/suspend
+ * 暂停上架（published / public_notice → suspended）
+ */
+const suspendSchema = z.object({ reason: z.string().min(1).max(500) });
+
+router.post(
+  '/content/modules/:id/suspend',
+  authMiddleware,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const parsed = suspendSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: 'reason is required' }); return; }
+    const { id } = req.params;
+    try {
+      const row = await db('modules').where({ id }).first();
+      if (!row) { res.status(404).json({ error: 'Module not found' }); return; }
+      if (!['public', 'public_notice', 'reviewing'].includes(row.status)) {
+        res.status(400).json({ error: `Cannot suspend module in status: ${row.status}` }); return;
+      }
+      await db('modules').where({ id }).update({
+        status: 'suspended',
+        suspended_reason: parsed.data.reason,
+        updated_at: new Date(),
+      });
+      res.json({ id, status: 'suspended', suspended_reason: parsed.data.reason });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? 'Suspend failed' });
+    }
+  }
+);
+
+/**
+ * POST /admin/content/rulesets/:id/approve
+ */
+router.post(
+  '/content/rulesets/:id/approve',
+  authMiddleware,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const row = await db('rulesets').where({ id }).first();
+      if (!row) { res.status(404).json({ error: 'Ruleset not found' }); return; }
+      await db('rulesets').where({ id }).update({ status: 'published', updated_at: new Date() });
+      res.json({ id, status: 'published' });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? 'Approve failed' });
+    }
+  }
+);
+
+/**
+ * POST /admin/content/rulesets/:id/suspend
+ */
+router.post(
+  '/content/rulesets/:id/suspend',
+  authMiddleware,
+  requireAdmin,
+  async (req: Request, res: Response) => {
+    const parsed = suspendSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: 'reason is required' }); return; }
+    const { id } = req.params;
+    try {
+      const row = await db('rulesets').where({ id }).first();
+      if (!row) { res.status(404).json({ error: 'Ruleset not found' }); return; }
+      await db('rulesets').where({ id }).update({
+        status: 'deprecated',
+        updated_at: new Date(),
+      });
+      res.json({ id, status: 'deprecated', reason: parsed.data.reason });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? 'Suspend failed' });
+    }
+  }
+);
