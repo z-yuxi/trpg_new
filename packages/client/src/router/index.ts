@@ -74,10 +74,16 @@ const routes = [
     ],
   },
   {
+    path: '/module/:id',
+    name: 'ModuleViewer',
+    component: () => import('../views/ModuleViewer.vue'),
+    meta: { title: '模组阅览' },
+  },
+  {
     path: '/ruleset/:id',
     name: 'RulesetDetail',
     component: () => import('../views/RulesetDetail.vue'),
-    meta: { title: '规则集详情' },
+    meta: { title: '规则包阅览' },
   },
   {
     path: '/room/:id',
