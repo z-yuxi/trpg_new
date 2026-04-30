@@ -68,11 +68,11 @@ const confirmedApplications = computed(() => {
   return detail.value.applications.filter((item: any) => item.status === 'confirmed');
 });
 
-/** 成团条件：发帖者 + 状态为 open/full + 已确认人数 >= 要求人数 */
+/** 成团条件：发帖者 + 状态为 open/full + 至少有一名已确认玩家（后端会做完整校验） */
 const canFormGroup = computed(() => {
   if (!isOwner.value || !detail.value) return false;
   if (!['open', 'full'].includes(detail.value.status)) return false;
-  return confirmedApplications.value.length >= Number(detail.value.player_count_max || 0);
+  return confirmedApplications.value.length > 0;
 });
 
 /** 玩家本人的申请 */
@@ -164,7 +164,7 @@ async function submitApply() {
       message: applyMessage.value.trim(),
       ob: false,
     }, isWaiting);
-    ElMessage.success(suffix ? '已加入候补名单' : '申请已提交');
+    ElMessage.success(isWaiting ? '已加入候补名单' : '申请已提交');
     showApplyDialog.value = false;
     applyMessage.value = '';
     applyCharacterId.value = '';
@@ -252,11 +252,11 @@ async function dissolvePost() {
 async function formGroup() {
   try {
     const result = await api.post<{ campaign_id: string }>(`/recruitment/${postId.value}/group`, {});
-    ElMessage.success('成团成功');
+    ElMessage.success('成团成功！正在跳转到团房间…');
     showGroupDialog.value = false;
     await loadDetail();
     if (result?.campaign_id) {
-      router.push('/rooms');
+      router.push(`/room/${result.campaign_id}`);
     }
   } catch (err: any) {
     ElMessage.error(err?.message ?? '成团失败');
