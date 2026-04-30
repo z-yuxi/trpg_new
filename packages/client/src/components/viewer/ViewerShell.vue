@@ -7,7 +7,7 @@
  *
  * 不复用 PageLayout，独立沉浸式壳层。
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import SvgIcon from '../SvgIcon.vue';
 import { useAuthStore } from '../../stores/auth-store';
@@ -298,6 +298,8 @@ interface Annotation {
 
 const annotations = ref<Annotation[]>([]);
 const annotationPanelOpen = ref(false);
+/** 正文内容容器引用，用于高亮还原 */
+const contentElRef = ref<HTMLElement | null>(null);
 // 浮动工具栏
 const selectionToolbar = ref<{ visible: boolean; x: number; y: number; text: string; start: number; end: number }>({
   visible: false, x: 0, y: 0, text: '', start: 0, end: 0,
@@ -305,6 +307,7 @@ const selectionToolbar = ref<{ visible: boolean; x: number; y: number; text: str
 // 编辑中的笔记
 const editingAnnotationId = ref<string | null>(null);
 const editingNote = ref('');
+const focusedAnnotationId = ref<string | null>(null);
 
 async function loadAnnotations() {
   if (!authStore.isLoggedIn) return;
@@ -329,6 +332,8 @@ async function createAnnotation(color: Annotation['color'] = 'yellow') {
       range_end: end,
     });
     annotations.value.push(row);
+    await nextTick();
+    applyHighlights();
   } catch { /* ignore */ }
   selectionToolbar.value.visible = false;
   window.getSelection()?.removeAllRanges();
@@ -347,6 +352,8 @@ async function deleteAnnotation(id: string) {
   try {
     await api.delete(`/annotations/${id}`);
     annotations.value = annotations.value.filter(a => a.id !== id);
+    await nextTick();
+    applyHighlights();
   } catch { /* ignore */ }
 }
 
@@ -359,7 +366,8 @@ function onContentMouseup(e: MouseEvent) {
   }
   const text = sel.toString().trim().slice(0, 500);
   // 计算字符偏移（基于内容区纯文本）
-  const contentEl = (e.currentTarget as HTMLElement);
+  const contentEl = contentElRef.value;
+  if (!contentEl) return;
   const range = sel.getRangeAt(0);
   const preRange = document.createRange();
   preRange.setStart(contentEl, 0);
@@ -378,7 +386,107 @@ function onContentMouseup(e: MouseEvent) {
   };
 }
 
-// ─── 生命周期 ─────────────────────────────────────────────────────────────────
+// ─── 生命周期 ─────────────────────────────────────────────────────
+/**
+ * 高亮还原：用 TreeWalker 遍历文本节点，将已保存的 annotations 渲染为 <mark>。
+ * 每次调用时先移除旧的 <mark>，再重新渲染。
+ */
+const COLOR_BG: Record<string, string> = {
+  yellow: 'rgba(253,230,138,.6)',
+  green: 'rgba(187,247,208,.6)',
+  blue: 'rgba(191,219,254,.6)',
+  red: 'rgba(254,202,202,.6)',
+};
+
+function applyHighlights() {
+  const el = contentElRef.value;
+  if (!el || annotations.value.length === 0) return;
+
+  // 先恢复旧 mark——将 <mark> 替换为其文本内容
+  el.querySelectorAll('mark[data-ann-id]').forEach((mark) => {
+    const parent = mark.parentNode;
+    if (!parent) return;
+    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+    parent.removeChild(mark);
+  });
+  el.normalize();
+
+  // 按 range_start 排序，避免嵌套问题
+  const sorted = [...annotations.value].sort((a, b) => a.range_start - b.range_start);
+
+  // 收集所有文本节点
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let node: Node | null;
+  while ((node = walker.nextNode())) textNodes.push(node as Text);
+
+  // 建立全局偏移表
+  const offsets: { node: Text; start: number; end: number }[] = [];
+  let cur = 0;
+  for (const tn of textNodes) {
+    offsets.push({ node: tn, start: cur, end: cur + tn.length });
+    cur += tn.length;
+  }
+
+  // 逐一插入 <mark>
+  let shift = 0; // 已插入节点造成的偏移修正（因节点拆分后表条目失效）
+  const usedOffsets = offsets.map(o => ({ ...o }));
+
+  for (const ann of sorted) {
+    const s = ann.range_start;
+    const e = ann.range_end;
+    // 找起始和结束的文本节点
+    const startEntry = usedOffsets.find(o => o.start <= s && s < o.end);
+    const endEntry   = usedOffsets.find(o => o.start < e && e <= o.end);
+    if (!startEntry || !endEntry) continue;
+    // 只处理单个文本节点内的情况（跨节点高亮还原暂不支持）
+    if (startEntry.node !== endEntry.node) continue;
+
+    const tn = startEntry.node;
+    const localStart = s - startEntry.start;
+    const localEnd   = e - startEntry.start;
+
+    const before = tn.splitText(localStart);
+    const highlighted = before.splitText(localEnd - localStart);
+
+    const mark = document.createElement('mark');
+    mark.dataset['annId'] = ann.id;
+    mark.style.background = COLOR_BG[ann.color] ?? COLOR_BG['yellow'];
+    mark.style.borderRadius = '2px';
+    mark.style.cursor = 'pointer';
+    before.parentNode!.insertBefore(mark, highlighted);
+    mark.appendChild(before);
+
+    // 更新居中节点的偏移（拆分后 startEntry 节点只剩 before）
+    startEntry.end = startEntry.start + localStart;
+    const afterEntry = { node: highlighted, start: startEntry.start + localEnd, end: startEntry.start + localEnd + highlighted.length };
+    usedOffsets.splice(usedOffsets.indexOf(startEntry) + 1, 0, afterEntry);
+  }
+}
+
+// 内容或笔记变化时重新渲染高亮
+watch([visibleContent, annotations], async () => {
+  await nextTick();
+  applyHighlights();
+}, { deep: true });
+
+function scrollToHighlight(id: string) {
+  focusedAnnotationId.value = id;
+  const mark = contentElRef.value?.querySelector(`mark[data-ann-id="${id}"]`);
+  if (mark) mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function onMarkClick(e: MouseEvent) {
+  const mark = (e.target as HTMLElement).closest('mark[data-ann-id]') as HTMLElement | null;
+  if (!mark) return;
+  const id = mark.dataset['annId'];
+  if (!id) return;
+  annotationPanelOpen.value = true;
+  focusedAnnotationId.value = id;
+  nextTick(() => {
+    document.querySelector(`.annotation-item[data-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+}────────────
 onMounted(async () => {
   await loadAsset();
   await loadReadingProgress();
@@ -590,11 +698,13 @@ function goBack() {
           <!-- 正文渲染 §3.1 -->
           <div
             v-if="visibleContent"
+            ref="contentElRef"
             class="viewer-content"
             :class="{ 'viewer-content--watermark': !!watermarkText }"
             :style="watermarkText ? { '--watermark-text': JSON.stringify(watermarkText) } : undefined"
             v-html="visibleContent"
             @mouseup="onContentMouseup"
+            @click.capture="onMarkClick"
           />
 
           <!-- 试读边界提示 §14.3 §14.4 — 文案见 G01.16 -->
@@ -650,7 +760,14 @@ function goBack() {
             <button class="annotation-panel__close" @click="annotationPanelOpen = false">×</button>
           </div>
           <div v-if="annotations.length === 0" class="annotation-panel__empty">选中正文文字开始划线</div>
-          <div v-for="ann in annotations" :key="ann.id" class="annotation-item" :class="`annotation-item--${ann.color}`">
+          <div
+            v-for="ann in annotations"
+            :key="ann.id"
+            :data-id="ann.id"
+            class="annotation-item"
+            :class="[`annotation-item--${ann.color}`, { 'annotation-item--focused': focusedAnnotationId === ann.id }]"
+            @click="scrollToHighlight(ann.id)"
+          >
             <p class="annotation-item__text">“{{ ann.selected_text }}”</p>
             <div v-if="editingAnnotationId === ann.id" class="annotation-item__edit">
               <textarea v-model="editingNote" rows="3" class="annotation-item__textarea" />
@@ -1315,11 +1432,14 @@ function goBack() {
   padding: 8px 10px;
   margin-bottom: 8px;
   border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: box-shadow .15s;
 
   &--yellow { background: #fffbeb; border-left-color: #f59e0b; }
   &--green  { background: #f0fdf4; border-left-color: #10b981; }
   &--blue   { background: #eff6ff; border-left-color: #3b82f6; }
   &--red    { background: #fef2f2; border-left-color: #ef4444; }
+  &--focused { box-shadow: 0 0 0 2px var(--color-primary, #6c63ff); }
 }
 
 .annotation-item__text {
