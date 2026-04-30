@@ -255,6 +255,34 @@ git reset --hard <commit_id>
 6. 端口 3000/5173 被占用
 操作：结束占用进程后重启服务。
 
+7. server 性能测试偶发失败（P99 抖动）
+操作：使用性能阈值倍率开关 `PERF_P99_MULTIPLIER`。
+
+PowerShell 临时放宽（仅当前终端生效）：
+
+```powershell
+$env:PERF_P99_MULTIPLIER = "2"
+pnpm --filter @trpg/server exec vitest run src/__tests__/perf/recruitment.perf.test.ts
+```
+
+执行 server 全量测试：
+
+```powershell
+$env:PERF_P99_MULTIPLIER = "2"
+pnpm --filter @trpg/server test
+```
+
+恢复默认（移除环境变量）：
+
+```powershell
+Remove-Item Env:PERF_P99_MULTIPLIER
+```
+
+建议：
+- Windows 本地开发机：`2`
+- Linux CI（稳定机器）：`1` 或 `1.2`
+- 仅在性能压测任务中放宽，不建议长期全局设置。
+
 ---
 
 ## 12. 每次开发的快速启动顺序
