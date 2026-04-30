@@ -371,7 +371,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <SvgIcon name="icon-market" :size="20" />
         <span>资产</span>
       </div>
-      <div class="menu-item" @click="router.push('/tuantu/notification-list')">
+      <div class="menu-item" @click="router.push('/notifications')">
         <SvgIcon name="icon-bell" :size="20" />
         <span>通知</span>
       </div>
@@ -396,7 +396,7 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <span>设置</span>
       </div>
       <div class="menu-item" @click="clearCache">
-        <SvgIcon name="icon-settings" :size="20" />
+        <SvgIcon name="icon-refresh" :size="20" />
         <span>清除缓存</span>
       </div>
       <div class="menu-item danger" @click="logout">

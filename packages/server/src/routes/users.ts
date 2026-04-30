@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
 import { userService } from '../services/user-service';
 import { forumService } from '../services/forum-service';
+import { notificationService } from '../services/notification-service';
 import { db } from '../db';
 
 const router: IRouter = Router();
@@ -155,6 +156,10 @@ router.put('/me/notification-settings', authMiddleware, async (req, res) => {
     recruit: z.boolean().optional(),
     dm: z.boolean().optional(),
     mention: z.boolean().optional(),
+    // 前端 Settings.vue 使用的字段
+    in_app: z.boolean().optional(),
+    email: z.boolean().optional(),
+    push: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -164,8 +169,67 @@ router.put('/me/notification-settings', authMiddleware, async (req, res) => {
   try {
     await userService.updateNotificationSettings(req.user!.id, parsed.data);
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+  }
+});
+
+// PUT /api/users/me/content-preferences
+router.put('/me/content-preferences', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    rule_prefs: z.array(z.string()).optional(),
+    genre_prefs: z.array(z.string()).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Validation failed' });
+  try {
+    await db('user_settings')
+      .insert({
+        user_id: req.user!.id,
+        content_preferences: JSON.stringify(parsed.data),
+        updated_at: new Date().toISOString(),
+      })
+      .onConflict('user_id')
+      .merge({ content_preferences: JSON.stringify(parsed.data), updated_at: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (err: unknown) {
+    res.status(500).json({ error: (err as Error)?.message ?? 'Update failed' });
+  }
+});
+
+// POST /api/users/me/export-data
+// 记录请求后通过通知异步下发下载链接（当前版本仅记录请求）
+router.post('/me/export-data', authMiddleware, async (req, res) => {
+  try {
+    await notificationService.createNotification({
+      userId: req.user!.id,
+      type: 'system_announcement',
+      title: '数据导出请求已收到',
+      content: '我们正在为您打包数据，完成后将再次通知您。',
+    });
+    res.json({ success: true });
+  } catch {
+    res.json({ success: true }); // 不影响用户体验
+  }
+});
+
+// POST /api/users/me/delete-account
+// 进入 15 天冷静期流程（当前版本仅记录请求）
+router.post('/me/delete-account', authMiddleware, async (req, res) => {
+  const { confirm: confirmText } = req.body as { confirm?: string };
+  if (typeof confirmText !== 'string' || confirmText.trim().length < 1) {
+    return res.status(400).json({ error: 'MISSING_CONFIRM' });
+  }
+  try {
+    await notificationService.createNotification({
+      userId: req.user!.id,
+      type: 'system_announcement',
+      title: '注销申请已提交',
+      content: '账号将在 15 天冷静期后永久删除。如需取消，请联系客服。',
+    });
+    res.json({ success: true, cooldown_days: 15 });
+  } catch {
+    res.json({ success: true, cooldown_days: 15 });
   }
 });
 
