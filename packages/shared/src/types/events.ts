@@ -41,7 +41,11 @@ export interface ServerToClientEvents {
     messages: ChatMessage[];
     your_state: CharacterInstance;
     global_time: StoryTime;
+    /** 断线时间过长，消息可能不完整，客户端应刷新完整状态 */
+    incomplete?: boolean;
   }) => void;
+  /** 通用错误提示，如权限校验失败 */
+  error_message: (data: { message: string }) => void;
   notification_new: (notification: UserNotification) => void;
   unread_count_changed: (data: { count: number }) => void;
   grid_token_moved: (data: { campaign_id: string; scene_id: string; token: GridToken }) => void;

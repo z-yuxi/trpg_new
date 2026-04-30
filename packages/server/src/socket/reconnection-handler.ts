@@ -67,7 +67,8 @@ export async function handleReconnection(
   const globalTime = safeJsonParse(campaignRow?.global_story_time, { day: 1, hour: 8, minute: 0 });
 
   // 如果断线超过 24 小时（消息可能不完整），通知客户端刷新完整状态
-  const oldestMessageId = missedMessages[0]?.id;
+  const typedMessages = missedMessages as Array<{ id: string | number }>;
+  const oldestMessageId = typedMessages[0]?.id;
   const disconnectTooLong = !oldestMessageId || String(lastEventId) < String(oldestMessageId);
 
   socket.emit('missed_messages', {

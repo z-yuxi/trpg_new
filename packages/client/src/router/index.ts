@@ -38,12 +38,19 @@ const routes = [
       // 团途（原个人中心）
       { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Personal.vue'), meta: { title: '团途' } },
       { path: 'tuantu/characters', name: 'TuantuCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '角色档案' } },
-      { path: 'tuantu/security', name: 'TuantuSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
-      { path: 'tuantu/notifications', name: 'TuantuNotifications', component: () => import('../views/personal/NotificationSettings.vue'), meta: { title: '消息通知设置' } },
-      { path: 'tuantu/notification-list', name: 'TuantuNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
-      { path: 'tuantu/privacy', name: 'TuantuPrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
-      { path: 'tuantu/about', name: 'TuantuAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
       { path: 'tuantu/assets', name: 'TuantuAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '个人馆藏', requiresAuth: true } },
+      // 通知中心（独立页）
+      { path: 'notifications', name: 'Notifications', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '通知', requiresAuth: true } },
+      // 私信
+      { path: 'messages', name: 'Messages', component: () => import('../views/Messages.vue'), meta: { title: '私信', requiresAuth: true } },
+      // 设置（统一入口）
+      { path: 'settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '设置', requiresAuth: true } },
+      // 兼容旧路由：老 tuantu 子页重定向
+      { path: 'tuantu/security', redirect: '/settings' },
+      { path: 'tuantu/notifications', redirect: '/settings' },
+      { path: 'tuantu/notification-list', redirect: '/notifications' },
+      { path: 'tuantu/privacy', redirect: '/settings' },
+      { path: 'tuantu/about', redirect: '/settings' },
       // 兼容旧地址：/mine 和 /trip
       { path: 'mine', redirect: '/tuantu' },
       {

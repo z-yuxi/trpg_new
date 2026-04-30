@@ -313,6 +313,8 @@ describe('B. executeCommand 路由集成', () => {
       name: '未知命令',
       graph: minGraph as any,
       parsedParams: {},
+      description: '',
+      layer: 'custom' as const,
     });
 
     const result = await service.executeCommand('rs001', {
@@ -393,7 +395,7 @@ describe('C. testRecipe 集成（真实编译路径）', () => {
       params: {
         steps: [{ recipe_id: 'skill_check' }],
       },
-    };
+    } as unknown as import('@trpg/shared').Recipe;
     const result = await service.testRecipe({
       recipe: chainRecipe,
       allRecipes: [subRecipe],

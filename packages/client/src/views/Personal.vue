@@ -373,7 +373,11 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
       </div>
       <div class="menu-item" @click="router.push('/tuantu/notification-list')">
         <SvgIcon name="icon-bell" :size="20" />
-        <span>通知/私信</span>
+        <span>通知</span>
+      </div>
+      <div class="menu-item" @click="router.push('/messages')">
+        <SvgIcon name="icon-chat" :size="20" />
+        <span>私信</span>
       </div>
       <div class="menu-item" @click="router.push('/rooms')">
         <SvgIcon name="icon-menu" :size="20" />
@@ -387,21 +391,9 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         <span>{{ currentTheme === 'day' ? '切换深色模式' : '切换浅色模式' }}</span>
       </div>
-      <div class="menu-item" @click="router.push('/tuantu/security')">
-        <SvgIcon name="icon-lock" :size="20" />
-        <span>账号安全</span>
-      </div>
-      <div class="menu-item" @click="router.push('/tuantu/notifications')">
-        <SvgIcon name="icon-bell" :size="20" />
-        <span>消息通知设置</span>
-      </div>
-      <div class="menu-item" @click="router.push('/tuantu/privacy')">
-        <SvgIcon name="icon-user" :size="20" />
-        <span>隐私设置</span>
-      </div>
-      <div class="menu-item" @click="router.push('/tuantu/about')">
-        <SvgIcon name="icon-workshop" :size="20" />
-        <span>关于我们</span>
+      <div class="menu-item" @click="router.push('/settings')">
+        <SvgIcon name="icon-settings" :size="20" />
+        <span>设置</span>
       </div>
       <div class="menu-item" @click="clearCache">
         <SvgIcon name="icon-settings" :size="20" />

@@ -40,12 +40,12 @@ async function setupPost(gmToken: string) {
 describe('故障演练 A — Redis 不可用', () => {
   // 在 e2e setup.ts 中，redis 已被 mock 为内存实现。
   // 此处进一步 mock 为全部拒绝（模拟 Redis 宕机）
-  let originalGet: typeof vi.fn;
-  let originalSet: typeof vi.fn;
-  let originalPing: typeof vi.fn;
+  let originalGet: (() => unknown) | undefined;
+  let originalSet: (() => unknown) | undefined;
+  let originalPing: (() => unknown) | undefined;
 
   beforeEach(async () => {
-    const { redis } = await import('../../db/redis');
+    const { redis } = await import('../../db/redis.js');
     originalGet = (redis.get as ReturnType<typeof vi.fn>).getMockImplementation?.() ?? (() => null);
     originalSet = (redis.set as ReturnType<typeof vi.fn>).getMockImplementation?.() ?? (() => 'OK');
 
@@ -57,7 +57,7 @@ describe('故障演练 A — Redis 不可用', () => {
   });
 
   afterEach(async () => {
-    const { redis } = await import('../../db/redis');
+    const { redis } = await import('../../db/redis.js');
     // 恢复默认 mock（返回正常值）
     vi.mocked(redis.get).mockResolvedValue(null);
     vi.mocked(redis.set).mockResolvedValue('OK');
@@ -108,7 +108,7 @@ describe('故障演练 A — Redis 不可用', () => {
 
 describe('故障演练 B — DB 异常降级', () => {
   it('B1: DB 不可达时 /api/health 应返回 503 + db:error', async () => {
-    const { db } = await import('../../db');
+    const { db } = await import('../../db/index.js');
     const originalRaw = db.raw.bind(db);
 
     // 临时让 db.raw 失败（模拟 DB 宕机）
@@ -125,7 +125,7 @@ describe('故障演练 B — DB 异常降级', () => {
   });
 
   it('B2: 招募列表 DB 失败应返回 500（不崩溃进程）', async () => {
-    const { db } = await import('../../db');
+    const { db } = await import('../../db/index.js');
 
     // Mock 特定 table 查询失败
     const spy = vi.spyOn(db, 'raw' as never).mockRejectedValueOnce(new Error('DB error'));
@@ -165,7 +165,7 @@ describe('故障演练 C — 慢响应边界', () => {
 describe('故障演练 D — Cron 任务异常隔离', () => {
   it('D1: expireInvites 内部异常不影响主服务接口可用性', async () => {
     // 模拟 expireInvites 抛出异常
-    const { recruitmentService } = await import('../../services/recruitment-service');
+    const { recruitmentService } = await import('../../services/recruitment-service.js');
     vi.spyOn(recruitmentService, 'expireInvites').mockRejectedValueOnce(new Error('DB timeout'));
 
     // 验证 API 仍然可用
@@ -176,7 +176,7 @@ describe('故障演练 D — Cron 任务异常隔离', () => {
   });
 
   it('D2: 日报巡检失败不影响招募主链路', async () => {
-    const { runDailyDataCheck } = await import('../../services/daily-check-service');
+    const { runDailyDataCheck } = await import('../../services/daily-check-service.js');
     vi.spyOn({ runDailyDataCheck }, 'runDailyDataCheck').mockRejectedValueOnce(new Error('check failed'));
 
     // 主链路不受影响
