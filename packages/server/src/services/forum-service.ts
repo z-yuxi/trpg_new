@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { db } from '../db';
 
-export type ForumBoard = 'rules' | 'creation' | 'experience' | 'newbie' | 'lounge';
+export type ForumBoard = 'tips' | 'share' | 'lounge';
 export type ThreadSort = 'newest' | 'hottest' | 'latest_reply';
 
 export interface ForumThread {

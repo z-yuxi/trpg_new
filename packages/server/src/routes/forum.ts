@@ -7,7 +7,7 @@ import { db } from '../db';
 
 const router = Router();
 
-const BOARDS: ForumBoard[] = ['rules', 'creation', 'experience', 'newbie', 'lounge'];
+const BOARDS: ForumBoard[] = ['tips', 'share', 'lounge'];
 
 // GET /api/forum/boards/:board/threads
 router.get('/boards/:board/threads', optionalAuthMiddleware, async (req, res) => {
@@ -29,7 +29,7 @@ router.get('/boards/:board/threads', optionalAuthMiddleware, async (req, res) =>
 // POST /api/forum/threads
 router.post('/threads', authMiddleware, async (req, res) => {
   const schema = z.object({
-    board: z.enum(['rules', 'creation', 'experience', 'newbie', 'lounge']),
+    board: z.enum(['tips', 'share', 'lounge']),
     title: z.string().min(2).max(200),
     content: z.string().min(1).max(10000),
   });

@@ -8,14 +8,14 @@ const route = useRoute();
 const router = useRouter();
 
 const tabs = [
-  { key: 'experience', label: '经验交流', icon: 'icon-ruleset',   to: '/discuss/experience' },
-  { key: 'rpg-log',    label: '跑团心得', icon: 'icon-list',      to: '/discuss/rpg-log' },
-  { key: 'lounge',     label: '闲聊',     icon: 'icon-message',   to: '/discuss/lounge' },
+  { key: 'tips',       label: '技巧交流', icon: 'icon-ruleset',   to: '/discuss/tips' },
+  { key: 'share',      label: '跑团分享', icon: 'icon-list',      to: '/discuss/share' },
+  { key: 'lounge',     label: '同好闲谈', icon: 'icon-message',   to: '/discuss/lounge' },
 ] as const;
 
 const activeTab = computed(() => {
-  if (route.path.startsWith('/discuss/rpg-log')) return 'rpg-log';
-  if (route.path.startsWith('/discuss/experience')) return 'experience';
+  if (route.path.startsWith('/discuss/share')) return 'share';
+  if (route.path.startsWith('/discuss/tips')) return 'tips';
   return 'lounge';
 });
 
@@ -34,7 +34,7 @@ function navigateTab(target: (typeof tabs)[number]) {
         <p class="banner-desc">分享你的观点，与天下 TRPG 玩家交流</p>
       </div>
       <div class="banner-action">
-        <TButton type="primary" @click="router.push('/discuss/lounge')">
+        <TButton type="primary" @click="router.push('/discuss/tips')">
           <SvgIcon name="icon-plus" :size="16" />
           发帖讨论
         </TButton>

@@ -185,10 +185,10 @@ onMounted(async () => {
     </div>
 
     <ElTabs v-model="activeTab">
-      <ElTabPane label="找团玩" name="gm_recruit">
+      <ElTabPane label="找房间" name="gm_recruit">
         <RecruitmentBoard :key="`gm-${boardVersion}`" fixed-type="gm_recruit" :rulesets="rulesets" />
       </ElTabPane>
-      <ElTabPane label="当 GM" name="player_seek">
+      <ElTabPane label="开团招人" name="player_seek">
         <RecruitmentBoard :key="`player-${boardVersion}`" fixed-type="player_seek" :rulesets="rulesets" />
       </ElTabPane>
     </ElTabs>
@@ -202,8 +202,8 @@ onMounted(async () => {
 
         <ElFormItem label="招募类型" required>
           <ElSelect v-model="postForm.type" style="width:100%">
-            <ElOption label="找团玩（GM 招玩家）" value="gm_recruit" />
-            <ElOption label="当 GM（玩家求组）" value="player_seek" />
+            <ElOption label="找房间（GM 招募帖）" value="gm_recruit" />
+            <ElOption label="开团招人（玩家求组帖）" value="player_seek" />
           </ElSelect>
         </ElFormItem>
 

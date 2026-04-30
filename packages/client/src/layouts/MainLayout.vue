@@ -85,7 +85,7 @@ function handleBack() {
           <button class="icon-btn theme-toggle" @click="toggleTheme" aria-label="切换主题">
             <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
           </button>
-          <router-link to="/mine" class="avatar-btn" aria-label="个人中心">
+          <router-link to="/tuantu" class="avatar-btn" aria-label="团途">
             <SvgIcon name="icon-settings" :size="20" />
           </router-link>
         </div>

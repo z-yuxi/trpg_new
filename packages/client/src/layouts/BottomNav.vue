@@ -16,7 +16,7 @@ const tabs = [
   { name: 'Recruit', label: '招募', icon: 'icon-recruit', path: '/recruit' },
   { name: 'Rooms', label: '房间', icon: 'icon-list', path: '/rooms', badge: campaignUnread },
   { name: 'Discuss', label: '讨论', icon: 'icon-message', path: '/discuss' },
-  { name: 'Mine', label: '我的', icon: 'icon-settings', path: '/mine', badge: computed(() => notificationStore.unreadCount) },
+  { name: 'Tuantu', label: '团途', icon: 'icon-settings', path: '/tuantu', badge: computed(() => notificationStore.unreadCount) },
 ];
 
 function isActive(tab: { name: string; path: string }) {

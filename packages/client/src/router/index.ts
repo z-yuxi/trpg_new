@@ -30,20 +30,39 @@ const routes = [
         component: () => import('../views/Community.vue'),
         meta: { title: '讨论' },
         children: [
-          { path: '', redirect: { path: '/discuss/lounge' } },
+          { path: '', redirect: { path: '/discuss/tips' } },
           { path: ':board', name: 'DiscussBoard', component: () => import('../views/community/ForumBoard.vue'), meta: { title: '讨论区' } },
         ],
       },
       { path: 'discuss/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
-      // 我的（原个人中心）
-      { path: 'mine', name: 'Mine', component: () => import('../views/Personal.vue'), meta: { title: '我的' } },
-      { path: 'mine/characters', name: 'MineCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '我的角色卡' } },
-      { path: 'mine/security', name: 'MineSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
-      { path: 'mine/notifications', name: 'MineNotifications', component: () => import('../views/personal/NotificationSettings.vue'), meta: { title: '消息通知设置' } },
-      { path: 'mine/notification-list', name: 'MineNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
-      { path: 'mine/privacy', name: 'MinePrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
-      { path: 'mine/about', name: 'MineAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
-      { path: 'mine/assets', name: 'MineAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '我的资产', requiresAuth: true } },
+      // 团途（原个人中心）
+      { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Personal.vue'), meta: { title: '团途' } },
+      { path: 'tuantu/characters', name: 'TuantuCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '角色档案' } },
+      { path: 'tuantu/security', name: 'TuantuSecurity', component: () => import('../views/personal/SecuritySettings.vue'), meta: { title: '账号安全' } },
+      { path: 'tuantu/notifications', name: 'TuantuNotifications', component: () => import('../views/personal/NotificationSettings.vue'), meta: { title: '消息通知设置' } },
+      { path: 'tuantu/notification-list', name: 'TuantuNotificationList', component: () => import('../views/personal/NotificationList.vue'), meta: { title: '消息通知', requiresAuth: true } },
+      { path: 'tuantu/privacy', name: 'TuantuPrivacy', component: () => import('../views/personal/PrivacySettings.vue'), meta: { title: '隐私设置' } },
+      { path: 'tuantu/about', name: 'TuantuAbout', component: () => import('../views/personal/About.vue'), meta: { title: '关于我们' } },
+      { path: 'tuantu/assets', name: 'TuantuAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '个人馆藏', requiresAuth: true } },
+      // 兼容旧地址：/mine 和 /trip
+      { path: 'mine', redirect: '/tuantu' },
+      {
+        path: 'mine/:pathMatch(.*)*',
+        redirect: (to: any) => {
+          const raw = to.params['pathMatch'];
+          const nextPath = Array.isArray(raw) ? raw.join('/') : String(raw ?? '');
+          return `/tuantu/${nextPath}`;
+        },
+      },
+      { path: 'trip', redirect: '/tuantu' },
+      {
+        path: 'trip/:pathMatch(.*)*',
+        redirect: (to: any) => {
+          const raw = to.params['pathMatch'];
+          const nextPath = Array.isArray(raw) ? raw.join('/') : String(raw ?? '');
+          return `/tuantu/${nextPath}`;
+        },
+      },
       { path: 'u/:uid', name: 'UserProfile', component: () => import('../views/UserProfile.vue'), meta: { title: '个人主页' } },
     ],
   },

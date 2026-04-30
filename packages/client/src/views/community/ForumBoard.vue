@@ -22,12 +22,9 @@ interface Thread {
 }
 
 const BOARD_META: Record<string, { label: string; description: string; badge: string }> = {
-  experience: { label: '经验交流', description: '交流玩法经验、检定技巧与规则问答。', badge: 'EX' },
-  'rpg-log':  { label: '跑团心得', description: '复盘跑团故事、分享带团心得与战报。', badge: 'RL' },
-  lounge:     { label: '闲聊',     description: '轻松闲聊、拉片、吐槽和非严肃话题。', badge: 'LG' },
-  rules:      { label: '规则问答', description: '检定、判定、规则冲突与实战裁定集中讨论。', badge: 'RL' },
-  creation:   { label: '模组创作', description: '分享模组草稿、灵感片段和发布前评审。', badge: 'CR' },
-  newbie:     { label: '新人求助', description: '面向新手的快速问答区，适合入门咨询。', badge: 'NB' },
+  tips:   { label: '技巧交流', description: '来这，教大家点什么 / 学点什么。', badge: 'TP' },
+  share:  { label: '跑团分享', description: '来这，晒你和跑团相关的所有成果。', badge: 'SH' },
+  lounge: { label: '同好闲谈', description: '来这，和大家随便聊聊天。', badge: 'LG' },
 };
 
 const route = useRoute();

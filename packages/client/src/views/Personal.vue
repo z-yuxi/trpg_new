@@ -363,15 +363,15 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
     </TCard>
 
     <div class="menu-list quick-entry">
-      <div class="menu-item" @click="router.push('/mine/characters')">
+      <div class="menu-item" @click="router.push('/tuantu/characters')">
         <SvgIcon name="icon-user" :size="20" />
         <span>角色卡</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/assets')">
+      <div class="menu-item" @click="router.push('/tuantu/assets')">
         <SvgIcon name="icon-market" :size="20" />
         <span>资产</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/notification-list')">
+      <div class="menu-item" @click="router.push('/tuantu/notification-list')">
         <SvgIcon name="icon-bell" :size="20" />
         <span>通知/私信</span>
       </div>
@@ -387,19 +387,19 @@ const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', crea
         <SvgIcon :name="currentTheme === 'day' ? 'icon-moon' : 'icon-sun'" :size="20" />
         <span>{{ currentTheme === 'day' ? '切换深色模式' : '切换浅色模式' }}</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/security')">
+      <div class="menu-item" @click="router.push('/tuantu/security')">
         <SvgIcon name="icon-lock" :size="20" />
         <span>账号安全</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/notifications')">
+      <div class="menu-item" @click="router.push('/tuantu/notifications')">
         <SvgIcon name="icon-bell" :size="20" />
         <span>消息通知设置</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/privacy')">
+      <div class="menu-item" @click="router.push('/tuantu/privacy')">
         <SvgIcon name="icon-user" :size="20" />
         <span>隐私设置</span>
       </div>
-      <div class="menu-item" @click="router.push('/mine/about')">
+      <div class="menu-item" @click="router.push('/tuantu/about')">
         <SvgIcon name="icon-workshop" :size="20" />
         <span>关于我们</span>
       </div>
