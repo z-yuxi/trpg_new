@@ -3,16 +3,19 @@
 # deploy-check.sh — 发布前门禁检查脚本（可执行 SOP）
 #
 # 用法：
-#   bash scripts/deploy-check.sh [--skip-e2e]
+#   bash scripts/deploy-check.sh [--skip-e2e] [--skip-migrate]
 #
 # 通过所有检查后退出码 0，任何检查失败立即退出码 1。
 # CI/CD 流水线可在 docker build 之前调用此脚本。
+# CI 推荐用法：bash scripts/deploy-check.sh --skip-e2e --skip-migrate
 # =============================================================================
 set -euo pipefail
 
 SKIP_E2E=false
+SKIP_MIGRATE=false
 for arg in "$@"; do
-  [[ "$arg" == "--skip-e2e" ]] && SKIP_E2E=true
+  [[ "$arg" == "--skip-e2e" ]]      && SKIP_E2E=true
+  [[ "$arg" == "--skip-migrate" ]]  && SKIP_MIGRATE=true
 done
 
 GREEN="\033[0;32m"; RED="\033[0;31m"; YELLOW="\033[1;33m"; NC="\033[0m"
@@ -64,11 +67,15 @@ else
 fi
 
 # ── 4. 数据库迁移回滚演练 ──────────────────────────────────────────────────────
-info "Step 4/6: 迁移回滚演练"
-if pnpm --filter @trpg/server run migrate -- latest 2>&1 | tail -5; then
-  ok "迁移 latest 通过"
+if [[ "$SKIP_MIGRATE" == "false" ]]; then
+  info "Step 4/6: 迁移回滚演练"
+  if pnpm --filter @trpg/server run migrate -- latest 2>&1 | tail -5; then
+    ok "迁移 latest 通过"
+  else
+    fail "迁移 latest 失败"
+  fi
 else
-  fail "迁移 latest 失败"
+  info "Step 4/6: 迁移回滚演练（已跳过，CI 环境无真实 DB）"
 fi
 
 # ── 5. 安全测试 ────────────────────────────────────────────────────────────────

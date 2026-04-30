@@ -17,3 +17,4 @@ export * from './annotations';
 export * from './reports';
 export * from './payments';
 export * from './assets';
+export * from './ai';

@@ -124,7 +124,36 @@ jobs:
       - name: 全量单元测试
         run: pnpm test
 
-# ─── Job 5: Docker 构建冒烟（仅 main / release-* 分支运行） ──────────────────
+# ─── Job 5: 发布门禁脚本（deploy-check.sh CI 版） ───────────────────────────
+  deploy-script-gate:
+    name: 发布门禁脚本（tsc + 安全测试 + 客户端构建）
+    runs-on: ubuntu-latest
+    needs: static-checks
+    env:
+      JWT_SECRET: ci_test_jwt_secret_not_for_production
+      DB_HOST: 127.0.0.1
+      DB_USER: trpg
+      DB_PASSWORD: trpg_password
+      DB_NAME: trpg_platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 发布门禁脚本（跳过 E2E 和迁移，避免重复）
+        run: bash scripts/deploy-check.sh --skip-e2e --skip-migrate
+
+# ─── Job 6: Docker 构建冒烟（仅 main / release-* 分支运行） ──────────────────
   docker-smoke:
     name: Docker 构建冒烟（server + client 镜像）
     runs-on: ubuntu-latest
@@ -156,22 +185,24 @@ jobs:
             packages/server/dist/server.js --version 2>&1 || true
           echo "Docker smoke: server image built successfully"
 
-# ─── Job 6: 发布就绪汇总（所有关键 job 通过才绿灯） ─────────────────────────
+# ─── Job 7: 发布就绪汇总（所有关键 job 通过才绿灯） ─────────────────────────
   release-ready:
     name: ✅ 发布就绪汇总
     runs-on: ubuntu-latest
-    needs: [acceptance-gate, contract-tests, unit-tests]
+    needs: [acceptance-gate, contract-tests, unit-tests, deploy-script-gate]
     if: always()
     steps:
       - name: 检查所有关键 job 状态
         run: |
-          echo "acceptance-gate: ${{ needs.acceptance-gate.result }}"
-          echo "contract-tests:  ${{ needs.contract-tests.result }}"
-          echo "unit-tests:      ${{ needs.unit-tests.result }}"
+          echo "acceptance-gate:    ${{ needs.acceptance-gate.result }}"
+          echo "contract-tests:     ${{ needs.contract-tests.result }}"
+          echo "unit-tests:         ${{ needs.unit-tests.result }}"
+          echo "deploy-script-gate: ${{ needs.deploy-script-gate.result }}"
 
           if [[ "${{ needs.acceptance-gate.result }}" != "success" || \
                 "${{ needs.contract-tests.result }}" != "success" || \
-                "${{ needs.unit-tests.result }}"     != "success" ]]; then
+                "${{ needs.unit-tests.result }}"     != "success" || \
+                "${{ needs.deploy-script-gate.result }}" != "success" ]]; then
             echo "❌ 发布门禁未通过，不允许合并/发布"
             exit 1
           fi

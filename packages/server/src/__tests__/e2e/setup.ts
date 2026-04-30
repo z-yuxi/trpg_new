@@ -169,13 +169,18 @@ function makeBuilder(tableName: string): any {
     builder._pendingInsertConflictSkip = false;
     return builder;
   };
-  builder.onConflict = (_cols?: any) => ({
+  builder.onConflict = (cols?: string | string[]) => ({
     ignore: () => {
-      // 如果有待插入数据，检查是否已存在（简化：按 id 去重）
+      // 如果有待插入数据，按冲突列去重（模拟真实 DB 的唯一约束）
       if (builder._pendingInsertRecord) {
         const rec = builder._pendingInsertRecord;
         if (!rows[table]) rows[table] = [];
-        const exists = rows[table].some((r) => r.id === rec.id);
+        const conflictCols = cols
+          ? (Array.isArray(cols) ? cols : [cols])
+          : null;
+        const exists = conflictCols && conflictCols.length > 0
+          ? rows[table].some((r) => conflictCols.every((col) => r[col] === rec[col]))
+          : rows[table].some((r) => r.id === rec.id);
         if (!exists) rows[table].push(rec);
         builder._insertResult = [rec.id];
         builder._pendingInsertRecord = null;

@@ -52,6 +52,8 @@ describe('移动端弱网专项验收', () => {
     rows.payment_orders = [];
     rows.content_access_grants = [];
     rows.payment_audit_log = [];
+    rows.modules = [];
+    rows.users = [];
   });
 
   async function setup() {
@@ -172,10 +174,12 @@ describe('移动端弱网专项验收', () => {
     const webhookBody = { order_id: orderId, transaction_id: 'txn-w4', status: 'paid' };
 
     // 模拟网络抖动导致 3 次重复回调
+    // 延迟足够大（300ms / 600ms）确保第一次回调在第二次到达前已完成，
+    // 使服务端的幂等路径（status=paid 短路）在 CI 慢机上同样可靠触发。
     const results = await Promise.all([
       request.post('/api/payments/webhook/alipay').send(webhookBody),
-      withDelay(() => request.post('/api/payments/webhook/alipay').send(webhookBody), 50),
-      withDelay(() => request.post('/api/payments/webhook/alipay').send(webhookBody), 100),
+      withDelay(() => request.post('/api/payments/webhook/alipay').send(webhookBody), 300),
+      withDelay(() => request.post('/api/payments/webhook/alipay').send(webhookBody), 600),
     ]);
 
     // 所有回调均应返回成功

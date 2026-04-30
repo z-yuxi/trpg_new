@@ -197,5 +197,58 @@ docker logs --tail=50 trpg_new-server-1 2>&1 | grep -i error
 ---
 
 _SOP 版本：v1.0 | 维护人：后端团队 | 下次评审：2026-07-01_
+
+---
+
+## 八、当前执行入口（脚本 × 触发时机 × 责任人）
+
+> 本节与代码库脚本保持同步，新增 / 修改脚本后须同步更新此表。
+
+### 8.1 脚本责任矩阵
+
+| 脚本 | 用途 | 触发时机 | 推荐执行者 |
+|------|------|---------|-----------|
+| `scripts/deploy-check.sh` | 发布前 6 步门禁（tsc / 单测 / E2E / 迁移 / 安全 / 构建） | **CI 自动**（每次推送 main/release-* 分支）；手工发布前也应执行 | CI Runner（自动） / 发布工程师（手工） |
+| `scripts/rollback.sh` | 生产回滚（含二次确认 + 审计日志） | 发现 P0/P1 故障，由值班工程师手工执行 | 值班后端工程师 |
+| `scripts/health-watch.sh` | 发布后 30 分钟观测窗口（阈值自动告警） | 每次正式上线后立即运行，保持前台执行直至窗口结束 | 发布工程师 / SRE |
+| `.github/workflows/ci.yml` | 自动化全量 CI（静态检查 / 验收套件 / 合同测试 / 单测 / 发布门禁脚本 / Docker 冒烟） | GitHub 推送或 PR 事件自动触发 | CI Runner（自动） |
+
+### 8.2 CI 作业依赖关系
+
+```
+push / PR
+    │
+    ▼
+static-checks（术语守卫 + 迁移验证）
+    │
+    ├─▶ acceptance-gate（发布门禁验收套件）─────────────────┐
+    ├─▶ contract-tests（API 合同测试）                       ├─▶ release-ready ✅
+    ├─▶ unit-tests（全量单元测试）──────────────────────────┤
+    └─▶ deploy-script-gate（deploy-check.sh --skip-e2e      │
+         --skip-migrate：tsc + 安全测试 + 客户端构建）──────┘
+                                │
+                                └─▶ docker-smoke（仅 main/release-* 分支）
+```
+
+### 8.3 手工发布标准流程（与 CI 的衔接点）
+
+```
+1. 开发 → 推送 PR → CI 全绿（release-ready ✅）
+2. 合并 main 后：
+   a. 本地再次确认：bash scripts/deploy-check.sh（含迁移演练）
+   b. 执行标准上线步骤（见第三节）
+   c. 立即启动观测窗口：bash scripts/health-watch.sh
+3. 若出现 P0/P1：bash scripts/rollback.sh（会要求二次确认）
+```
+
+### 8.4 弱网专项测试（CI 覆盖状态）
+
+| 测试文件 | 覆盖场景 | CI 作业 | 状态 |
+|---------|---------|--------|------|
+| `e2e/mobile-weak-network.test.ts` | W1~W8（超时/幂等/慢网/并发） | `unit-tests` → `pnpm test` | ✅ 已接入 |
+| `e2e/payment.e2e.test.ts` | 支付主链路 15 条 | `acceptance-gate` | ✅ 已接入 |
+
+> **W4 幂等说明**：mock 已修复 `onConflict(cols).ignore()` 按冲突列去重；
+> 回调延迟由 50/100ms 调整为 300/600ms，确保 CI 慢机可重复通过。
 </content>
 </invoke>

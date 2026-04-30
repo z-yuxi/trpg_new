@@ -169,4 +169,17 @@ router.get('/quota', async (req, res) => {
   });
 });
 
+// ── GET /api/ai/tasks — 最近 AI 任务列表 ─────────────────────────────────────
+router.get('/tasks', async (req, res) => {
+  const limit = Math.min(Number(req.query['limit'] ?? 30), 100);
+
+  const tasks = await db('ai_usage_log')
+    .where('user_id', req.user!.id)
+    .orderBy('created_at', 'desc')
+    .limit(limit)
+    .select('id', 'task_type', 'status', 'input_tokens', 'output_tokens', 'duration_ms', 'created_at');
+
+  res.json({ tasks });
+});
+
 export default router;

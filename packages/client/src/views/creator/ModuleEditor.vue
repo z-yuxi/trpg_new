@@ -49,6 +49,14 @@
         <button class="btn btn--secondary" @click="openTermsPanel">
           术语白名单{{ moduleTerms.length ? ` (${moduleTerms.length})` : '' }}
         </button>
+        <button
+          class="btn btn--secondary atc-trigger-btn"
+          :class="{ 'atc-trigger-btn--alert': aiTaskFailedCount > 0 }"
+          @click="aiTaskCenterOpen = true"
+        >
+          AI 任务{{ aiTaskPendingCount ? ` (${aiTaskPendingCount})` : '' }}
+          <span v-if="aiTaskFailedCount" class="atc-fail-dot" />
+        </button>
         <button class="btn btn--secondary" @click="readerSettingsPanelOpen = true">叙阅器设置</button>
         <button class="btn btn--secondary" @click="manualSave">保存</button>
         <button
@@ -113,8 +121,34 @@
       <aside class="props-panel" :class="{ 'props-panel--hidden': !aiPanelVisible }">
         <div class="props-title">
           AI 校对结果
-          <button class="panel-close-btn" @click="aiPanelVisible = false">×</button>
+          <div class="props-title-actions">
+            <button
+              v-if="aiCheckHistory.length"
+              class="history-toggle-btn"
+              :class="{ 'history-toggle-btn--active': aiHistoryPanelOpen }"
+              @click="aiHistoryPanelOpen = !aiHistoryPanelOpen"
+              title="校对历史"
+            >历史 ({{ aiCheckHistory.length }})</button>
+            <button class="panel-close-btn" @click="aiPanelVisible = false">×</button>
+          </div>
         </div>
+
+        <!-- 校对历史展开面板 -->
+        <div v-if="aiHistoryPanelOpen && aiCheckHistory.length" class="ai-history-panel">
+          <div class="ai-history-title">最近 {{ aiCheckHistory.length }} 次校对</div>
+          <ul class="ai-history-list">
+            <li v-for="snap in aiCheckHistory" :key="snap.id" class="ai-history-item">
+              <div class="ai-history-meta">
+                <span class="ai-history-time">{{ new Date(snap.timestamp).toLocaleTimeString() }}</span>
+                <span class="ai-history-count">{{ snap.issues.length }} 个问题</span>
+              </div>
+              <button class="ai-history-rollback-btn" @click="rollbackToSnapshot(snap)">
+                ↩ 恢复到此版本
+              </button>
+            </li>
+          </ul>
+        </div>
+
         <div v-if="aiCheckBusy" class="ai-loading">分析中，请稍候...</div>
         <div v-else-if="aiIssues.length === 0 && aiChecked" class="ai-empty">未发现问题，文本状态良好。</div>
         <div v-else-if="aiIssues.length === 0" class="ai-empty">点击「AI 校对」开始分析当前内容。</div>
@@ -166,6 +200,12 @@
       :busy="aiEntityDialogBusy"
       @close="aiEntityDialogOpen = false"
       @confirm="handleEntityConfirm"
+    />
+
+    <AiTaskCenterPanel
+      v-if="aiTaskCenterOpen"
+      @close="aiTaskCenterOpen = false"
+      @open-entity-review="handleTaskCenterEntityReview"
     />
 
     <!-- ── 术语白名单管理抽屉 ──────────────────────────── -->
@@ -294,6 +334,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDialog.vue';
 import AiEntityReviewDialog from '../../components/module-editor/AiEntityReviewDialog.vue';
+import AiTaskCenterPanel from '../../components/ai/AiTaskCenterPanel.vue';
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
@@ -391,6 +432,41 @@ const aiChecked = ref(false);
 const aiIssues = ref<AiIssue[]>([]);
 const aiQuotaInfo = ref<{ used: number; quota: number } | null>(null);
 
+// ── AI 校对历史（最近 3 次，含校对前快照，支持回滚） ─────
+const MAX_HISTORY = 3;
+
+interface AiCheckSnapshot {
+  id: string;
+  timestamp: number;
+  contentBefore: string;   // 校对前的编辑器内容快照
+  issues: AiIssue[];       // 本次发现的问题列表
+}
+
+const aiCheckHistory = ref<AiCheckSnapshot[]>([]);
+const aiHistoryPanelOpen = ref(false);
+
+function pushCheckSnapshot(contentBefore: string, issues: AiIssue[]) {
+  const snapshot: AiCheckSnapshot = {
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    contentBefore,
+    issues,
+  };
+  aiCheckHistory.value.unshift(snapshot);
+  if (aiCheckHistory.value.length > MAX_HISTORY) {
+    aiCheckHistory.value.length = MAX_HISTORY;
+  }
+}
+
+function rollbackToSnapshot(snapshot: AiCheckSnapshot) {
+  if (!confirm(`确认恢复到 ${new Date(snapshot.timestamp).toLocaleTimeString()} 的版本？当前未保存的修改将丢失。`)) return;
+  editorContent.value = snapshot.contentBefore as any;
+  aiIssues.value = [];
+  aiChecked.value = false;
+  aiHistoryPanelOpen.value = false;
+  saveState.value = 'unsaved';
+}
+
 // AI 导入任务 ID → 等待 socket 回调
 const pendingAiImportTaskId = ref<string | null>(null);
 
@@ -398,6 +474,22 @@ const pendingAiImportTaskId = ref<string | null>(null);
 const aiEntityDialogOpen = ref(false);
 const aiEntityDialogBusy = ref(false);
 const aiEntityList = ref<ModuleEntity[]>([]);
+
+// AI 任务中心
+const aiTaskCenterOpen = ref(false);
+const aiTaskPendingCount = ref(0);
+const aiTaskFailedCount = ref(0);
+
+// 任务中心"查看分析结果"回调（简化：重新打开空预览，提示用户重新提交分析）
+function handleTaskCenterEntityReview(_taskId: string) {
+  aiTaskCenterOpen.value = false;
+  // 若当前模组的 import_module 任务已完成，实体列表可能已被上次 socket 更新填充
+  if (aiEntityList.value.length > 0) {
+    aiEntityDialogOpen.value = true;
+  } else {
+    alert('该任务的分析结果已过期，请重新提交 AI 分析结构。');
+  }
+};
 
 async function handleEntityConfirm(selected: ModuleEntity[]) {
   if (!moduleId.value || selected.length === 0) return;
@@ -507,6 +599,10 @@ async function fetchAiQuota() {
 async function handleAiCheck() {
   const text = editorContent.value;
   if (!text || aiCheckBusy.value) return;
+
+  // 校对前保存内容快照（回滚用）
+  const snapshotContent = editorContent.value as string;
+
   aiCheckBusy.value = true;
   aiPanelVisible.value = true;
   aiIssues.value = [];
@@ -516,8 +612,13 @@ async function handleAiCheck() {
       text: text.slice(0, 5000),
       rule_terms: moduleTerms.value.length ? moduleTerms.value : undefined,
     });
-    aiIssues.value = result.issues ?? [];
+    const issues = result.issues ?? [];
+    aiIssues.value = issues;
     aiChecked.value = true;
+    // 仅在有问题时保存历史（无问题的校对无需记录）
+    if (issues.length > 0) {
+      pushCheckSnapshot(snapshotContent, issues);
+    }
     await fetchAiQuota();
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string };
@@ -548,7 +649,8 @@ async function handleAiImportAnalysis() {
       term_whitelist: moduleTerms.value.length ? moduleTerms.value : undefined,
     });
     pendingAiImportTaskId.value = res.task_id;
-    alert(`AI 分析任务已提交（ID: ${res.task_id}）\n完成后将通过通知推送结果。`);
+    aiTaskPendingCount.value += 1;
+    aiTaskFailedCount.value = 0; // 重置失败角标（新任务已提交）
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 403) {
@@ -800,6 +902,14 @@ onMounted(async () => {
   // 监听 AI 导入任务完成推送
   socketClient.connectUser();
   socketClient.onAiTaskUpdate((data) => {
+    // 更新任务中心角标
+    if (data.status === 'success') {
+      aiTaskPendingCount.value = Math.max(0, aiTaskPendingCount.value - 1);
+    } else if (data.status === 'failed') {
+      aiTaskPendingCount.value = Math.max(0, aiTaskPendingCount.value - 1);
+      aiTaskFailedCount.value += 1;
+    }
+
     if (data.task_id !== pendingAiImportTaskId.value) return;
     pendingAiImportTaskId.value = null;
     aiImportBusy.value = false;
@@ -974,6 +1084,7 @@ function goBack() {
 .btn--danger { background: var(--color-danger, #B85450); color: #fff; }
 .btn--danger:hover { background: #A04743; }
 .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+.btn--sm { padding: 3px 10px; font-size: 12px; border-radius: 4px; }
 
 /* 布局 */
 .module-layout {
@@ -1111,6 +1222,14 @@ function goBack() {
   background: var(--color-accent, #6366f1);
   color: #fff;
 }
+/* AI 任务中心触发按钮 */
+.atc-trigger-btn { position: relative; }
+.atc-trigger-btn--alert { border-color: #ef4444; color: #dc2626; }
+.atc-fail-dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #ef4444;
+}
 
 /* AI 校对结果面板 */
 .ai-loading, .ai-empty {
@@ -1160,6 +1279,39 @@ function goBack() {
 .ai-quota-bar {
   font-size: 11px; color: var(--color-text-muted, #aaa);
   text-align: right; padding-top: 8px; border-top: 1px solid var(--color-border, #eee); margin-top: 8px;
+}
+/* 面板标题行 */
+.props-title { display: flex; align-items: center; justify-content: space-between; }
+.props-title-actions { display: flex; align-items: center; gap: 6px; }
+.history-toggle-btn {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  border: 1px solid var(--color-border, #ddd);
+  background: transparent; cursor: pointer;
+  color: var(--color-text-secondary, #666);
+  &:hover { background: var(--color-surface-hover, #f0f0f0); }
+  &.history-toggle-btn--active { background: #ede9fe; border-color: #a78bfa; color: #5b21b6; }
+}
+/* 校对历史面板 */
+.ai-history-panel {
+  background: var(--color-surface-alt, #fafafa);
+  border-radius: 6px; border: 1px solid var(--color-border, #eee);
+  padding: 10px; margin-bottom: 10px;
+}
+.ai-history-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  color: var(--color-text-muted, #aaa); margin-bottom: 8px; letter-spacing: .05em;
+}
+.ai-history-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-history-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.ai-history-meta { display: flex; flex-direction: column; gap: 2px; }
+.ai-history-time { font-size: 12px; font-weight: 500; }
+.ai-history-count { font-size: 11px; color: var(--color-text-muted, #aaa); }
+.ai-history-rollback-btn {
+  font-size: 12px; padding: 3px 9px; border-radius: 4px; white-space: nowrap;
+  border: 1px solid #d97706; background: #fffbeb; color: #92400e; cursor: pointer;
+  &:hover { background: #fef3c7; }
 }
 
 /* ── 叙阅器设置抽屉 ─────────────────────────────────────── */
