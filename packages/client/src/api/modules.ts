@@ -76,3 +76,12 @@ export function submitModule(id: string): Promise<void> {
 export function withdrawModule(id: string): Promise<void> {
   return api.post(`/modules/${id}/withdraw`, {}, key());
 }
+
+export function getModuleTerms(id: string): Promise<{ terms: Array<{ id: string; term: string }> }> {
+  return api.get(`/modules/${id}/terms`);
+}
+
+export function saveModuleTerms(id: string, terms: string[]): Promise<{ terms: Array<{ term: string }> }> {
+  return api.put(`/modules/${id}/terms`, { terms });
+}
+

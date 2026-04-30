@@ -41,7 +41,7 @@ const upload = multer({
   },
 });
 
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, uploadLimiter, (req, res) => {
   upload.single('file')(req, res, async (error) => {
     if (error) {
       res.status(400).json({ error: error.message || '上传失败' });

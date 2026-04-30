@@ -17,6 +17,11 @@ import { enqueueAiTask } from '../queue/ai-queue';
 import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 import type { TaskType } from '../services/ai-service';
+import {
+  extractJsonFromAiOutput,
+  validateCheckTextOutput,
+  validateImportModuleOutput,
+} from '../services/ai-output-validator';
 
 const router: IRouter = Router();
 
@@ -65,9 +70,8 @@ router.post('/check-text', checkAiQuota('check_text'), async (req, res) => {
 
   try {
     const raw = await callAI('flash', messages, 'check_text', req.user!.id);
-    // 提取 JSON（防御模型额外输出 Markdown 代码块）
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    const result = jsonMatch ? (JSON.parse(jsonMatch[0]) as unknown) : { issues: [] };
+    const parsed = extractJsonFromAiOutput(raw);
+    const result = validateCheckTextOutput(parsed, rule_terms);
     res.json(result);
   } catch (err: unknown) {
     console.error('[ai:checkText]', err instanceof Error ? err.message : err);

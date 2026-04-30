@@ -76,6 +76,12 @@ export const rows: Record<string, any[]> = {
   // 规则集
   rulesets: [],
   ruleset_versions: [],
+  // 支付系统
+  payment_orders: [],
+  content_access_grants: [],
+  payment_audit_log: [],
+  coin_transactions: [],
+  subscription_events: [],
 };
 
 function makeBuilder(tableName: string): any {
@@ -87,6 +93,8 @@ function makeBuilder(tableName: string): any {
     _first: false,
     _maxCol: null as string | null,
     _countMode: false,
+    _pendingInsertRecord: null as any,
+    _insertResult: undefined as any,
   };
 
   // 去除列前缀（'m.id' → 'id'，'u.name' → 'name'）
@@ -146,7 +154,7 @@ function makeBuilder(tableName: string): any {
     catch: () => builder,
   });
 
-  builder.insert = async (data: any) => {
+  builder.insert = (data: any) => {
     if (!rows[table]) rows[table] = [];
     const now = new Date().toISOString();
     const record = {
@@ -156,9 +164,34 @@ function makeBuilder(tableName: string): any {
       updated_at: now,
       ...data,
     };
-    rows[table].push(record);
-    return [record.id];
+    // 将待插入数据存到 builder 状态，实际写入时机由 execute()、ignore()、or then 决定
+    builder._pendingInsertRecord = record;
+    builder._pendingInsertConflictSkip = false;
+    return builder;
   };
+  builder.onConflict = (_cols?: any) => ({
+    ignore: () => {
+      // 如果有待插入数据，检查是否已存在（简化：按 id 去重）
+      if (builder._pendingInsertRecord) {
+        const rec = builder._pendingInsertRecord;
+        if (!rows[table]) rows[table] = [];
+        const exists = rows[table].some((r) => r.id === rec.id);
+        if (!exists) rows[table].push(rec);
+        builder._insertResult = [rec.id];
+        builder._pendingInsertRecord = null;
+      }
+      return builder;
+    },
+    merge: () => {
+      if (builder._pendingInsertRecord) {
+        if (!rows[table]) rows[table] = [];
+        rows[table].push(builder._pendingInsertRecord);
+        builder._insertResult = [builder._pendingInsertRecord.id];
+        builder._pendingInsertRecord = null;
+      }
+      return builder;
+    },
+  });
 
   builder.update = async (data: any) => {
     if (!rows[table]) return 0;
@@ -219,7 +252,22 @@ function makeBuilder(tableName: string): any {
   };
 
   builder.then = (resolve: (v: any) => any, reject?: (e: any) => any) => {
-    try { resolve(execute()); } catch (e) { if (reject) reject(e); else resolve(undefined); }
+    try {
+      // 处理未经 onConflict 链的直接 insert（await builder.insert(data)）
+      if (builder._pendingInsertRecord) {
+        const rec = builder._pendingInsertRecord;
+        if (!rows[table]) rows[table] = [];
+        rows[table].push(rec);
+        builder._insertResult = [rec.id];
+        builder._pendingInsertRecord = null;
+      }
+      // 如果有 insertResult（经过 onConflict 处理），直接返回
+      if (builder._insertResult !== undefined) {
+        resolve(builder._insertResult);
+        return;
+      }
+      resolve(execute());
+    } catch (e) { if (reject) reject(e); else resolve(undefined); }
   };
   builder.catch = () => builder;
   return builder;

@@ -115,20 +115,33 @@
         <div v-if="aiCheckBusy" class="ai-loading">分析中，请稍候...</div>
         <div v-else-if="aiIssues.length === 0 && aiChecked" class="ai-empty">未发现问题，文本状态良好。</div>
         <div v-else-if="aiIssues.length === 0" class="ai-empty">点击「AI 校对」开始分析当前内容。</div>
-        <ul v-else class="ai-issues-list">
-          <li
-            v-for="(issue, idx) in aiIssues"
-            :key="idx"
-            class="ai-issue-item"
-            :class="`ai-issue--${issue.type}`"
-          >
-            <span class="issue-type-tag">{{ issueTypeLabel(issue.type) }}</span>
-            <span class="issue-original">「{{ issue.original }}」</span>
-            <span class="issue-arrow">→</span>
-            <span class="issue-suggestion">{{ issue.suggestion }}</span>
-            <span class="issue-reason">{{ issue.reason }}</span>
-          </li>
-        </ul>
+        <template v-else>
+          <div class="ai-panel-actions">
+            <button class="btn btn--sm btn--primary" @click="adoptAllIssues">全部采纳</button>
+          </div>
+          <ul class="ai-issues-list">
+            <li
+              v-for="(issue, idx) in aiIssues"
+              :key="idx"
+              class="ai-issue-item"
+              :class="`ai-issue--${issue.type}`"
+            >
+              <div class="issue-header">
+                <span class="issue-type-tag">{{ issueTypeLabel(issue.type) }}</span>
+                <div class="issue-btns">
+                  <button class="issue-btn issue-btn--adopt" title="采纳此建议" @click="adoptIssue(idx)">✓ 采纳</button>
+                  <button class="issue-btn issue-btn--dismiss" title="忽略此条" @click="dismissIssue(idx)">✕</button>
+                </div>
+              </div>
+              <div class="issue-body">
+                <span class="issue-original">「{{ issue.original }}」</span>
+                <span class="issue-arrow">→</span>
+                <span class="issue-suggestion">{{ issue.suggestion }}</span>
+              </div>
+              <span class="issue-reason">{{ issue.reason }}</span>
+            </li>
+          </ul>
+        </template>
         <div v-if="aiQuotaInfo" class="ai-quota-bar">
           本月已用 {{ aiQuotaInfo.used }}/{{ aiQuotaInfo.quota }} 次
         </div>
@@ -344,6 +357,36 @@ const ISSUE_TYPE_LABELS: Record<string, string> = {
 };
 function issueTypeLabel(type: string): string {
   return ISSUE_TYPE_LABELS[type] ?? type;
+}
+
+/** 采纳单条：将 original 替换为 suggestion（替换编辑器内容中第一次出现的匹配） */
+function adoptIssue(idx: number) {
+  const issue = aiIssues.value[idx];
+  if (!issue || editorContent.value === null) return;
+  // 纯文本内容直接字符串替换；富文本编辑器内容同样按字符串操作（content 为 JSON 字符串）
+  const updated = (editorContent.value as string).replace(issue.original, issue.suggestion);
+  if (updated !== editorContent.value) {
+    editorContent.value = updated as any;
+    saveState.value = 'unsaved';
+  }
+  aiIssues.value.splice(idx, 1);
+}
+
+/** 忽略单条 */
+function dismissIssue(idx: number) {
+  aiIssues.value.splice(idx, 1);
+}
+
+/** 全部采纳：按顺序依次替换所有 issue */
+function adoptAllIssues() {
+  if (editorContent.value === null) return;
+  let content = editorContent.value as string;
+  for (const issue of aiIssues.value) {
+    content = content.replace(issue.original, issue.suggestion);
+  }
+  editorContent.value = content as any;
+  aiIssues.value = [];
+  saveState.value = 'unsaved';
 }
 
 async function fetchAiQuota() {
@@ -967,9 +1010,13 @@ function goBack() {
 .ai-loading, .ai-empty {
   font-size: 13px; color: var(--color-text-muted, #aaa); text-align: center; padding: 24px 0;
 }
+.ai-panel-actions {
+  display: flex; justify-content: flex-end; padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, #eee); margin-bottom: 8px;
+}
 .ai-issues-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .ai-issue-item {
-  display: flex; flex-direction: column; gap: 3px;
+  display: flex; flex-direction: column; gap: 4px;
   background: var(--color-input-bg, #f8f8f8);
   border-radius: 6px; padding: 8px 10px;
   border-left: 3px solid var(--color-accent, #6366f1);
@@ -979,10 +1026,27 @@ function goBack() {
 .ai-issue--punctuation { border-left-color: #3b82f6; }
 .ai-issue--term { border-left-color: #f59e0b; }
 .ai-issue--style { border-left-color: #10b981; }
+.issue-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
 .issue-type-tag {
   font-size: 10px; font-weight: 600; text-transform: uppercase;
   color: var(--color-text-muted, #aaa);
 }
+.issue-btns { display: flex; gap: 4px; }
+.issue-btn {
+  font-size: 11px; padding: 2px 7px; border-radius: 4px;
+  border: 1px solid transparent; cursor: pointer; line-height: 1.4;
+}
+.issue-btn--adopt {
+  background: #d1fae5; color: #065f46; border-color: #6ee7b7;
+  &:hover { background: #a7f3d0; }
+}
+.issue-btn--dismiss {
+  background: transparent; color: var(--color-text-muted, #aaa); border-color: var(--color-border, #ddd);
+  &:hover { background: var(--color-surface-hover, #f0f0f0); }
+}
+.issue-body { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .issue-original { color: #ef4444; font-family: var(--font-mono, monospace); }
 .issue-arrow { color: var(--color-text-muted, #aaa); }
 .issue-suggestion { color: #10b981; font-weight: 600; }

@@ -13,6 +13,10 @@ import IORedis from 'ioredis';
 import type { Server } from 'socket.io';
 import { generateId } from '@trpg/shared';
 import { callAI, type TaskType, type AiEndpoint, type AiMessage } from '../services/ai-service';
+import {
+  extractJsonFromAiOutput,
+  validateImportModuleOutput,
+} from '../services/ai-output-validator';
 
 export interface AiJobData {
   taskId: string;
@@ -64,15 +68,27 @@ export function startAiWorker(io: Server): Worker<AiJobData> {
       const { taskId, userId, taskType, endpoint, messages } = job.data;
 
       try {
-        const result = await callAI(endpoint, messages, taskType, userId);
+        const rawResult = await callAI(endpoint, messages, taskType, userId);
+
+        // 对 import_module 任务进行输出校验，确保结构和术语安全
+        let safeResult: string = rawResult;
+        if (taskType === 'import_module') {
+          try {
+            const parsed = extractJsonFromAiOutput(rawResult);
+            const validated = validateImportModuleOutput(parsed);
+            safeResult = JSON.stringify(validated);
+          } catch (validationErr) {
+            console.warn('[AI Worker] import_module 输出校验失败，使用原始结果:', validationErr);
+          }
+        }
 
         io.of('/user').to(`user:${userId}`).emit('ai_task_update', {
           task_id: taskId,
           status: 'success',
-          result,
+          result: safeResult,
         });
 
-        return result;
+        return safeResult;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'AI 任务失败';
 

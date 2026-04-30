@@ -289,4 +289,48 @@ router.post('/:id/report', authMiddleware, async (req, res) => {
   }
 });
 
+// ── GET /api/modules/:id/terms — 获取模组术语白名单 ──────────────────────────
+router.get('/:id/terms', authMiddleware, async (req, res) => {
+  const moduleId = req.params['id'];
+  const mod = await db('modules').where({ id: moduleId }).first();
+  if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+
+  const rows = await db('module_terms')
+    .where('module_id', moduleId)
+    .orderBy('created_at', 'asc')
+    .select('id', 'term');
+
+  res.json({ terms: rows });
+});
+
+// ── PUT /api/modules/:id/terms — 覆盖保存模组术语白名单（仅模组作者） ─────────
+const termsSchema = z.object({
+  terms: z.array(z.string().min(1).max(64)).max(100),
+});
+
+router.put('/:id/terms', authMiddleware, async (req, res) => {
+  const moduleId = req.params['id'];
+  const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string }>();
+  if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const parsed = termsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { terms } = parsed.data;
+  // 全量覆盖：先删后插
+  await db('module_terms').where('module_id', moduleId).delete();
+
+  if (terms.length > 0) {
+    const { generateId } = await import('@trpg/shared');
+    const rows = terms.map((term) => ({ id: generateId(), module_id: moduleId, term }));
+    await db('module_terms').insert(rows);
+  }
+
+  res.json({ terms: terms.map((t) => ({ term: t })) });
+});
+
 export default router;
