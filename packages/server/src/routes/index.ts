@@ -23,6 +23,7 @@ import directMessagesRoutes from './direct-messages';
 import aiRoutes from './ai';
 import readingProgressRoutes from './reading-progress';
 import annotationsRoutes from './annotations';
+import paymentsRoutes from './payments';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -84,5 +85,6 @@ router.use('/messages', directMessagesRoutes);
 router.use('/ai', aiRoutes);
 router.use('/reading-progress', readingProgressRoutes);
 router.use('/annotations', annotationsRoutes);
+router.use('/payments', paymentsRoutes);
 
 export default router;
