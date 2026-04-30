@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { api } from '../../utils/api';
+import { updatePrivacy } from '../../api/users';
 
 const router = useRouter();
 
@@ -15,7 +15,7 @@ const saving = ref(false);
 async function save() {
   saving.value = true;
   try {
-    await api.put('/users/me/privacy', {
+    await updatePrivacy({
       profile_public: profilePublic.value,
       online_visible: onlineVisible.value,
       campaign_history_public: campaignHistoryPublic.value,

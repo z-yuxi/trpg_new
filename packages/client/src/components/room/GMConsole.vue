@@ -13,6 +13,8 @@ import GmMoveApproval from './GmMoveApproval.vue';
 import GmSceneManager from './GmSceneManager.vue';
 import type { StoryTime, Scene, CampaignNpc } from '@trpg/shared';
 import { socketClient } from '../../socket/socket-client';
+import { listClues, createClue, deleteClue as apiDeleteClue, updateGridMapSettings, getTrajectoryMatrix } from '../../api/campaigns';
+import { getModule } from '../../api/modules';
 import { api } from '../../utils/api';
 import { extractBlocks } from '../../utils/block-integrity-validator';
 
@@ -115,7 +117,7 @@ async function loadModulePresetClues() {
     const campaign = await api.get<{ module_id?: string | null }>(`/campaigns/${props.campaignId}`);
     if (!campaign.module_id) { modulePresetClues.value = []; return; }
 
-    const moduleData = await api.get<{ content?: string | null }>(`/modules/${campaign.module_id}`);
+    const moduleData = await getModule(campaign.module_id) as { content?: string | null };
     const blocks = extractBlocks(moduleData.content ?? '');
     modulePresetClues.value = blocks
       .filter((block) => block.type === 'clue')
@@ -136,7 +138,7 @@ async function loadModulePresetClues() {
 
 async function loadClues() {
   try {
-    localClues.value = await api.get<CampaignClueRecord[]>(`/campaigns/${props.campaignId}/clues`);
+    localClues.value = await listClues(props.campaignId) as CampaignClueRecord[];
   } catch {
     // ignore initial load failure
   }
@@ -182,7 +184,7 @@ async function sendClue() {
       return;
     }
 
-    const clue = await api.post<{ id: string; title: string; content: string; theme: ClueTheme }>(`/campaigns/${props.campaignId}/clues`, {
+    const clue = await createClue(props.campaignId, {
       title: clueForm.value.title,
       content: clueForm.value.content,
       theme: clueForm.value.theme,
@@ -248,7 +250,7 @@ async function deleteClue(clue: CampaignClueRecord) {
   }
 
   try {
-    await api.delete(`/campaigns/${props.campaignId}/clues/${clue.id}`);
+    await apiDeleteClue(props.campaignId, clue.id);
     localClues.value = localClues.value.filter((item) => item.id !== clue.id);
     ElMessage.success('线索已删除');
   } catch (e: any) {
@@ -285,7 +287,7 @@ async function togglePlayerDrag() {
   const scene = activeGridScene.value;
   if (!scene) return;
   const next = !playerDragEnabled.value;
-  await api.put(`/campaigns/${props.campaignId}/scenes/${scene.id}/grid-map`, { allow_player_token_drag: next });
+  await updateGridMapSettings(props.campaignId, scene.id, { allow_player_token_drag: next });
   playerDragEnabled.value = next;
   gridMapRef.value?.reload();
 }
@@ -313,7 +315,7 @@ const trajectoryLoading = ref(false);
 async function loadTrajectoryHistory() {
   trajectoryLoading.value = true;
   try {
-    trajectoryData.value = await api.get<TrajectoryMatrixResponse>(`/campaigns/${props.campaignId}/trajectory-matrix`);
+    trajectoryData.value = await getTrajectoryMatrix(props.campaignId) as TrajectoryMatrixResponse;
   } catch { /* ignore */ }
   finally { trajectoryLoading.value = false; }
 }

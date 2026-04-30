@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { ElDialog, ElMessage } from 'element-plus';
-import { api } from '../../utils/api';
+import { approveMove as apiApproveMove, rejectMove, forceMove, listUpcomingMoves } from '../../api/campaigns';
 import type { Scene } from '@trpg/shared';
 
 const props = defineProps<{
@@ -32,7 +32,7 @@ const forceMoveSceneId = ref('');
 async function loadPendingScheduledMoves() {
   loadingMoves.value = true;
   try {
-    currentScheduledMoves.value = await api.get<ScheduledMove[]>(`/campaigns/${props.campaignId}/moves?status=pending`);
+    currentScheduledMoves.value = await listUpcomingMoves(props.campaignId) as ScheduledMove[];
   } catch {
     // ignore
   } finally {
@@ -43,9 +43,7 @@ async function loadPendingScheduledMoves() {
 async function approveMove(moveId: string) {
   try {
     const storyArrivalTime = arrivalTimes.value[moveId]?.trim();
-    await api.post(`/campaigns/${props.campaignId}/moves/${moveId}/approve`, {
-      story_arrival_time: storyArrivalTime || null,
-    });
+    await apiApproveMove(props.campaignId, moveId, { story_time_arrival: storyArrivalTime ? (() => { const [h, m] = storyArrivalTime.split(':').map(Number); return { hour: h, minute: m }; })() : null });
     currentScheduledMoves.value = currentScheduledMoves.value.filter((m) => m.id !== moveId);
     delete arrivalTimes.value[moveId];
     ElMessage.success('移动已批准');
@@ -67,7 +65,7 @@ function openRejectMove(moveId: string) {
 async function submitRejectMove() {
   if (!rejectMoveId.value) return;
   try {
-    await api.post(`/campaigns/${props.campaignId}/moves/${rejectMoveId.value}/reject`, { reason: rejectReason.value });
+    await rejectMove(props.campaignId, rejectMoveId.value, rejectReason.value);
     currentScheduledMoves.value = currentScheduledMoves.value.filter((m) => m.id !== rejectMoveId.value);
     showRejectDialog.value = false;
     ElMessage.success('已拒绝该移动申请');
@@ -77,7 +75,7 @@ async function submitRejectMove() {
 async function submitForceMoveScene() {
   if (!forceMoveCharId.value || !forceMoveSceneId.value) return;
   try {
-    await api.post(`/campaigns/${props.campaignId}/moves/force`, {
+    await forceMove(props.campaignId, {
       character_id: forceMoveCharId.value,
       to_scene_id: forceMoveSceneId.value,
     });

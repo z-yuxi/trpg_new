@@ -14,6 +14,7 @@ import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
 import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
 import { deserializeFromGraph } from '../../utils/canvas-serializer';
 import { api, getToken } from '../../utils/api';
+import { getRuleset, createRuleset as apiCreateRuleset, updateRuleset, submitRulesetReview, deprecateRuleset, executeRecipe } from '../../api/rulesets';
 import type { CommandGraph, RulesetRecipeSource, ReaderSettings } from '@trpg/shared';
 import { READER_SETTINGS_PRESETS } from '@trpg/shared';
 
@@ -151,7 +152,7 @@ async function saveReaderSettings() {
   if (!rulesetId || isNew) { ElMessage.warning('请先保存规则包'); return; }
   rsSaving.value = true;
   try {
-    await api.put(`/rulesets/${rulesetId}`, { reader_settings: rsDraft.value });
+    await updateRuleset(rulesetId, { reader_settings: rsDraft.value as any });
     ElMessage.success('叙阅器设置已保存');
     readerSettingsPanelOpen.value = false;
   } catch (err) {
@@ -289,10 +290,7 @@ async function runPreview() {
     mockSkills.value.forEach((s) => { if (s.name) skills[s.name] = s.value; });
     mockResources.value.forEach((r) => { if (r.name) resources[r.name] = { current: r.current, max: r.max }; });
 
-    const data = await api.post<{ success?: boolean; result?: string; dice_rolls?: unknown[]; logs?: unknown[] }>(
-      `/rulesets/${rulesetId}/execute`,
-      { command: previewCommand.value, mock_context: { attributes, skills, resources } },
-    );
+    const data = await executeRecipe(rulesetId, previewCommand.value, { attributes, skills, resources }) as { success?: boolean; result?: string; dice_rolls?: unknown[]; logs?: unknown[] };
     previewResult.value = {
       success: Boolean(data.success),
       result: data.result ?? '',
@@ -321,7 +319,7 @@ const formData = ref<Record<string, unknown>>({});
 async function fetchRuleset() {
   if (isNew) return;
   try {
-    const rs = await api.get<Record<string, unknown>>(`/rulesets/${rulesetId}`);
+    const rs = await getRuleset(rulesetId) as Record<string, unknown>;
     formName.value = (rs.name as string);
     formVersion.value = (rs.version as string);
     formStatus.value = (rs.status as string) as typeof formStatus.value;
@@ -500,11 +498,11 @@ async function save() {
   };
   try {
     if (isNew) {
-      const data = await api.post<{ id: string }>('/rulesets', body);
+      const data = await apiCreateRuleset(body as any) as { id: string };
       ElMessage.success('保存成功');
       router.replace(`/creator/workshop/${data.id}/edit`);
     } else {
-      await api.put(`/rulesets/${rulesetId}`, body);
+      await updateRuleset(rulesetId, body as any);
       ElMessage.success('保存成功');
     }
   } catch {
@@ -516,7 +514,7 @@ async function submitForReview() {
   if (!rulesetId || isNew) { ElMessage.warning('请先保存规则集'); return; }
   if (!confirm('提交发布？V1.0 将自动审核通过并公开发布。')) return;
   try {
-    await api.post(`/rulesets/${rulesetId}/submit-review`, {});
+    await submitRulesetReview(rulesetId);
     formStatus.value = 'published';
     ElMessage.success('规则集已发布');
   } catch (e: unknown) { ElMessage.error((e as Error)?.message ?? '发布失败'); }
@@ -526,7 +524,7 @@ async function deprecate() {
   if (!rulesetId || isNew) return;
   if (!confirm('确认弃用此规则集？弃用后不再对外展示。')) return;
   try {
-    await api.post(`/rulesets/${rulesetId}/deprecate`, {});
+    await deprecateRuleset(rulesetId);
     formStatus.value = 'deprecated';
     ElMessage.success('已弃用');
   } catch (e: unknown) { ElMessage.error((e as Error)?.message ?? '弃用失败'); }

@@ -95,6 +95,16 @@
 - icon-eye
 - icon-eye-off
 - icon-settings
+- icon-chat
+- icon-logout
+- icon-refresh
+- icon-warning
+- icon-share
+- icon-more-vertical
+- icon-alert-circle
+- icon-copyright
+- icon-play-circle
+- icon-clipboard
 
 ### 5.3 Status
 
@@ -120,6 +130,10 @@
 - icon-history
 - icon-lock
 - icon-unlock
+- icon-calendar
+- icon-annotation
+- icon-shield
+- icon-crown
 
 ### 5.5 工程扩展（业务映射）
 
@@ -128,6 +142,8 @@
 - icon-star
 - icon-highlight
 - icon-music
+- icon-message
+- icon-report
 
 ### 5.6 空状态插画（Dice-bird）
 

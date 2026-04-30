@@ -13,6 +13,8 @@ import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import FloorSystem from '../../components/community/FloorSystem.vue';
+import { getRecruitment, applyToRecruitment, confirmApplication, reviewApplication, publishRecruitment, closeRecruitment, dissolveRecruitment } from '../../api/recruitment';
+import { listMyCharacters } from '../../api/characters';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
 import { formatRecruitmentValue, hasRecruitmentValue, resolveRecruitmentFields } from '../../utils/recruitment-fields';
@@ -127,7 +129,7 @@ function formatDate(value: string) {
 async function loadDetail() {
   loading.value = true;
   try {
-    detail.value = await api.get(`/recruitment/${postId.value}`);
+    detail.value = await getRecruitment(postId.value);
   } catch (err: any) {
     ElMessage.error(err?.message ?? '加载详情失败');
   } finally {
@@ -138,7 +140,7 @@ async function loadDetail() {
 async function loadCharacters() {
   if (!authStore.token) return;
   try {
-    myCharacters.value = await api.get<CharacterItem[]>('/characters');
+    myCharacters.value = await listMyCharacters() as CharacterItem[];
   } catch {
     // ignore
   }
@@ -156,12 +158,12 @@ async function submitApply() {
     return;
   }
   try {
-    // 满员时自动报名候补
-    const suffix = detail.value?.status === 'full' ? '?type=waiting' : '';
-    await api.post(`/recruitment/${postId.value}/apply${suffix}`, {
+    const isWaiting = detail.value?.status === 'full';
+    await applyToRecruitment(postId.value, {
       character_id: applyCharacterId.value || null,
       message: applyMessage.value.trim(),
-    });
+      ob: false,
+    }, isWaiting);
     ElMessage.success(suffix ? '已加入候补名单' : '申请已提交');
     showApplyDialog.value = false;
     applyMessage.value = '';
@@ -175,7 +177,7 @@ async function submitApply() {
 /** 玩家：确认入团邀请 */
 async function confirmJoin() {
   try {
-    await api.post(`/recruitment/applications/${myApplication.value.id}/confirm`, {});
+    await confirmApplication(myApplication.value.id);
     ElMessage.success('已确认入团！');
     await loadDetail();
   } catch (err: any) {
@@ -186,7 +188,7 @@ async function confirmJoin() {
 /** GM：通过申请 → 发出邀请 */
 async function approveApplication(applicationId: string) {
   try {
-    await api.post(`/recruitment/${postId.value}/applications/${applicationId}/review`, { action: 'approve' });
+    await reviewApplication(postId.value, applicationId, 'approve');
     ElMessage.success('已发出邀请');
     await loadDetail();
   } catch (err: any) {
@@ -204,10 +206,7 @@ function openRejectDialog(applicationId: string) {
 /** GM：提交拒绝 */
 async function submitReject() {
   try {
-    await api.post(`/recruitment/${postId.value}/applications/${rejectTargetId.value}/review`, {
-      action: 'reject',
-      reject_reason: rejectReason.value.trim() || null,
-    });
+    await reviewApplication(postId.value, rejectTargetId.value, 'reject', rejectReason.value.trim() || null);
     ElMessage.success('已拒绝');
     showRejectDialog.value = false;
     await loadDetail();
@@ -219,7 +218,7 @@ async function submitReject() {
 /** GM：发布草稿 */
 async function publishPost() {
   try {
-    await api.post(`/recruitment/${postId.value}/publish`, {});
+    await publishRecruitment(postId.value);
     ElMessage.success('已发布');
     await loadDetail();
   } catch (err: any) {
@@ -230,7 +229,7 @@ async function publishPost() {
 /** GM：关闭招募 */
 async function closePost() {
   try {
-    await api.post(`/recruitment/${postId.value}/close`, {});
+    await closeRecruitment(postId.value);
     ElMessage.success('已关闭');
     await loadDetail();
   } catch (err: any) {
@@ -241,7 +240,7 @@ async function closePost() {
 /** GM：解散团队 */
 async function dissolvePost() {
   try {
-    await api.post(`/recruitment/${postId.value}/dissolve`, {});
+    await dissolveRecruitment(postId.value);
     ElMessage.success('已解散');
     await loadDetail();
   } catch (err: any) {

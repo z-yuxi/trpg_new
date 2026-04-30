@@ -6,6 +6,7 @@ import PageLayout from '../../components/layout/PageLayout.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
+import { listMyRulesets, createRuleset as apiCreateRuleset, publishRuleset as apiPublishRuleset, listRulesetVersions, createRulesetVersion, rollbackRulesetVersion } from '../../api/rulesets';
 import { api } from '../../utils/api';
 
 interface RulesetItem {
@@ -68,8 +69,8 @@ function statusColor(status: RulesetItem['status']) {
 async function loadRulesets() {
   loading.value = true;
   try {
-    const body = await api.get<unknown>('/rulesets/mine');
-    rulesets.value = Array.isArray(body) ? body : (body as { data?: RulesetItem[] }).data ?? [];
+    const body = await listMyRulesets();
+    rulesets.value = (body.data ?? []) as RulesetItem[];
   } catch (error: any) {
     ElMessage.error(error?.message ?? '规则集加载失败');
   } finally {
@@ -85,7 +86,7 @@ async function createRuleset() {
 
   creating.value = true;
   try {
-    const created = await api.post<{ id: string }>('/rulesets', { name: newName.value.trim(), version: '0.1.0' });
+    const created = await apiCreateRuleset({ name: newName.value.trim(), version: '0.1.0' }) as { id: string };
     showNew.value = false;
     newName.value = '';
     router.push(`/creator/workshop/${created.id}/edit`);
@@ -99,7 +100,7 @@ async function createRuleset() {
 async function publishRuleset(rulesetId: string) {
   publishTargetId.value = rulesetId;
   try {
-    await api.post(`/rulesets/${rulesetId}/publish`, {});
+    await apiPublishRuleset(rulesetId);
     ElMessage.success('规则集已发布');
     await loadRulesets();
   } catch (error: any) {
@@ -129,7 +130,7 @@ async function openVersions(rs: RulesetItem) {
   showVersionDialog.value = true;
   versionLoading.value = true;
   try {
-    const body = await api.get<unknown>(`/rulesets/${rs.id}/versions`);
+    const body = await listRulesetVersions(rs.id) as unknown;
     versions.value = Array.isArray(body) ? body : (body as { data?: unknown[] }).data ?? [];
   } catch (error: any) {
     ElMessage.error(error?.message ?? '版本列表加载失败');
@@ -142,7 +143,7 @@ async function createSnapshot() {
   if (!versionRuleset.value) return;
   savingVersion.value = true;
   try {
-    await api.post(`/rulesets/${versionRuleset.value.id}/versions`, { changelog: snapshotChangelog.value.trim() });
+    await createRulesetVersion(versionRuleset.value.id, snapshotChangelog.value.trim());
     ElMessage.success('版本快照已创建');
     snapshotChangelog.value = '';
     await openVersions(versionRuleset.value);
@@ -159,7 +160,7 @@ async function rollbackVersion(versionId: string) {
   if (!confirmed) return;
   rollingBackVersionId.value = versionId;
   try {
-    await api.post(`/rulesets/${versionRuleset.value.id}/versions/${versionId}/rollback`, {});
+    await rollbackRulesetVersion(versionRuleset.value.id, versionId);
     ElMessage.success('已回滚到指定版本');
     await loadRulesets();
     await openVersions(versionRuleset.value);

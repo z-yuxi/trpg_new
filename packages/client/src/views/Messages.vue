@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import SvgIcon from '../components/SvgIcon.vue';
-import { api } from '../utils/api';
+import { listConversations, getMessages, markConversationRead, sendMessage, createConversation } from '../api/messages';
 import { showApiError } from '../utils/feedback';
 import { useAuthStore } from '../stores/auth-store';
 import { useRouter, useRoute } from 'vue-router';
@@ -52,7 +52,7 @@ function applySearch() {
 async function loadConversations() {
   loadingConvs.value = true;
   try {
-    const data = await api.get<Conversation[]>('/messages/conversations');
+    const data = await listConversations();
     conversations.value = data;
   } catch (error) {
     conversations.value = [];
@@ -67,11 +67,11 @@ async function openConversation(conv: Conversation) {
   mobileView.value = 'chat';
   loadingMsgs.value = true;
   try {
-    const data = await api.get<Message[]>(`/messages/conversations/${conv.id}/messages`);
+    const data = await getMessages(conv.id);
     messages.value = data;
     // 标为已读
     if (conv.unread_count > 0) {
-      await api.put(`/messages/conversations/${conv.id}/read`, {}).catch(() => {});
+      await markConversationRead(conv.id).catch(() => {});
       conv.unread_count = 0;
     }
   } catch (error) {
@@ -97,7 +97,7 @@ async function sendMessage() {
   messages.value.push(tempMsg);
   sending.value = true;
   try {
-    const sent = await api.post<Message>(`/messages/conversations/${activeConv.value.id}/messages`, { content });
+    const sent = await sendMessage(activeConv.value.id, { content });
     // 替换临时消息
     const idx = messages.value.findIndex(m => m.id === tempMsg.id);
     if (idx !== -1) messages.value[idx] = sent;
@@ -128,7 +128,7 @@ onMounted(async () => {
   const withUserId = route.query['with'] as string | undefined;
   if (withUserId) {
     try {
-      const conv = await api.post<Conversation>('/messages/conversations', { target_user_id: withUserId });
+      const conv = await createConversation(withUserId);
       // 确保会话在列表中
       if (!conversations.value.find(c => c.id === conv.id)) {
         conversations.value.unshift(conv);

@@ -14,6 +14,8 @@ import { useAuthStore } from '../stores/auth-store';
 import { useMessageStore } from '../stores/message-store';
 import { socketClient } from '../socket/socket-client';
 import { api } from '../utils/api';
+import { createScene, joinScene, listObPermissions, grantObPermission as apiGrantObPermission, revokeObPermission as apiRevokeObPermission, listCampaignMembers } from '../api/campaigns';
+import { getCharacter } from '../api/characters';
 import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
 
 const route = useRoute();
@@ -76,7 +78,7 @@ async function submitCreateVirtualScene() {
   const name = newVirtualSceneName.value.trim();
   if (!name) return;
   try {
-    const scene = await api.post<any>(`/campaigns/${campaignId}/scenes`, { name, type: 'virtual', description: '' });
+    const scene = await createScene(campaignId, { name, type: 'virtual', description: '' });
     scenes.value.push(scene);
     switchScene(scene.id);
     showCreateVirtualSceneDialog.value = false;
@@ -133,9 +135,7 @@ async function loadObPermissions() {
   if (!obPermissionSceneId.value) return;
   obPermissionLoading.value = true;
   try {
-    const data = await api.get<Array<{ id: string; user_id: string; granted_by: string; granted_at: string }>>(
-      `/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions`
-    );
+    const data = await listObPermissions(campaignId, obPermissionSceneId.value);
     obPermissions.value = data ?? [];
   } catch {
     obPermissions.value = [];
@@ -156,9 +156,7 @@ async function submitGrantObPermission() {
   const userId = obPermissionUserId.value.trim();
   if (!obPermissionSceneId.value || !userId) return;
   try {
-    await api.post(`/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions/grant`, {
-      user_id: userId,
-    });
+    await apiGrantObPermission(campaignId, obPermissionSceneId.value, userId);
     ElMessage.success('已授予 OB 旁听权限');
     obPermissionUserId.value = '';
     await loadObPermissions();
@@ -170,9 +168,7 @@ async function submitGrantObPermission() {
 async function revokeObPermission(userId: string) {
   if (!obPermissionSceneId.value || !userId) return;
   try {
-    await api.post(`/campaigns/${campaignId}/scenes/${obPermissionSceneId.value}/ob-permissions/revoke`, {
-      user_id: userId,
-    });
+    await apiRevokeObPermission(campaignId, obPermissionSceneId.value, userId);
     ElMessage.success('已撤销 OB 旁听权限');
     await loadObPermissions();
   } catch {

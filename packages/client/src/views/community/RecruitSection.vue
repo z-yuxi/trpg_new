@@ -18,9 +18,11 @@ import {
 import RecruitmentBoard from './RecruitmentBoard.vue';
 import MyRecruitments from './MyRecruitments.vue';
 import TButton from '../../components/base/TButton.vue';
+import { showApiError } from '../../utils/feedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../../utils/api';
+import { createRecruitment, publishRecruitment } from '../../api/recruitment';
+import { listRulesets } from '../../api/rulesets';
 import {
   createRecruitmentMetadata,
   hasRecruitmentValue,
@@ -66,8 +68,8 @@ const currentRecruitmentFields = computed<RecruitmentField[]>(() => resolveRecru
 
 async function loadRulesets() {
   try {
-    const result = await api.get<{ data?: RulesetOption[] } | RulesetOption[]>('/rulesets');
-    const items = Array.isArray(result) ? result : result.data ?? [];
+    const result = await listRulesets();
+    const items = result.data ?? [];
     if (Array.isArray(items) && items.length > 0) {
       rulesets.value = items.map((item) => ({
         id: item.id,
@@ -131,7 +133,7 @@ async function submitPost() {
 
   submitLoading.value = true;
   try {
-    const created = await api.post<{ id: string }>('/recruitment', {
+    const created = await createRecruitment({
       title,
       type: postForm.value.type,
       ruleset_id: postForm.value.ruleset_id,
@@ -146,7 +148,7 @@ async function submitPost() {
     });
     // 创建后立即发布（draft → open）
     try {
-      await api.post(`/recruitment/${created.id}/publish`, {});
+      await publishRecruitment(created.id);
       ElMessage.success('招募帖已发布');
     } catch {
       ElMessage.success('招募帖已创建（草稿），请在详情页发布');
@@ -154,8 +156,8 @@ async function submitPost() {
     showPostDialog.value = false;
     // 跳转到详情页让 GM 管理申请
     router.push(`/recruit/${created.id}`);
-  } catch (err: any) {
-    ElMessage.error(err?.message ?? '发布失败');
+  } catch (err: unknown) {
+    showApiError(err, '发布失败');
   } finally {
     submitLoading.value = false;
   }

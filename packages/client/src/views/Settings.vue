@@ -3,7 +3,7 @@ import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import SvgIcon from '../components/SvgIcon.vue';
-import { api } from '../utils/api';
+import { updatePassword, updateNotificationSettings, updateContentPreferences, updatePrivacy, exportMyData, deleteMyAccount, getMySettings } from '../api/users';
 import { useTheme } from '../composables/useTheme';
 import { useAuthStore } from '../stores/auth-store';
 
@@ -57,7 +57,7 @@ async function changePassword() {
   }
   securitySaving.value = true;
   try {
-    await api.put('/users/me/password', { current_password: currentPwd.value, new_password: newPwd.value });
+    await updatePassword(currentPwd.value, newPwd.value);
     ElMessage.success('密码修改成功');
     currentPwd.value = '';
     newPwd.value = '';
@@ -109,10 +109,10 @@ async function saveContentPrefs() {
   if (contentTimer) clearTimeout(contentTimer);
   contentTimer = setTimeout(async () => {
     try {
-      await api.put('/users/me/content-preferences', {
+      await updateContentPreferences({
         rule_prefs: rulePrefs.value,
         genre_prefs: genrePrefs.value,
-      });
+      } as any);
       ElMessage.success('已保存');
     } catch { /* ignore */ }
   }, 600);
@@ -130,10 +130,11 @@ async function saveNotifyPrefs() {
   if (notifyTimer) clearTimeout(notifyTimer);
   notifyTimer = setTimeout(async () => {
     try {
-      await api.put('/users/me/notification-settings', {
-        in_app: notifyInApp.value,
-        email: notifyEmail.value,
-        push: notifyPush.value,
+      await updateNotificationSettings({
+        system: notifyInApp.value,
+        recruit: notifyInApp.value,
+        dm: notifyEmail.value,
+        mention: notifyPush.value,
       });
       ElMessage.success('已保存');
     } catch { /* ignore */ }
@@ -153,7 +154,7 @@ async function savePrivacy() {
   if (privacyTimer) clearTimeout(privacyTimer);
   privacyTimer = setTimeout(async () => {
     try {
-      await api.put('/users/me/privacy', {
+      await updatePrivacy({
         profile_visibility: profileVisibility.value,
         dm_visibility: dmVisibility.value,
         allow_stats: allowStats.value,
@@ -174,7 +175,7 @@ const deleteLoading = ref(false);
 async function exportData() {
   exportLoading.value = true;
   try {
-    await api.post('/users/me/export-data', {});
+    await exportMyData();
     ElMessage.success('数据导出请求已提交，生成后将通过站内通知发送下载链接');
   } catch (e: unknown) {
     ElMessage.error((e as Error).message || '导出失败');
@@ -187,7 +188,7 @@ async function deleteAccount() {
   if (!deleteConfirm.value) return;
   deleteLoading.value = true;
   try {
-    await api.post('/users/me/delete-account', { confirm: deleteConfirm.value });
+    await deleteMyAccount(deleteConfirm.value);
     ElMessage.success('账号删除请求已提交，15 天冷静期后数据将永久删除');
     showDeleteDialog.value = false;
     router.push('/login');
@@ -202,11 +203,7 @@ async function deleteAccount() {
 onMounted(async () => {
   if (!authStore.isLoggedIn) return;
   try {
-    const saved = await api.get<{
-      notification: { in_app: boolean; email: boolean; push: boolean };
-      content: { rule_prefs: string[]; genre_prefs: string[] };
-      privacy: { profile_visibility: string; dm_visibility: string; allow_stats: boolean; allow_ai_train: boolean };
-    }>('/users/me/settings');
+    const saved = await getMySettings() as any;
 
     // 通知偏好（不触发 watch 保存，故临时暂停 watch）
     notifyInApp.value = saved.notification.in_app;

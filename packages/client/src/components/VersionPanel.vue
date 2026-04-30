@@ -5,6 +5,7 @@
  */
 import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import { listRulesetVersions, createRulesetVersion, rollbackRulesetVersion } from '../api/rulesets';
 import { api } from '../utils/api';
 
 const props = defineProps<{
@@ -35,7 +36,7 @@ async function fetchVersions() {
   if (!props.rulesetId || props.rulesetId === 'new') return;
   loading.value = true;
   try {
-    const data = await api.get<{ data: VersionItem[] }>(`/rulesets/${props.rulesetId}/versions`);
+    const data = await listRulesetVersions(props.rulesetId) as { data: VersionItem[] };
     versions.value = data.data ?? [];
   } finally {
     loading.value = false;
@@ -55,7 +56,7 @@ async function saveVersion() {
   }
   saving.value = true;
   try {
-    await api.post(`/rulesets/${props.rulesetId}/versions`, { changelog: changelogInput.value });
+    await createRulesetVersion(props.rulesetId, changelogInput.value);
     ElMessage.success('版本快照已保存');
     changelogInput.value = '';
     await fetchVersions();
@@ -73,7 +74,7 @@ async function rollback(versionId: string, versionNumber: string) {
   if (!confirm(`确认回滚到版本 ${versionNumber}？当前草稿内容将被替换。`)) return;
   rollbacking.value = versionId;
   try {
-    await api.post(`/rulesets/${props.rulesetId}/versions/${versionId}/rollback`, {});
+    await rollbackRulesetVersion(props.rulesetId, versionId);
     ElMessage.success(`已回滚到版本 ${versionNumber}`);
     emit('rolledback');
     await fetchVersions();

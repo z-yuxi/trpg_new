@@ -4,7 +4,9 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import TTag from '../components/base/TTag.vue';
-import { api, getToken } from '../utils/api';
+import { getToken } from '../utils/api';
+import { updateCharacter, createCharacter, getCharacter } from '../api/characters';
+import { listRulesets } from '../api/rulesets';
 import { calcDerived, COC7_DEFAULT_DERIVED } from '@trpg/shared';
 
 /* ========== 类型 ========== */
@@ -163,12 +165,13 @@ function initSkills() {
 /* ========== 加载规则集 ========== */
 onMounted(async () => {
   try {
-    rulesets.value = await api.get<{ id: string; name: string }[]>('/rulesets?status=published');
+    const allRulesets = await listRulesets({ status: 'published' }).catch(() => ({ data: [] }));
+    rulesets.value = (allRulesets.data ?? []) as { id: string; name: string }[];
   } catch { /* ignore */ }
 
   if (isEditing && characterId) {
     try {
-      const data = await api.get<Record<string, unknown>>(`/characters/${characterId}`);
+      const data = await getCharacter(characterId) as Record<string, unknown>;
       form.value.name = (data.name as string) ?? '';
       form.value.ruleset_id = (data.ruleset_id as string) ?? '';
       form.value.occupation_id = (data.occupation_id as string) ?? '';
@@ -294,10 +297,10 @@ async function save() {
       skills: form.value.skills,
     };
     if (isEditing) {
-      await api.put(`/characters/${characterId}`, payload);
+      await updateCharacter(characterId, payload as any);
       router.push('/tuantu/characters');
     } else {
-      const saved = await api.post<{ character_code?: string }>('/characters', payload);
+      const saved = await createCharacter({ ruleset_id: payload.ruleset_id, name: payload.name }) as any;
       savedCharacterCode.value = saved.character_code ?? '';
       step.value = 6;
     }

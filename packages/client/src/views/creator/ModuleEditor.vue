@@ -239,6 +239,7 @@ import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDia
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
+import { getModule, updateModule, autoSaveModule, submitModule as apiSubmitModule, withdrawModule as apiWithdrawModule } from '../../api/modules';
 import { extractOutline } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
 import { socketClient } from '../../socket/socket-client';
@@ -297,7 +298,7 @@ async function saveReaderSettings() {
   if (!moduleId.value) return;
   rsSaving.value = true;
   try {
-    await api.put(`/modules/${moduleId.value}`, { reader_settings: rsDraft.value });
+    await updateModule(moduleId.value, { reader_settings: rsDraft.value as any });
     if (module.value) (module.value as any).reader_settings = rsDraft.value;
   } catch (err) {
     alert('保存叙阅器设置失败');
@@ -429,10 +430,10 @@ async function autoSave() {
   if (!moduleId.value || editorContent.value === null) return;
   saveState.value = 'saving';
   try {
-    await api.put(`/modules/${moduleId.value}/auto-save`, {
+    await autoSaveModule(moduleId.value, {
       content: editorContent.value,
       word_count: wordCount.value,
-    });
+    } as any);
     saveState.value = 'saved';
   } catch {
     saveState.value = 'unsaved';
@@ -544,7 +545,7 @@ function onWordCount(count: number) {
 async function handleTitleBlur() {
   if (!moduleId.value || moduleTitle.value === module.value?.name) return;
   try {
-    await api.put(`/modules/${moduleId.value}`, { name: moduleTitle.value });
+    await updateModule(moduleId.value, { name: moduleTitle.value });
   } catch {
     // 静默处理
   }
@@ -565,7 +566,7 @@ async function handlePublish() {
   // Batch 4: 提交发布审核（draft -> public_notice）
   if (!moduleId.value) return;
   try {
-    const res = await api.post<{ status: string; public_notice_end_at?: string | Date | null }>(`/modules/${moduleId.value}/submit`);
+    const res = await apiSubmitModule(moduleId.value) as { status: string; public_notice_end_at?: string | Date | null };
     if (module.value) {
       module.value.status = res.status as any;
       module.value.public_notice_end_at = res.public_notice_end_at as any;
@@ -579,7 +580,7 @@ async function handlePublish() {
 async function handleWithdraw() {
   if (!moduleId.value) return;
   try {
-    const res = await api.post<{ status: string }>(`/modules/${moduleId.value}/withdraw`);
+    const res = await apiWithdrawModule(moduleId.value) as { status: string };
     if (module.value) module.value.status = res.status as any;
   } catch (err) {
     console.error('撤回失败', err);
@@ -635,7 +636,7 @@ const saveIndicatorText = computed(() => SAVE_TEXT[saveState.value]);
 // ── 加载 ─────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const data = await api.get<Module>(`/modules/${moduleId.value}`);
+    const data = await getModule(moduleId.value) as Module;
     module.value = data;
     moduleTitle.value = data.name;
     editorContent.value = data.content ?? null;

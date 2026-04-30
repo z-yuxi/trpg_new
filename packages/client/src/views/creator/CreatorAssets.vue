@@ -4,7 +4,9 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import PageLayout from '../../components/layout/PageLayout.vue';
 import TButton from '../../components/base/TButton.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { api, getToken } from '../../utils/api';
+import { getToken } from '../../utils/api';
+import { listCreatorAssets, deleteCreatorAsset } from '../../api/creator';
+import { api } from '../../utils/api';
 
 interface Asset {
   id: string;
@@ -29,7 +31,7 @@ const filteredAssets = computed(() => {
 async function loadAssets() {
   loading.value = true;
   try {
-    assets.value = await api.get<Asset[]>('/creator/assets');
+    assets.value = await listCreatorAssets() as Asset[];
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '加载素材失败');
   } finally {
@@ -95,7 +97,7 @@ async function deleteAsset(asset: Asset) {
   });
 
   try {
-    await api.delete(`/creator/assets/${asset.id}`);
+    await deleteCreatorAsset(asset.id);
     assets.value = assets.value.filter(a => a.id !== asset.id);
     ElMessage.success('已删除');
   } catch (e: unknown) {

@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { ElDialog, ElMessage } from 'element-plus';
 import SceneRoadmap from './SceneRoadmap.vue';
-import { api } from '../../utils/api';
+import { createScene as apiCreateScene, updateScene, deleteScene } from '../../api/campaigns';
 import type { Scene } from '@trpg/shared';
 
 const props = defineProps<{
@@ -26,7 +26,7 @@ async function createScene() {
   if (!newScene.value.name.trim()) { ElMessage.warning('场景名称不能为空'); return; }
   sceneLoading.value = true;
   try {
-    const scene = await api.post<Scene>(`/campaigns/${props.campaignId}/scenes`, newScene.value);
+    const scene = await apiCreateScene(props.campaignId, newScene.value);
     emit('scene-created', scene);
     showNewScene.value = false;
     newScene.value = { name: '', type: 'spatial', description: '' };
@@ -61,7 +61,7 @@ async function saveSceneEdit() {
   if (!editSceneForm.value.name.trim()) { ElMessage.warning('场景名不能为空'); return; }
   sceneEditLoading.value = true;
   try {
-    await api.put(`/campaigns/${props.campaignId}/scenes/${editingSceneId.value}`, editSceneForm.value);
+    await updateScene(props.campaignId, editingSceneId.value, editSceneForm.value as any);
     showEditScene.value = false;
     ElMessage.success('场景已更新，刷新页面生效');
   } catch (e: any) { ElMessage.error(e.message ?? '更新失败'); }
@@ -81,8 +81,7 @@ function openDeleteScene(scene: any) {
 
 async function confirmDeleteScene() {
   try {
-    await api.delete(`/campaigns/${props.campaignId}/scenes/${deletingSceneId.value}`);
-    showDeleteSceneConfirm.value = false;
+    await deleteScene(props.campaignId, deletingSceneId.value);
     ElMessage.success('场景已删除，刷新页面生效');
   } catch (e: any) { ElMessage.error(e.message ?? '删除失败'); }
 }

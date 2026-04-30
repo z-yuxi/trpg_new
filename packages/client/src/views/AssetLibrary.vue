@@ -5,7 +5,9 @@ import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import EmptyState from '../components/base/EmptyState.vue';
 import QuickCreateCampaignDialog from '../components/campaign/QuickCreateCampaignDialog.vue';
-import { api } from '../utils/api';
+import { discoverRulesets, discoverModules } from '../api/assets';
+import { listMyModules } from '../api/modules';
+import { listMyRulesets } from '../api/rulesets';
 import { useAuthStore } from '../stores/auth-store';
 import { useRouter } from 'vue-router';
 
@@ -83,20 +85,20 @@ onMounted(async () => {
   loading.value = true;
   try {
     const [rsRes, modRes] = await Promise.allSettled([
-      api.get<{ data: Ruleset[]; total: number }>('/rulesets?status=published&limit=50'),
-      api.get<{ data: Module[]; total: number }>('/modules?limit=50'),
+      discoverRulesets({ status: 'published', limit: 50 }),
+      discoverModules({ limit: 50 }),
     ]);
 
-    if (rsRes.status === 'fulfilled') rulesets.value = rsRes.value.data ?? [];
-    if (modRes.status === 'fulfilled') modules.value = modRes.value.data ?? [];
+    if (rsRes.status === 'fulfilled') rulesets.value = (rsRes.value as any).data ?? [];
+    if (modRes.status === 'fulfilled') modules.value = (modRes.value as any).data ?? [];
 
     if (authStore.token) {
       const [mineModulesRes, mineRulesetsRes] = await Promise.allSettled([
-        api.get<Module[]>('/modules/mine'),
-        api.get<{ data: Ruleset[]; total: number }>(`/rulesets?author_id=${authStore.userId}&limit=50`),
+        listMyModules(),
+        listMyRulesets(),
       ]);
-      if (mineModulesRes.status === 'fulfilled') myModules.value = mineModulesRes.value ?? [];
-      if (mineRulesetsRes.status === 'fulfilled') myRulesets.value = mineRulesetsRes.value.data ?? [];
+      if (mineModulesRes.status === 'fulfilled') myModules.value = (mineModulesRes.value.data ?? []) as Module[];
+      if (mineRulesetsRes.status === 'fulfilled') myRulesets.value = (mineRulesetsRes.value.data ?? []) as Ruleset[];
     }
   } finally {
     loading.value = false;

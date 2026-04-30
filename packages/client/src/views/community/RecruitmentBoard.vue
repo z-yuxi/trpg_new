@@ -6,7 +6,7 @@ import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import EmptyState from '../../components/base/EmptyState.vue';
-import { api } from '../../utils/api';
+import { listRecruitments, confirmApplication } from '../../api/recruitment';
 import { showApiError } from '../../utils/feedback';
 import { useAuthStore } from '../../stores/auth-store';
 import { getApplyButtonState } from '../../composables/useApplyButtonState';
@@ -151,7 +151,7 @@ async function loadPosts() {
     if (keyword.value.trim()) query.set('keyword', keyword.value.trim());
     if (props.mine) query.set('mine', props.mine);
 
-    const result = await api.get<{ data: RecruitmentPostVM[]; total: number }>(`/recruitment?${query.toString()}`);
+    const result = await listRecruitments(Object.fromEntries(query.entries())) as { data: RecruitmentPostVM[]; total: number };
     posts.value = result.data ?? [];
     total.value = result.total ?? 0;
   } catch (err: unknown) {
@@ -188,7 +188,7 @@ async function handleCardAction(event: Event, post: RecruitmentPostVM) {
       if (!post.my_application_id) break;
       confirmingId.value = post.id;
       try {
-        await api.post(`/recruitment/applications/${post.my_application_id}/confirm`, {});
+        await confirmApplication(post.my_application_id!);
         ElMessage.success('已确认入团！');
         await loadPosts();
       } catch (err: unknown) {

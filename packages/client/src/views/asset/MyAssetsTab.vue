@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import TCard from '../../components/base/TCard.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
+
+const router = useRouter();
 
 const authStore = useAuthStore();
 const myRulesets = ref<any[]>([]);
@@ -37,7 +40,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="actions">
-            <TButton type="secondary" size="sm">编辑</TButton>
+            <TButton type="ghost" size="sm" @click="router.push(`/ruleset/${rs.id}`)">阅读</TButton>
           </div>
         </div>
       </TCard>

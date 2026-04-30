@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { ElInput, ElMessage, ElSkeleton } from 'element-plus';
 import TButton from '../base/TButton.vue';
+import { listFloors, likeFloor, unlikeFloor, deleteFloor as apiDeleteFloor, deleteComment as apiDeleteComment, likeComment, unlikeComment } from '../../api/recruitment';
 import { api } from '../../utils/api';
 import { useAuthStore } from '../../stores/auth-store';
 
@@ -91,9 +92,7 @@ async function loadFloors(reset = false) {
   else loadingMore.value = true;
 
   try {
-    const data = await api.get<{ floors: FloorReply[]; total: number }>(
-      `/recruitment/${props.postId}/floors?page=${page.value}&pageSize=${pageSize}`,
-    );
+    const data = await listFloors(props.postId, { page: page.value, pageSize }) as { floors: FloorReply[]; total: number };
     floors.value = isFirst ? (data?.floors ?? []) : [...floors.value, ...(data?.floors ?? [])];
     total.value = data?.total ?? 0;
   } catch (err: any) {
@@ -239,9 +238,9 @@ async function toggleFloorLike(floor: FloorReply) {
   };
   try {
     if (liked) {
-      await api.delete(`/recruitment/${props.postId}/floors/${floor.id}/like`);
+      await unlikeFloor(props.postId, floor.id);
     } else {
-      await api.post(`/recruitment/${props.postId}/floors/${floor.id}/like`, {});
+      await likeFloor(props.postId, floor.id);
     }
   } catch (err: any) {
     // 回滚乐观更新
@@ -268,9 +267,9 @@ async function toggleCommentLike(floor: FloorReply, comment: FloorComment) {
   floorCommentsMap.value.set(floor.id, [...comments]);
   try {
     if (liked) {
-      await api.delete(`/recruitment/${props.postId}/floors/${floor.id}/comments/${comment.id}/like`);
+      await unlikeComment(props.postId, floor.id, comment.id);
     } else {
-      await api.post(`/recruitment/${props.postId}/floors/${floor.id}/comments/${comment.id}/like`, {});
+      await likeComment(props.postId, floor.id, comment.id);
     }
   } catch (err: any) {
     comments[idx] = { ...comments[idx], is_liked_by_me: liked, like_count: liked ? comments[idx].like_count + 1 : comments[idx].like_count - 1 };
@@ -281,8 +280,7 @@ async function toggleCommentLike(floor: FloorReply, comment: FloorComment) {
 
 async function deleteFloor(floor: FloorReply) {
   try {
-    await api.delete(`/recruitment/${props.postId}/floors/${floor.id}`);
-    const idx = floors.value.findIndex((f) => f.id === floor.id);
+    await apiDeleteFloor(props.postId, floor.id);
     if (idx !== -1) {
       floors.value[idx] = { ...floors.value[idx], deleted: true, content: '[该楼层已删除]' };
     }
@@ -294,8 +292,7 @@ async function deleteFloor(floor: FloorReply) {
 
 async function deleteComment(floor: FloorReply, comment: FloorComment) {
   try {
-    await api.delete(`/recruitment/${props.postId}/floors/${floor.id}/comments/${comment.id}`);
-    const comments = floorCommentsMap.value.get(floor.id) ?? [];
+    await apiDeleteComment(props.postId, floor.id, comment.id);
     floorCommentsMap.value.set(floor.id, comments.filter((c) => c.id !== comment.id));
     // 更新楼层 reply_count
     const floorIdx = floors.value.findIndex((f) => f.id === floor.id);

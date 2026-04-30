@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { Scene, SceneConnection } from '@trpg/shared';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { api } from '../../utils/api';
+import { listConnections, createConnection, updateConnection, deleteConnection } from '../../api/campaigns';
 
 type SceneConnectionRow = SceneConnection & {
   from_scene_name?: string;
@@ -33,7 +33,7 @@ const editConn = ref<Partial<SceneConnectionRow> & { fromId: string; toId: strin
 async function loadConnections() {
   loading.value = true;
   try {
-    connections.value = await api.get<SceneConnectionRow[]>(`/campaigns/${props.campaignId}/connections`);
+    connections.value = await listConnections(props.campaignId) as SceneConnectionRow[];
   } catch {
     ElMessage.error('场景连接加载失败');
   } finally {
@@ -55,9 +55,9 @@ async function saveConnection() {
 
     const isEdit = !!editConn.value.id;
     if (isEdit) {
-      await api.put(`/campaigns/${props.campaignId}/connections/${editConn.value.id}`, body);
+      await updateConnection(props.campaignId, editConn.value.id!, body);
     } else {
-      await api.post(`/campaigns/${props.campaignId}/connections`, body);
+      await createConnection(props.campaignId, body);
     }
 
     await loadConnections();
@@ -79,8 +79,7 @@ async function removeConnection(connId: string) {
       type: 'warning',
     });
 
-    await api.delete(`/campaigns/${props.campaignId}/connections/${connId}`);
-    connections.value = connections.value.filter((c) => c.id !== connId);
+    await deleteConnection(props.campaignId, connId);
     ElMessage.success('场景连接已删除');
   } catch (err: any) {
     if (err?.message !== 'cancel') {

@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
 import type { LocalMessage } from '../../stores/message-store';
-import { api } from '../../utils/api';
+import { createReport } from '../../api/reports';
 import { ElMessage } from 'element-plus';
 
 const props = defineProps<{ message: LocalMessage; isOwn: boolean }>();
@@ -74,7 +74,7 @@ function openReport() {
 async function submitReport() {
   if (!reportReason.value) { ElMessage.warning('请选择举报原因'); return; }
   try {
-    await api.post('/reports', {
+    await createReport({
       content_type: 'message',
       content_id: String(props.message.id),
       reason: reportReason.value,

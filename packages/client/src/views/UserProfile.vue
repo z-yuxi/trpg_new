@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '../stores/auth-store';
-import { api } from '../utils/api';
+import { getUserProfile, getUserCampaigns, getUserHostedCampaigns, getUserCreatedModules, followUser, unfollowUser, getFollowers, getFollowing, getFollowStatus } from '../api/users';
 
 const route = useRoute();
 const router = useRouter();
@@ -84,15 +84,15 @@ const followingLoaded = ref(false);
 
 async function loadFollowers() {
   if (followersLoaded.value) return;
-  const res = await api.get<{ data: UserSummary[]; total: number }>(`/users/${uid}/followers`).catch(() => ({ data: [], total: 0 }));
-  followersList.value = res.data;
+  const res = await getFollowers(uid).catch(() => ({ data: [], total: 0 }));
+  followersList.value = Array.isArray(res) ? res : (res as any).data ?? [];
   followersLoaded.value = true;
 }
 
 async function loadFollowing() {
   if (followingLoaded.value) return;
-  const res = await api.get<{ data: UserSummary[]; total: number }>(`/users/${uid}/following`).catch(() => ({ data: [], total: 0 }));
-  followingList.value = res.data;
+  const res = await getFollowing(uid).catch(() => ({ data: [], total: 0 }));
+  followingList.value = Array.isArray(res) ? res : (res as any).data ?? [];
   followingLoaded.value = true;
 }
 
@@ -105,17 +105,17 @@ function switchTab(tab: TabKey) {
 async function loadProfile() {
   loading.value = true;
   try {
-    profile.value = await api.get(`/users/${uid}/profile`);
-    playerCampaigns.value = await api.get(`/users/${uid}/campaigns`);
-    hostedCampaigns.value = await api.get(`/users/${uid}/hosted-campaigns`);
-    creatorWorks.value = await api.get(`/users/${uid}/created-modules`);
+    profile.value = await getUserProfile(uid) as any;
+    playerCampaigns.value = await getUserCampaigns(uid) as any[];
+    hostedCampaigns.value = await getUserHostedCampaigns(uid) as any[];
+    creatorWorks.value = await getUserCreatedModules(uid) as any[];
     playerStats.value.joinedCampaigns = playerCampaigns.value.length;
     playerStats.value.totalSessions = playerCampaigns.value.length;
     gmStats.value.hostedCampaigns = hostedCampaigns.value.length;
     gmStats.value.totalPlayers = hostedCampaigns.value.length * 4;
     // 获取当前登录用户对该 UID 的关注状态
     if (authStore.isLoggedIn && !isOwnProfile()) {
-      const status = await api.get<{ following: boolean }>(`/users/${uid}/follow-status`).catch(() => ({ following: false }));
+      const status = await getFollowStatus(uid).catch(() => ({ following: false }));
       following.value = status.following;
     }
   } catch {
@@ -128,12 +128,12 @@ async function toggleFollow() {
   followLoading.value = true;
   try {
     if (following.value) {
-      await api.delete(`/users/${uid}/follow`);
+      await unfollowUser(uid);
       following.value = false;
       if (profile.value) profile.value.follower_count = Math.max(0, (profile.value.follower_count ?? 1) - 1);
       ElMessage.success('已取消关注');
     } else {
-      const res = await api.post<{ follower_count: number }>(`/users/${uid}/follow`, {});
+      const res = await followUser(uid);
       following.value = true;
       if (profile.value) profile.value.follower_count = res.follower_count;
       ElMessage.success('已关注');

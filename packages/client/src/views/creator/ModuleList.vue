@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router';
 import { ElDialog, ElMessage } from 'element-plus';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
-import { api } from '../../utils/api';
+import { listMyModules, createModule as apiCreateModule, submitModule as apiSubmitModule, deleteModule as apiDeleteModule, withdrawModule as apiWithdrawModule } from '../../api/modules';
+import { listMyRulesets } from '../../api/rulesets';
 
 interface ModuleItem {
   id: string;
@@ -31,13 +32,13 @@ async function loadModules() {
   loading.value = true;
   try {
     const [modulePayload, rulesetPayload] = await Promise.all([
-      api.get<unknown>('/modules/mine'),
-      api.get<unknown>('/rulesets/mine'),
+      listMyModules(),
+      listMyRulesets(),
     ]);
 
-    modules.value = Array.isArray(modulePayload) ? modulePayload : (modulePayload as { data?: ModuleItem[] }).data ?? [];
+    modules.value = (modulePayload.data ?? []) as ModuleItem[];
 
-    const list = Array.isArray(rulesetPayload) ? rulesetPayload : (rulesetPayload as { data?: unknown[] }).data ?? [];
+    const list = rulesetPayload.data ?? [];
     rulesets.value = (list as { id: string; name: string }[]).map((item) => ({ id: item.id, name: item.name }));
   } finally {
     loading.value = false;
@@ -67,7 +68,7 @@ async function createModule() {
 
   creating.value = true;
   try {
-    const created = await api.post<{ id: string }>('/modules', { name: createName.value.trim(), ruleset_id: createRulesetId.value });
+    const created = await apiCreateModule({ name: createName.value.trim(), ruleset_id: createRulesetId.value }) as { id: string };
     ElMessage.success('模组已创建');
     showCreate.value = false;
     createName.value = '';
@@ -82,7 +83,7 @@ async function createModule() {
 
 async function submitModule(moduleId: string) {
   try {
-    await api.post(`/modules/${moduleId}/submit`, {});
+    await apiSubmitModule(moduleId);
     ElMessage.success('已提交审核');
     loadModules();
   } catch {
@@ -94,7 +95,7 @@ async function deleteModule(moduleId: string) {
   const confirmed = window.confirm('仅草稿模组可删除，确认继续吗？');
   if (!confirmed) return;
   try {
-    await api.delete(`/modules/${moduleId}`);
+    await apiDeleteModule(moduleId);
     ElMessage.success('已删除模组');
     loadModules();
   } catch {
@@ -106,7 +107,7 @@ async function withdrawModule(moduleId: string) {
   const confirmed = window.confirm('撤回后模组将回到草稿状态，确认撤回吗？');
   if (!confirmed) return;
   try {
-    await api.post(`/modules/${moduleId}/withdraw`, {});
+    await apiWithdrawModule(moduleId);
     ElMessage.success('已撤回模组审核');
     loadModules();
   } catch {
@@ -161,6 +162,7 @@ onMounted(loadModules);
             </span>
           </div>
           <div class="actions">
+            <TButton type="ghost" size="sm" @click="router.push(`/module/${item.id}`)">预览</TButton>
             <TButton type="secondary" size="sm" @click="router.push(`/creator/modules/${item.id}/edit`)">编辑</TButton>
             <TButton v-if="item.status === 'draft'" type="primary" size="sm" @click="submitModule(item.id)">提交审核</TButton>
             <TButton v-if="item.status === 'draft'" type="secondary" size="sm" @click="deleteModule(item.id)">删除</TButton>

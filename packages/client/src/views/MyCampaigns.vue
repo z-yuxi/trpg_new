@@ -7,7 +7,9 @@ import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import EmptyState from '../components/base/EmptyState.vue';
-import { api } from '../utils/api';
+import { listMyCampaigns, createCampaign, joinCampaignByCode } from '../api/campaigns';
+import { listRulesets } from '../api/rulesets';
+import { listModules } from '../api/modules';
 import { showApiError } from '../utils/feedback';
 
 const router = useRouter();
@@ -61,7 +63,7 @@ const statusMap: Record<string, { label: string; color: 'success' | 'warning' | 
 async function loadCampaigns() {
   loading.value = true;
   try {
-    campaigns.value = await api.get<CampaignListItem[]>('/campaigns');
+    campaigns.value = await listMyCampaigns();
   } catch (error: unknown) {
     showApiError(error, '加载失败');
   }
@@ -78,12 +80,12 @@ async function loadCreateOptions() {
   createOptionsLoading.value = true;
   try {
     const [rulesetRes, moduleRes] = await Promise.allSettled([
-      api.get<{ data?: Array<{ id: string; name: string }> } | Array<{ id: string; name: string }>>('/rulesets?status=published&limit=100'),
-      api.get<{ data?: Array<{ id: string; name?: string; title?: string }> } | Array<{ id: string; name?: string; title?: string }>>('/modules?limit=100'),
+      listRulesets({ status: 'published', limit: 100 }),
+      listModules({ limit: 100 }),
     ]);
 
     if (rulesetRes.status === 'fulfilled') {
-      const rulesetData = Array.isArray(rulesetRes.value) ? rulesetRes.value : (rulesetRes.value.data ?? []);
+      const rulesetData = rulesetRes.value.data ?? [];
       rulesetOptions.value = rulesetData
         .filter((item) => item.id)
         .map((item) => ({ id: item.id, name: item.name }));
@@ -92,7 +94,7 @@ async function loadCreateOptions() {
     }
 
     if (moduleRes.status === 'fulfilled') {
-      const moduleData = Array.isArray(moduleRes.value) ? moduleRes.value : (moduleRes.value.data ?? []);
+      const moduleData = moduleRes.value.data ?? [];
       moduleOptions.value = moduleData
         .filter((item) => item.id)
         .map((item) => ({ id: item.id, name: item.title ?? item.name ?? '未命名模组' }));
@@ -113,7 +115,7 @@ async function createCampaign() {
   if (!createForm.value.name || !createForm.value.ruleset_id) return;
   createLoading.value = true;
   try {
-    await api.post('/campaigns', createForm.value);
+    await createCampaign(createForm.value);
     showCreateDialog.value = false;
     createForm.value = { name: '', ruleset_id: '', module_id: '' };
     await loadCampaigns();
@@ -131,7 +133,7 @@ async function joinCampaign() {
   if (joinCode.value.length < 4) return;
   joinLoading.value = true;
   try {
-    const campaign = await api.post<{ id: string }>('/campaigns/join', { code: joinCode.value });
+    const campaign = await joinCampaignByCode(joinCode.value);
     showJoinDialog.value = false;
     joinCode.value = '';
     router.push(`/room/${campaign.id}`);

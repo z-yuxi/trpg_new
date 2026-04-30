@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { api } from '../../utils/api';
+import { updatePassword } from '../../api/users';
 
 const router = useRouter();
 
@@ -42,7 +42,7 @@ async function changePassword() {
   }
   saving.value = true;
   try {
-    await api.put('/users/me/password', { current_password: currentPwd.value, new_password: newPwd.value });
+    await updatePassword(currentPwd.value, newPwd.value);
     ElMessage.success('密码修改成功');
     currentPwd.value = '';
     newPwd.value = '';

@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router';
 import TCard from '../components/base/TCard.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import { useAuthStore } from '../stores/auth-store';
-import { api } from '../utils/api';
+import { discoverRulesets, discoverModules } from '../api/assets';
+import { listRecruitments } from '../api/recruitment';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -23,20 +24,13 @@ onMounted(async () => {
   loading.value = true;
   try {
     const [rData, mData, recData] = await Promise.all([
-      api.get<unknown>('/rulesets?limit=6').catch(() => null),
-      api.get<unknown>('/modules?limit=6').catch(() => null),
-      api.get<unknown[]>('/recruitment?limit=5').catch(() => null),
+      discoverRulesets({ limit: 6 }).catch(() => null),
+      discoverModules({ limit: 6 }).catch(() => null),
+      listRecruitments({ limit: 5 }).catch(() => null),
     ]);
 
-    if (rData) {
-      const d = rData as { data?: unknown[] } | unknown[];
-      rulesets.value = Array.isArray((d as { data?: unknown[] }).data) ? ((d as { data: unknown[] }).data).slice(0, 6) : Array.isArray(d) ? (d as unknown[]).slice(0, 6) : [];
-    }
-    if (mData) {
-      const d = mData as { data?: unknown[] };
-      modules.value = Array.isArray(d?.data) ? d.data!.slice(0, 6) : [];
-    }
-
+    if (rData) rulesets.value = (rData.data ?? []).slice(0, 6);
+    if (mData) modules.value = (mData.data ?? []).slice(0, 6);
     if (recData) stories.value = (recData as unknown[]).slice(0, 4);
   } catch { /* silent */ } finally {
     loading.value = false;

@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { api } from '../../utils/api';
+import { updateNotificationSettings } from '../../api/users';
 
 const router = useRouter();
 
@@ -44,7 +44,7 @@ const saving = ref(false);
 async function save() {
   saving.value = true;
   try {
-    await api.put('/users/me/notification-settings', { system: system.value, recruit: recruit.value, dm: dm.value, mention: mention.value });
+    await updateNotificationSettings({ system: system.value, recruit: recruit.value, dm: dm.value, mention: mention.value });
     ElMessage.success('通知设置已保存');
   } catch {
     ElMessage.error('保存失败，请稍后重试');

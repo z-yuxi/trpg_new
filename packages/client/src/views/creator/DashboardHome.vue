@@ -5,7 +5,8 @@ import PageLayout from '../../components/layout/PageLayout.vue';
 import TCard from '../../components/base/TCard.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
-import { api } from '../../utils/api';
+import { listMyRulesets } from '../../api/rulesets';
+import { listMyModules } from '../../api/modules';
 
 interface RulesetItem {
   id: string;
@@ -75,12 +76,12 @@ async function loadDashboard() {
   loading.value = true;
   try {
     const [rulesetPayload, modulePayload] = await Promise.all([
-      api.get<unknown>('/rulesets/mine'),
-      api.get<unknown>('/modules/mine'),
+      listMyRulesets(),
+      listMyModules(),
     ]);
 
-    rulesets.value = Array.isArray(rulesetPayload) ? rulesetPayload : (rulesetPayload as { data?: RulesetItem[] }).data ?? [];
-    modules.value = Array.isArray(modulePayload) ? modulePayload : (modulePayload as { data?: ModuleItem[] }).data ?? [];
+    rulesets.value = (rulesetPayload.data ?? []) as RulesetItem[];
+    modules.value = (modulePayload.data ?? []) as ModuleItem[];
   } finally {
     loading.value = false;
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TCard from '../components/base/TCard.vue';
@@ -9,6 +9,9 @@ import TTag from '../components/base/TTag.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useAuthStore } from '../stores/auth-store';
 import { api, getToken } from '../utils/api';
+import { getMe, getMyStats, updateMyProfile, activateCreator as apiActivateCreator } from '../api/users';
+import { listMyCampaigns } from '../api/campaigns';
+import { getMembershipBenefits, createMembershipOrder } from '../api/membership';
 import { useTheme } from '../composables/useTheme';
 import { useNotificationStore } from '../stores/notification-store';
 
@@ -63,8 +66,8 @@ async function loadUserDetail() {
   userLoading.value = true;
   userLoadError.value = false;
   try {
-    const payload = await api.get<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me');
-    userDetail.value = (payload as { user?: Record<string, unknown> }).user ?? payload;
+    const rawPayload = await getMe();
+    userDetail.value = (rawPayload as { user?: Record<string, unknown> }).user ?? rawPayload as Record<string, unknown>;
     if (!Array.isArray(userDetail.value.tags)) userDetail.value.tags = [];
     if (typeof userDetail.value.intro !== 'string') userDetail.value.intro = '';
     authStore.setAuth({
@@ -85,7 +88,7 @@ async function loadUserDetail() {
 async function activateCreator() {
   activatingCreator.value = true;
   try {
-    await api.post('/users/me/activate-creator');
+    await apiActivateCreator();
     ElMessage.success('创作者模式已开通！');
     await loadUserDetail();
   } catch {
@@ -99,11 +102,9 @@ onMounted(async () => {
   if (!authStore.isLoggedIn) return;
   await loadUserDetail();
   await loadMembershipInfo();
-  await loadAiQuota();
-  restorePendingOrder();
 
   try {
-    const data = await api.get<Record<string, unknown>>('/users/me/stats');
+    const data = await getMyStats();
     stats.value = {
       joinedCampaigns: Number(data.joined_campaigns ?? 0),
       createdCampaigns: Number(data.created_campaigns ?? 0),
@@ -114,7 +115,7 @@ onMounted(async () => {
 
   // 兼容尚未部署统计接口的环境：从现有战役接口做动态兜底，不使用硬编码。
   try {
-    const campaigns = await api.get<unknown[]>('/campaigns');
+    const campaigns = await listMyCampaigns();
     const count = Array.isArray(campaigns) ? campaigns.length : 0;
     stats.value = { joinedCampaigns: count, createdCampaigns: count, totalHours: 0 };
   } catch { /* ignore */ }
@@ -130,13 +131,13 @@ function startEdit() {
 
 async function saveEdit() {
   try {
-    const payload = await api.put<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me', {
+    const rawPayload2 = await updateMyProfile({
       nickname: editNickname.value,
       avatar_url: avatarPreview.value,
       intro: editIntro.value.slice(0, 200),
       tags: editTags.value,
     });
-    const updated = (payload as { user?: Record<string, unknown> }).user ?? payload as Record<string, unknown>;
+    const updated = (rawPayload2 as { user?: Record<string, unknown> }).user ?? rawPayload2 as Record<string, unknown>;
     const merged = {
       ...displayUser.value,
       ...updated,
@@ -197,8 +198,8 @@ async function uploadAvatar(file: File): Promise<string> {
 }
 
 async function persistAvatar(url: string) {
-  const payload = await api.put<{ user?: Record<string, unknown> } | Record<string, unknown>>('/users/me', { avatar_url: url });
-  const updated = (payload as { user?: Record<string, unknown> }).user ?? payload as Record<string, unknown>;
+    const rawPayload3 = await updateMyProfile({ avatar_url: url });
+    const updated = (rawPayload3 as { user?: Record<string, unknown> }).user ?? rawPayload3 as Record<string, unknown>;
   userDetail.value = {
     ...displayUser.value,
     ...updated,
@@ -255,38 +256,6 @@ const selectedSku = ref<string>('pro_yearly');
 const selectedChannel = ref<'alipay' | 'wechat'>('alipay');
 const orderLoading = ref(false);
 const membershipInfo = ref<{ tier: string; expires_at: string | null } | null>(null);
-const currentOrderId = ref<string | null>(null);
-const orderStatus = ref<'idle' | 'pending' | 'paid' | 'failed'>('idle');
-const orderPolling = ref(false);
-const queryOrderLoading = ref(false);
-let orderPollTimer: ReturnType<typeof setTimeout> | null = null;
-const PENDING_ORDER_STORAGE_KEY = 'membership_pending_order';
-
-function savePendingOrder(orderId: string) {
-  localStorage.setItem(PENDING_ORDER_STORAGE_KEY, JSON.stringify({ orderId, ts: Date.now() }));
-}
-
-function clearPendingOrder() {
-  localStorage.removeItem(PENDING_ORDER_STORAGE_KEY);
-}
-
-function restorePendingOrder() {
-  try {
-    const raw = localStorage.getItem(PENDING_ORDER_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as { orderId?: string };
-    if (!parsed?.orderId) {
-      clearPendingOrder();
-      return;
-    }
-
-    currentOrderId.value = parsed.orderId;
-    orderStatus.value = 'pending';
-    startOrderPolling(parsed.orderId);
-  } catch {
-    clearPendingOrder();
-  }
-}
 
 const SKU_LIST = [
   { sku: 'pro_monthly',     label: 'Pro 会员',  period: '月',  price: '¥29',  originalPrice: '', badge: '' },
@@ -308,7 +277,7 @@ const BENEFIT_ROWS = [
 
 async function loadMembershipInfo() {
   try {
-    const data = await api.get<{ tier: string; expires_at: string | null }>('/membership/benefits');
+    const data = await getMembershipBenefits();
     membershipInfo.value = data;
   } catch { /* 忽略，非关键路径 */ }
 }
@@ -316,21 +285,11 @@ async function loadMembershipInfo() {
 async function createOrder() {
   orderLoading.value = true;
   try {
-    const res = await api.post<{ order_id: string; status: 'pending' | 'paid' | 'failed' }>('/membership/orders', {
-      sku: selectedSku.value,
-      channel: selectedChannel.value,
-    });
-
-    currentOrderId.value = res.order_id;
-    orderStatus.value = res.status;
-    ElMessage.success('订单已创建，系统将自动轮询支付结果');
-
-    if (res.status === 'pending') {
-      savePendingOrder(res.order_id);
-      startOrderPolling(res.order_id);
-    } else {
-      clearPendingOrder();
-    }
+    await createMembershipOrder(selectedSku.value, selectedChannel.value);
+    ElMessage.success('订单已创建，请按弹出的支付页面完成支付');
+    showUpgradeModal.value = false;
+    await loadUserDetail();
+    await loadMembershipInfo();
   } catch (e: any) {
     ElMessage.error(e?.message ?? '创建订单失败，请稍后重试');
   } finally {
@@ -338,160 +297,10 @@ async function createOrder() {
   }
 }
 
-function stopOrderPolling() {
-  orderPolling.value = false;
-  if (orderPollTimer) {
-    clearTimeout(orderPollTimer);
-    orderPollTimer = null;
-  }
-}
-
-async function pollOrderOnce(orderId: string) {
-  try {
-    const res = await api.get<{ status: 'pending' | 'paid' | 'failed' }>('/membership/orders/' + orderId);
-    const previousStatus = orderStatus.value;
-    orderStatus.value = res.status;
-
-    if (res.status === 'paid') {
-      stopOrderPolling();
-      clearPendingOrder();
-      if (previousStatus !== 'paid') {
-        ElMessage.success('支付成功，会员权益已生效');
-      }
-      await loadUserDetail();
-      await loadMembershipInfo();
-      showUpgradeModal.value = false;
-      return;
-    }
-
-    if (res.status === 'failed') {
-      stopOrderPolling();
-      clearPendingOrder();
-      if (previousStatus !== 'failed') {
-        ElMessage.warning('订单已关闭，请重新发起支付');
-      }
-      return;
-    }
-  } catch {
-    // 轮询失败不打断，进入下一轮
-  }
-
-  if (orderPolling.value) {
-    orderPollTimer = setTimeout(() => {
-      void pollOrderOnce(orderId);
-    }, 3000);
-  }
-}
-
-function startOrderPolling(orderId: string) {
-  stopOrderPolling();
-  orderPolling.value = true;
-  void pollOrderOnce(orderId);
-}
-
-async function cancelCurrentOrder() {
-  if (!currentOrderId.value || orderStatus.value !== 'pending') return;
-  try {
-    await api.post('/membership/orders/' + currentOrderId.value + '/cancel', {});
-    stopOrderPolling();
-    clearPendingOrder();
-    orderStatus.value = 'failed';
-    ElMessage.success('订单已取消');
-  } catch (e: any) {
-    ElMessage.error(e?.message ?? '取消订单失败');
-  }
-}
-
-async function queryCurrentOrderNow() {
-  if (!currentOrderId.value) return;
-  queryOrderLoading.value = true;
-  try {
-    const res = await api.get<{ status: 'pending' | 'paid' | 'failed' }>('/membership/orders/' + currentOrderId.value);
-    const previousStatus = orderStatus.value;
-    orderStatus.value = res.status;
-
-    if (res.status === 'pending') {
-      ElMessage.info('订单仍待支付，请完成支付后重试');
-      return;
-    }
-
-    if (res.status === 'paid') {
-      stopOrderPolling();
-      clearPendingOrder();
-      if (previousStatus !== 'paid') {
-        ElMessage.success('支付成功，会员权益已生效');
-      }
-      await loadUserDetail();
-      await loadMembershipInfo();
-      showUpgradeModal.value = false;
-      return;
-    }
-
-    stopOrderPolling();
-    clearPendingOrder();
-    if (previousStatus !== 'failed') {
-      ElMessage.warning('订单已关闭，请重新发起支付');
-    }
-  } catch (e: any) {
-    ElMessage.error(e?.message ?? '查询支付结果失败，请稍后重试');
-  } finally {
-    queryOrderLoading.value = false;
-  }
-}
-
-const orderStatusText = computed(() => {
-  return {
-    idle: '未创建',
-    pending: '待支付',
-    paid: '已支付',
-    failed: '已关闭',
-  }[orderStatus.value];
-});
-
 const membershipExpireText = computed(() => {
   if (!membershipInfo.value?.expires_at) return null;
   const d = new Date(membershipInfo.value.expires_at);
   return `有效期至 ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-});
-
-// ── AI 配额 ──────────────────────────────────────────────
-const AI_TASK_LABELS: Record<string, string> = {
-  import_module: '模组导入',
-  check_text:    '智能校对',
-  log_summary:   '日志摘要',
-  generate_recipe: '规则生成',
-};
-
-const AI_MONTHLY_QUOTA: Record<string, Record<string, number>> = {
-  free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
-  pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
-  creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
-};
-
-const aiQuota = ref<{ month: string; used: Record<string, number> } | null>(null);
-
-async function loadAiQuota() {
-  if (!authStore.isLoggedIn) return;
-  try {
-    const data = await api.get<{ month: string; used: Record<string, number> }>('/ai/quota');
-    aiQuota.value = data;
-  } catch { /* 非关键路径，静默处理 */ }
-}
-
-const aiQuotaRows = computed(() => {
-  const tier = (displayUser.value.subscription_type as string) ?? 'free';
-  const effectiveTier = tier === 'creator' ? 'creator' : tier === 'pro' ? 'pro' : 'free';
-  const quotaMap = AI_MONTHLY_QUOTA[effectiveTier] ?? AI_MONTHLY_QUOTA.free;
-  return Object.entries(AI_TASK_LABELS).map(([key, label]) => ({
-    key,
-    label,
-    used: aiQuota.value?.used[key] ?? 0,
-    quota: quotaMap[key] ?? 0,
-  }));
-});
-
-onBeforeUnmount(() => {
-  stopOrderPolling();
 });
 </script>
 
@@ -709,62 +518,13 @@ onBeforeUnmount(() => {
             >微信支付</button>
           </div>
 
-          <div v-if="currentOrderId" class="order-panel" :class="`order-panel--${orderStatus}`">
-            <div class="order-panel-row">
-              <span class="order-label">订单号</span>
-              <span class="order-value">{{ currentOrderId }}</span>
-            </div>
-            <div class="order-panel-row">
-              <span class="order-label">支付状态</span>
-              <span class="order-status">{{ orderStatusText }}</span>
-            </div>
-            <div class="order-actions" v-if="orderStatus === 'pending'">
-              <TButton type="ghost" size="sm" :loading="queryOrderLoading" @click="queryCurrentOrderNow">查询支付结果</TButton>
-              <TButton type="ghost" size="sm" @click="cancelCurrentOrder">取消订单</TButton>
-            </div>
-          </div>
-
           <TButton type="primary" size="lg" :loading="orderLoading" class="confirm-btn" @click="createOrder">
-            {{ currentOrderId && orderStatus === 'pending' ? '重新下单' : '立即支付' }}
+            立即支付
           </TButton>
-          <p class="modal-tip">下单后系统每 3 秒轮询支付状态，支付成功将自动刷新会员等级。</p>
+          <p class="modal-tip">支付完成后会员状态将自动更新。如有问题请联系客服。</p>
         </div>
       </div>
     </Teleport>
-    <!-- AI 配额卡（Pro+ 可见，free 显示升级入口） -->
-    <TCard
-      v-if="authStore.isLoggedIn && !userLoading"
-      padding="md"
-      class="ai-quota-card"
-    >
-      <div class="ai-quota-header">
-        <SvgIcon name="icon-settings" :size="16" style="color: var(--color-accent)" />
-        <span class="ai-quota-title">AI 功能配额——{{ aiQuota?.month ?? '' }}</span>
-        <span
-          v-if="displayUser.subscription_type === 'free'"
-          class="ai-quota-upgrade-link"
-          @click="showUpgradeModal = true"
-        >升级解锁</span>
-      </div>
-      <div v-if="displayUser.subscription_type === 'free'" class="ai-quota-locked">
-        AI 功能需要专业版或创作者版会员
-      </div>
-      <div v-else class="ai-quota-rows">
-        <div v-for="row in aiQuotaRows" :key="row.key" class="ai-quota-row">
-          <span class="ai-quota-label">{{ row.label }}</span>
-          <div class="ai-quota-bar-wrap">
-            <div
-              class="ai-quota-bar"
-              :style="{ width: row.quota > 0 ? `${Math.min(100, Math.round(row.used / row.quota * 100))}%` : '0%' }"
-              :class="{ 'ai-quota-bar--full': row.used >= row.quota }"
-            ></div>
-          </div>
-          <span class="ai-quota-count">{{ row.used }}/{{ row.quota }}</span>
-        </div>
-      </div>
-    </TCard>
-
-    <!-- 快捷入口 -->
     <div class="menu-list quick-entry">
       <div class="menu-item" @click="router.push('/tuantu/characters')">
         <SvgIcon name="icon-user" :size="20" />
@@ -1043,36 +803,4 @@ onBeforeUnmount(() => {
 
 .confirm-btn { width: 100%; }
 .modal-tip { text-align: center; font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; }
-
-.order-panel {
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-  background: var(--color-page-bg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.order-panel--pending { border-color: color-mix(in srgb, #f59e0b 45%, transparent); }
-.order-panel--paid { border-color: color-mix(in srgb, #22c55e 45%, transparent); }
-.order-panel--failed { border-color: color-mix(in srgb, #ef4444 45%, transparent); }
-.order-panel-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.order-label { color: var(--color-text-muted); font-size: var(--text-xs); }
-.order-value { font-family: var(--font-mono); font-size: 11px; word-break: break-all; text-align: right; }
-.order-status { font-weight: 600; }
-.order-actions { display: flex; justify-content: flex-end; margin-top: 2px; }
-
-/* ── AI 配额卡片 ── */
-.ai-quota-card { display: flex; flex-direction: column; gap: var(--space-2); }
-.ai-quota-header { display: flex; align-items: center; gap: var(--space-2); }
-.ai-quota-title { font-size: var(--text-sm); font-weight: 600; flex: 1; }
-.ai-quota-upgrade-link { font-size: var(--text-xs); color: var(--color-accent); cursor: pointer; }
-.ai-quota-locked { font-size: var(--text-xs); color: var(--color-text-muted); padding: var(--space-1) 0; }
-.ai-quota-rows { display: flex; flex-direction: column; gap: 6px; }
-.ai-quota-row { display: flex; align-items: center; gap: var(--space-2); }
-.ai-quota-label { font-size: var(--text-xs); color: var(--color-text-secondary); width: 60px; flex-shrink: 0; }
-.ai-quota-bar-wrap { flex: 1; height: 6px; background: var(--color-card-border); border-radius: 99px; overflow: hidden; }
-.ai-quota-bar { height: 100%; background: var(--color-accent); border-radius: 99px; transition: width .3s; }
-.ai-quota-bar--full { background: var(--color-warning); }
-.ai-quota-count { font-size: var(--text-xs); color: var(--color-text-muted); width: 40px; text-align: right; flex-shrink: 0; }
 </style>

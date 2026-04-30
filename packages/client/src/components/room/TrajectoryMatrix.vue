@@ -3,7 +3,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import type { StoryTime } from '@trpg/shared';
-import { api } from '../../utils/api';
+import { forceMove, getTrajectoryMatrix } from '../../api/campaigns';
 
 interface TrajectorySegment {
   scene_id: string;
@@ -109,7 +109,7 @@ async function handleCellContext(charId: string, charName: string, day: number, 
         cancelButtonText: '取消',
         type: 'warning',
       });
-      await api.post(`/campaigns/${props.campaignId}/moves/force`, { character_id: charId, to_scene_id: segment.scene_id });
+      await forceMove(props.campaignId, { character_id: charId, to_scene_id: segment.scene_id });
       ElMessage.success('已发起强制移动');
     } catch (err: any) {
       if (err?.message !== 'cancel') ElMessage.error(err?.message ?? '强制移动失败');

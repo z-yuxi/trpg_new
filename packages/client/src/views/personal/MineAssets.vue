@@ -6,7 +6,8 @@ import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import TSkeleton from '../../components/base/TSkeleton.vue';
 import QuickCreateCampaignDialog from '../../components/campaign/QuickCreateCampaignDialog.vue';
-import { api } from '../../utils/api';
+import { listMyModules } from '../../api/modules';
+import { listRulesets } from '../../api/rulesets';
 import { useAuthStore } from '../../stores/auth-store';
 
 interface Module {
@@ -54,13 +55,13 @@ onMounted(async () => {
   loading.value = true;
   try {
     const [modRes, rsRes] = await Promise.allSettled([
-      api.get<Module[]>('/modules/mine'),
-      api.get<{ data?: Ruleset[] } | Ruleset[]>(`/rulesets?author_id=${authStore.userId}&limit=50`),
+      listMyModules(),
+      listRulesets({ author_id: authStore.userId, limit: 50 }),
     ]);
     if (modRes.status === 'fulfilled') myModules.value = modRes.value ?? [];
     if (rsRes.status === 'fulfilled') {
       const d = rsRes.value;
-      myRulesets.value = Array.isArray(d) ? d : (d as { data?: Ruleset[] }).data ?? [];
+      myRulesets.value = d.data ?? [];
     }
   } finally {
     loading.value = false;
@@ -111,9 +112,12 @@ onMounted(async () => {
               <TTag size="sm" :color="m.price === 0 ? 'success' : 'default'">
                 {{ m.price === 0 ? '免费' : '已拥有' }}
               </TTag>
-              <TButton type="primary" size="sm" class="create-btn" @click="openQuickCreate(m.id, null)">
-                创建房间
-              </TButton>
+              <div class="asset-btns">
+                <TButton type="ghost" size="sm" @click="router.push(`/module/${m.id}`)">阅读</TButton>
+                <TButton type="primary" size="sm" class="create-btn" @click="openQuickCreate(m.id, null)">
+                  创建房间
+                </TButton>
+              </div>
             </div>
           </div>
         </div>
@@ -147,9 +151,12 @@ onMounted(async () => {
                 {{ rs.status === 'published' ? '已发布' : '草稿' }}
               </TTag>
               <p class="asset-desc">{{ rs.description || '暂无描述' }}</p>
-              <TButton type="primary" size="sm" class="create-btn" @click="openQuickCreate(null, rs.id)">
-                创建房间
-              </TButton>
+              <div class="asset-btns">
+                <TButton type="ghost" size="sm" @click="router.push(`/ruleset/${rs.id}`)">阅读</TButton>
+                <TButton type="primary" size="sm" class="create-btn" @click="openQuickCreate(null, rs.id)">
+                  创建房间
+                </TButton>
+              </div>
             </div>
           </div>
         </div>

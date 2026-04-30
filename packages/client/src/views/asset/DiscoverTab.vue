@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import TCard from '../../components/base/TCard.vue';
 import TInput from '../../components/base/TInput.vue';
 import TTag from '../../components/base/TTag.vue';
 import TButton from '../../components/base/TButton.vue';
 import { api } from '../../utils/api';
+
+const router = useRouter();
 
 const search = ref('');
 const filterType = ref<'all' | 'ruleset' | 'module'>('all');
@@ -46,7 +49,7 @@ onMounted(async () => {
           <span class="version">v{{ rs.version }}</span>
         </div>
         <p class="asset-desc">{{ rs.description || '暂无描述' }}</p>
-        <TButton type="ghost" size="sm" style="margin-top:8px">查看详情</TButton>
+        <TButton type="ghost" size="sm" style="margin-top:8px" @click="router.push(`/ruleset/${rs.id}`)">查看详情</TButton>
       </TCard>
     </div>
   </div>

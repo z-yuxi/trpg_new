@@ -27,6 +27,7 @@ export default defineConfig({
     ],
     env: {
       JWT_SECRET: 'test_jwt_secret_for_acceptance_gate',
+      JWT_REFRESH_SECRET: 'test_jwt_refresh_secret_for_acceptance_gate',
       DB_HOST: '127.0.0.1',
       DB_USER: 'trpg',
       DB_PASSWORD: 'trpg_password',

@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { api } from '../../utils/api';
+import { approveMove as apiApproveMove, rejectMove, listPendingMoves } from '../../api/campaigns';
 import type { StoryTime } from '@trpg/shared';
 
 const props = defineProps<{
@@ -40,7 +40,7 @@ function formatStoryTime(t: { day: number; hour: number; minute: number }) {
 async function loadPendingMoves() {
   loadingMoves.value = true;
   try {
-    pendingMoves.value = await api.get<ScheduledMove[]>(`/campaigns/${props.campaignId}/moves?status=pending`);
+    pendingMoves.value = await listPendingMoves(props.campaignId) as ScheduledMove[];
     emit('pending-count', pendingMoves.value.length);
   } catch {
     // ignore
@@ -51,7 +51,7 @@ async function loadPendingMoves() {
 
 async function approveMove(moveId: string) {
   try {
-    await api.post(`/campaigns/${props.campaignId}/moves/${moveId}/approve`);
+    await apiApproveMove(props.campaignId, moveId);
     pendingMoves.value = pendingMoves.value.filter((m) => m.id !== moveId);
     emit('pending-count', pendingMoves.value.length);
     ElMessage.success('移动已批准');
@@ -72,7 +72,7 @@ function startReject(moveId: string) {
 
 async function confirmReject(moveId: string) {
   try {
-    await api.post(`/campaigns/${props.campaignId}/moves/${moveId}/reject`, { reason: rejectReason.value });
+    await rejectMove(props.campaignId, moveId, rejectReason.value);
     pendingMoves.value = pendingMoves.value.filter((m) => m.id !== moveId);
     showRejectInput.value = null;
     emit('pending-count', pendingMoves.value.length);

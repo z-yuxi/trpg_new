@@ -12,6 +12,7 @@ import { useRouter } from 'vue-router';
 import SvgIcon from '../SvgIcon.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
+import { listAnnotations, createAnnotation as apiCreateAnnotation, updateAnnotation, deleteAnnotation as apiDeleteAnnotation, updateReadingProgress, getReadingProgress } from '../../api/annotations';
 
 // ─── Props & Emits ────────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -144,9 +145,7 @@ function onScroll() {
 async function loadReadingProgress() {
   if (!authStore.isLoggedIn) return;
   try {
-    const data = await api.get<{ scroll_percent: number } | null>(
-      `/reading-progress/${props.assetType}/${props.assetId}`
-    );
+    const data = await getReadingProgress(props.assetType, props.assetId);
     if (data && data.scroll_percent > 5) {
       savedScrollPercent.value = data.scroll_percent;
       showResumeBtn.value = true;
@@ -490,9 +489,7 @@ const focusedAnnotationId = ref<string | null>(null);
 async function loadAnnotations() {
   if (!authStore.isLoggedIn) return;
   try {
-    const rows = await api.get<Annotation[]>(
-      `/annotations?asset_type=${props.assetType}&asset_id=${props.assetId}`
-    );
+    const rows = await listAnnotations({ asset_type: props.assetType, asset_id: props.assetId }) as Annotation[];
     annotations.value = rows;
   } catch { /* ignore */ }
 }
@@ -501,14 +498,14 @@ async function createAnnotation(color: Annotation['color'] = 'yellow') {
   const { text, start, end } = selectionToolbar.value;
   if (!text || !authStore.isLoggedIn) return;
   try {
-    const row = await api.post<Annotation>('/annotations', {
+    const row = await apiCreateAnnotation({
       asset_type: props.assetType,
       asset_id: props.assetId,
       selected_text: text,
       color,
       range_start: start,
       range_end: end,
-    });
+    }) as Annotation;
     annotations.value.push(row);
     await nextTick();
     applyHighlights();
@@ -519,7 +516,7 @@ async function createAnnotation(color: Annotation['color'] = 'yellow') {
 
 async function updateAnnotationNote(id: string) {
   try {
-    const updated = await api.patch<Annotation>(`/annotations/${id}`, { note: editingNote.value });
+    const updated = await updateAnnotation(id, { note: editingNote.value }) as Annotation;
     const idx = annotations.value.findIndex(a => a.id === id);
     if (idx !== -1) annotations.value[idx] = updated;
   } catch { /* ignore */ }
@@ -528,8 +525,7 @@ async function updateAnnotationNote(id: string) {
 
 async function deleteAnnotation(id: string) {
   try {
-    await api.delete(`/annotations/${id}`);
-    annotations.value = annotations.value.filter(a => a.id !== id);
+    await apiDeleteAnnotation(id);
     await nextTick();
     applyHighlights();
   } catch { /* ignore */ }
@@ -716,7 +712,6 @@ function goBack() {
     <header class="viewer-topbar">
       <div class="viewer-topbar__inner">
         <button class="viewer-topbar__btn" aria-label="返回" @click="goBack">
-          <!-- TODO: 需要图标 back-arrow -->
           <SvgIcon name="icon-arrow-left" :size="20" />
         </button>
 
@@ -739,13 +734,11 @@ function goBack() {
             aria-label="目录"
             @click="toggleToc"
           >
-            <!-- TODO: 需要图标 table-of-contents -->
             <SvgIcon name="icon-list" :size="20" />
           </button>
 
           <!-- 分享 -->
           <button v-if="pluginFlags.share" class="viewer-topbar__btn" aria-label="分享" @click="handleShare">
-            <!-- TODO: 需要图标 share -->
             <SvgIcon name="icon-share" :size="20" />
           </button>
 
@@ -763,7 +756,6 @@ function goBack() {
           <!-- 更多操作 -->
           <div class="viewer-topbar__more-wrap">
             <button class="viewer-topbar__btn" aria-label="更多操作" @click="toggleMoreMenu">
-              <!-- TODO: 需要图标 more-vertical -->
               <SvgIcon name="icon-more-vertical" :size="20" />
             </button>
             <div v-if="moreMenuOpen" class="viewer-more-menu" @click.stop>
@@ -837,7 +829,6 @@ function goBack() {
         <!-- 错误态 -->
         <template v-else-if="error">
           <div class="viewer-error">
-            <!-- TODO: 需要图标 empty-error -->
             <SvgIcon name="icon-alert-circle" :size="48" />
             <p>{{ error }}</p>
             <button class="viewer-btn viewer-btn--primary" @click="loadAsset">重试</button>

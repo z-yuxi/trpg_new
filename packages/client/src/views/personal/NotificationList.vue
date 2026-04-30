@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import { ElMessage, ElBadge, ElButton, ElEmpty, ElSkeleton } from 'element-plus';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { socketClient } from '../../socket/socket-client';
-import { api } from '../../utils/api';
+import { listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadCount } from '../../api/notifications';
 import type { UserNotification } from '@trpg/shared';
 import { useRouter } from 'vue-router';
 
@@ -45,9 +45,7 @@ const JUMP_MAP: Record<string, string> = {
 async function fetchNotifications() {
   loading.value = true;
   try {
-    const params = new URLSearchParams({ page: '1', limit: '50' });
-    if (activeCategory.value !== 'all') params.set('category', activeCategory.value);
-    const body = await api.get<{ data: UserNotification[]; total: number }>(`/notifications?${params}`);
+    const body = await listNotifications({ page: 1, limit: 50, ...(activeCategory.value !== 'all' ? { category: activeCategory.value } : {}) });
     notifications.value = body.data;
     total.value = body.total;
   } catch {
@@ -59,14 +57,14 @@ async function fetchNotifications() {
 
 async function fetchUnreadCount() {
   try {
-    const body = await api.get<{ count: number }>('/notifications/unread-count');
+    const body = await getUnreadCount();
     unreadCount.value = body.count;
   } catch { /* ignore */ }
 }
 
 async function markAsRead(n: UserNotification) {
   if (!n.is_read) {
-    await api.put(`/notifications/${n.id}/read`, {}).catch(() => {});
+    await markNotificationRead(n.id).catch(() => {});
     n.is_read = true;
     unreadCount.value = Math.max(0, unreadCount.value - 1);
   }
@@ -83,7 +81,7 @@ async function markAllAsRead() {
   const body: Record<string, string> = {};
   if (activeCategory.value !== 'all') body['category'] = activeCategory.value;
   try {
-    await api.put('/notifications/read-all', body);
+    await markAllNotificationsRead(activeCategory.value !== 'all' ? { category: activeCategory.value } : {});
     notifications.value.forEach(n => { n.is_read = true; });
     if (activeCategory.value === 'all') unreadCount.value = 0;
     else await fetchUnreadCount();
