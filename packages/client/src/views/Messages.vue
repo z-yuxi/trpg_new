@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import EmptyState from '../components/base/EmptyState.vue';
 import SvgIcon from '../components/SvgIcon.vue';
 import { api } from '../utils/api';
 import { useAuthStore } from '../stores/auth-store';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 interface Conversation {
   id: string;
@@ -26,6 +26,7 @@ interface Message {
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 
 const conversations = ref<Conversation[]>([]);
 const activeConv = ref<Conversation | null>(null);
@@ -42,8 +43,6 @@ const filteredConversations = computed(() =>
     !searchQuery.value || c.other_user.nickname.includes(searchQuery.value)
   )
 );
-
-import { computed } from 'vue';
 
 async function loadConversations() {
   loadingConvs.value = true;
@@ -117,7 +116,25 @@ function formatTime(dateStr: string): string {
   return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
 }
 
-onMounted(loadConversations);
+onMounted(async () => {
+  await loadConversations();
+  // 深链：/messages?with=<userId> — 直接打开 / 创建与该用户的会话
+  const withUserId = route.query['with'] as string | undefined;
+  if (withUserId) {
+    try {
+      const conv = await api.post<Conversation>('/messages/conversations', { target_user_id: withUserId });
+      // 确保会话在列表中
+      if (!conversations.value.find(c => c.id === conv.id)) {
+        conversations.value.unshift(conv);
+      }
+      await openConversation(conv);
+    } catch {
+      ElMessage.warning('无法打开该会话');
+    }
+    // 清除 query 参数
+    router.replace({ path: '/messages' });
+  }
+});
 </script>
 
 <template>

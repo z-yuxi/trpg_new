@@ -1,11 +1,12 @@
 ﻿<script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useAuthStore } from '../stores/auth-store';
 import { api } from '../utils/api';
 
 const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
 const uid = route.params.uid as string;
 
@@ -94,6 +95,12 @@ async function toggleFollow() {
   } finally { followLoading.value = false; }
 }
 
+function sendDirectMessage() {
+  if (!authStore.isLoggedIn) { ElMessage.warning('请先登录'); return; }
+  if (!profile.value) return;
+  router.push({ path: '/messages', query: { with: profile.value.id } });
+}
+
 onMounted(loadProfile);
 </script>
 
@@ -125,7 +132,7 @@ onMounted(loadProfile);
           <button class="follow-btn" :class="{ following }" @click="toggleFollow" :disabled="followLoading">
             {{ following ? '已关注' : '关注' }}
           </button>
-          <button class="msg-btn">私信</button>
+          <button class="msg-btn" @click="sendDirectMessage">私信</button>
         </div>
       </div>
 
