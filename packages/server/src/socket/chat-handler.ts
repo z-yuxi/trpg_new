@@ -424,7 +424,23 @@ export function registerChatHandlers(
         if (!campaignId || campaignId !== data.campaign_id) return;
 
         const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
-        if (!campaign || campaign.gm_user_id !== userId) return;
+        if (!campaign) return;
+
+        const isGM = campaign.gm_user_id === userId;
+        if (!isGM) {
+          // 非 GM：必须 GM 已开启玩家拖拽，且只能移动自己的角色 Token
+          const mapRow = await db('campaign_grid_maps')
+            .where({ campaign_id: campaignId, scene_id: data.scene_id })
+            .select('allow_player_token_drag')
+            .first();
+          if (!mapRow?.allow_player_token_drag) return;
+          if (data.token.entity_type !== 'character') return;
+          const ownsChar = await db('characters')
+            .where({ id: data.token.entity_id, user_id: userId })
+            .select('id')
+            .first();
+          if (!ownsChar) return;
+        }
 
         const currentMap = await db('campaign_grid_maps')
           .where({ campaign_id: campaignId, scene_id: data.scene_id })

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { ElDialog, ElMessage, ElMessageBox } from 'element-plus';
 import SvgIcon from '../SvgIcon.vue';
 import ClueCard from '../ClueCard.vue';
@@ -36,6 +36,8 @@ const emit = defineEmits<{
 
 const activeTab = ref<'time' | 'moves' | 'scenes' | 'npcs' | 'clue' | 'broadcast' | 'grid' | 'trajectory'>(props.defaultTab ?? 'time');
 const activeGridSceneId = ref('');
+const gridMapRef = ref<{ reload: () => void } | null>(null);
+const playerDragEnabled = ref(false);
 
 // ─── Tab 1: 时间控制（已提取至 GmTimeControl.vue）───────────────────────────
 // ─── Tab 2: 场景管理 + 移动审批（已提取至 GmSceneManager.vue / GmMoveApproval.vue）─
@@ -267,6 +269,27 @@ const activeGridScene = computed(() => {
   return current ?? spatialScenes.value[0] ?? null;
 });
 
+watch(activeGridScene, async (scene) => {
+  if (!scene) { playerDragEnabled.value = false; return; }
+  try {
+    const map = await api.get<{ allow_player_token_drag?: boolean }>(
+      `/campaigns/${props.campaignId}/scenes/${scene.id}/grid-map`
+    );
+    playerDragEnabled.value = map.allow_player_token_drag ?? false;
+  } catch {
+    playerDragEnabled.value = false;
+  }
+});
+
+async function togglePlayerDrag() {
+  const scene = activeGridScene.value;
+  if (!scene) return;
+  const next = !playerDragEnabled.value;
+  await api.put(`/campaigns/${props.campaignId}/scenes/${scene.id}/grid-map`, { allow_player_token_drag: next });
+  playerDragEnabled.value = next;
+  gridMapRef.value?.reload();
+}
+
 // ─── Tab 5: 轨迹矩阵 ─────────────────────────────────────────────────────────
 type TrajectoryMatrixResponse = {
   time_axis: Array<{ day: number; hour: number }>;
@@ -333,9 +356,16 @@ onMounted(() => {
           <select v-model="activeGridSceneId" class="field-input grid-scene-select">
             <option v-for="scene in spatialScenes" :key="scene.id" :value="scene.id">{{ scene.name }}</option>
           </select>
+          <button
+            class="sm-btn"
+            :class="{ active: playerDragEnabled }"
+            :title="playerDragEnabled ? '关闭玩家拖拽' : '允许玩家拖拽自己的 Token'"
+            @click="togglePlayerDrag"
+          >{{ playerDragEnabled ? '🔓 拖拽:开' : '🔒 拖拽:关' }}</button>
         </div>
         <GridMap
           v-if="activeGridScene"
+          ref="gridMapRef"
           :campaign-id="campaignId"
           :scene-id="activeGridScene.id"
           :is-g-m="true"

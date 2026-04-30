@@ -739,6 +739,8 @@ export interface GridMap {
   background_image_url: string | null;
   tokens: GridToken[];
   overlays: GridOverlay[];
+  /** GM 开启后玩家可拖拽自己的角色 Token（默认 false） */
+  allow_player_token_drag: boolean;
   updated_at: Date;
 }
 

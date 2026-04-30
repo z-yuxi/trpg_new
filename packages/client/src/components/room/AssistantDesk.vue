@@ -331,6 +331,7 @@ function fmt(d: any): string {
           :campaign-id="campaignId"
           :scene-id="currentScene.id"
           :is-g-m="false"
+          :my-character-ids="myCharacters.map(c => c.id)"
           :characters="roomCharacters.map((character) => ({ id: character.id, name: character.name, sceneId: character.sceneId }))"
           :npcs="npcs"
         />

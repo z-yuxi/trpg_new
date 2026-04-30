@@ -121,6 +121,7 @@
 // 美术资源生产规范见内部美术文档，此处仅定义程序接口
 interface AvatarCustomDataBase {
   gender: 'male' | 'female';
+  body_type: 'slim' | 'standard' | 'heavy';  // V1.0 新增：基础体型，控制基础轮廓
   body_base: string;           // body_base_m 或 body_base_f
   body_skin: string;           // 皮肤色号ID（滤镜换色）
   brow: string;                // 眉毛款式ID，如 "brow_01"

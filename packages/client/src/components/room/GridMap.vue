@@ -8,6 +8,8 @@ const props = defineProps<{
   campaignId: string;
   sceneId: string;
   isGM?: boolean;
+  /** 当前登录用户拥有的角色 ID 列表（用于判断是否可拖拽 Token） */
+  myCharacterIds?: string[];
   characters: Array<{ id: string; name: string; sceneId?: string }>;
   npcs: Array<{ id: string; name: string; display_name?: string }>;
 }>();
@@ -93,7 +95,7 @@ function buildSeedTokens(): GridToken[] {
   return [...characterTokens, ...npcTokens];
 }
 
-async function persistMap(updates: Partial<Pick<GridMapState, 'tokens' | 'background_image_url' | 'cols' | 'rows' | 'cell_size' | 'overlays'>>) {
+async function persistMap(updates: Partial<Pick<GridMapState, 'tokens' | 'background_image_url' | 'cols' | 'rows' | 'cell_size' | 'overlays' | 'allow_player_token_drag'>>) {
   mapState.value = await api.put<GridMapState>(`/campaigns/${props.campaignId}/scenes/${props.sceneId}/grid-map`, updates);
   backgroundDraft.value = mapState.value.background_image_url ?? '';
   await loadBackground();
@@ -305,6 +307,17 @@ async function updateToken(nextToken: GridToken) {
   }
 }
 
+/** 判断给定 Token 是否可被当前用户拖拽 */
+function canDragToken(token: GridToken | null): boolean {
+  if (!token) return false;
+  if (props.isGM) return true;
+  return (
+    (mapState.value?.allow_player_token_drag ?? false) &&
+    token.entity_type === 'character' &&
+    (props.myCharacterIds?.includes(token.entity_id) ?? false)
+  );
+}
+
 function onMouseDown(event: MouseEvent) {
   const token = getTokenAt(event.clientX, event.clientY);
   if (token) selectedTokenId.value = token.id;
@@ -328,7 +341,7 @@ function onMouseDown(event: MouseEvent) {
     return;
   }
 
-  if (props.isGM && token) {
+  if (token && canDragToken(token)) {
     draggingTokenId.value = token.id;
     const rect = canvasRef.value!.getBoundingClientRect();
     draggingPos.value = {
@@ -592,6 +605,8 @@ onUnmounted(() => {
   window.removeEventListener('resize', resize);
   socketClient.getRoomSocket()?.off('grid_token_moved', handleGridTokenMoved);
 });
+
+defineExpose({ reload: loadGridMap });
 </script>
 
 <template>
@@ -632,7 +647,7 @@ onUnmounted(() => {
       <canvas
         ref="canvasRef"
         class="map-canvas"
-        :class="{ interactive: isGM, 'area-draw': areaDrawMode }"
+        :class="{ interactive: isGM || mapState?.allow_player_token_drag, 'area-draw': areaDrawMode }"
         @mousedown="onMouseDown"
         @mousemove="onMouseMove"
         @mouseup="onMouseUp"

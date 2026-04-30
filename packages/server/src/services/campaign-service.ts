@@ -63,6 +63,7 @@ function rowToGridMap(row: Record<string, unknown>): GridMap {
     background_image_url: (row['background_image_url'] as string) ?? null,
     tokens: safeJsonParse<GridToken[]>(row['tokens'], []),
     overlays: safeJsonParse<GridOverlay[]>(row['overlays'], []),
+    allow_player_token_drag: Boolean(row['allow_player_token_drag'] ?? false),
     updated_at: row['updated_at'] as Date,
   };
 }
@@ -212,6 +213,7 @@ export class CampaignService {
       background_image_url: null,
       tokens: JSON.stringify([]),
       overlays: JSON.stringify([]),
+      allow_player_token_drag: false,
     });
 
     const created = await db('campaign_grid_maps').where({ id }).first();
@@ -221,7 +223,7 @@ export class CampaignService {
   async updateGridMap(
     campaign_id: string,
     scene_id: string,
-    updates: Partial<Pick<GridMap, 'cols' | 'rows' | 'cell_size' | 'background_image_url' | 'tokens' | 'overlays'>>
+    updates: Partial<Pick<GridMap, 'cols' | 'rows' | 'cell_size' | 'background_image_url' | 'tokens' | 'overlays' | 'allow_player_token_drag'>>
   ): Promise<GridMap> {
     const current = await this.getGridMap(campaign_id, scene_id);
 
@@ -234,6 +236,7 @@ export class CampaignService {
         background_image_url: updates.background_image_url ?? current.background_image_url,
         tokens: JSON.stringify(updates.tokens ?? current.tokens),
         overlays: JSON.stringify(updates.overlays ?? current.overlays),
+        allow_player_token_drag: updates.allow_player_token_drag ?? current.allow_player_token_drag,
         updated_at: db.fn.now(),
       });
 

@@ -314,6 +314,7 @@ router.put('/:id/scenes/:sceneId/grid-map', async (req, res) => {
       cell_size?: number;
       background_image_url?: string | null;
       tokens?: GridToken[];
+      allow_player_token_drag?: boolean;
     };
 
     const map = await campaignService.updateGridMap(req.params.id, req.params.sceneId, body);
