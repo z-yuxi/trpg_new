@@ -4,7 +4,7 @@
  * 路由：/module/:id
  * 使用叙阅器内核（ViewerShell），扩展模组专属插件：
  *   - 导入开团 §14.7
- *   - 结构化数据导出 §14.3
+ *   - 结构化数据导出 §14.3（待后续迭代）
  */
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -19,6 +19,29 @@ const authStore = useAuthStore();
 
 const moduleId = computed(() => String(route.params['id'] ?? ''));
 
+// ─── 从 ViewerShell @loaded 事件获取 asset 基础字段 ───────────────────────────
+interface LoadedAsset {
+  id: string;
+  name: string;
+  ruleset_id?: string;
+  ruleset_name?: string;
+  min_players?: number | null;
+  max_players?: number | null;
+}
+const loadedAsset = ref<LoadedAsset | null>(null);
+
+function onAssetLoaded(asset: LoadedAsset) {
+  loadedAsset.value = asset;
+  // 自动填充团名
+  if (!importOptions.value.campaignName) {
+    importOptions.value.campaignName = `${asset.name} 的团`;
+  }
+  // 自动填充人数上限
+  if (asset.max_players && !importOptions.value.playerCountMax) {
+    importOptions.value.playerCountMax = asset.max_players;
+  }
+}
+
 // ─── 导入开团 §14.7 ────────────────────────────────────────────────────────────
 const importPanelOpen = ref(false);
 const importing = ref(false);
@@ -26,28 +49,62 @@ const importError = ref<string | null>(null);
 
 interface ImportOptions {
   campaignName: string;
+  isPublic: boolean;
+  playerCountMax: number;
+  /** 内容勾选：全量导入时均为 true，分类管理待后续迭代 */
+  importSections: boolean;
+  importNpcs: boolean;
+  importScenes: boolean;
+  importClues: boolean;
+  importProps: boolean;
 }
-const importOptions = ref<ImportOptions>({ campaignName: '' });
-// ASK: 导入开团的目标接口（如 POST /api/campaigns）是否已定义？当前使用占位实现。
+
+const importOptions = ref<ImportOptions>({
+  campaignName: '',
+  isPublic: false,
+  playerCountMax: 4,
+  importSections: true,
+  importNpcs: true,
+  importScenes: true,
+  importClues: true,
+  importProps: true,
+});
+
+function openImportPanel() {
+  importError.value = null;
+  importPanelOpen.value = true;
+}
 
 async function handleImportCampaign() {
   if (!authStore.isLoggedIn) {
     router.push('/login');
     return;
   }
+  if (!loadedAsset.value?.ruleset_id) {
+    importError.value = '无法获取规则包信息，请刷新后重试';
+    return;
+  }
   importing.value = true;
   importError.value = null;
   try {
-    // TODO: 调用 POST /api/campaigns 创建团并绑定模组，接口待后端实现
-    // 当前触发模组导入分析（AI任务）作为占位
-    await api.post(`/modules/${moduleId.value}/import/confirm`, {
-      campaign_name: importOptions.value.campaignName || undefined,
-    });
-    // 导入成功后跳转至房间列表（待后端返回 campaign_id 时改为直接跳转）
-    router.push('/rooms');
+    const name = importOptions.value.campaignName.trim()
+      || `${loadedAsset.value.name} 的团`;
+
+    const result = await api.post<{ campaign: { id: string } }>(
+      '/campaigns/quick-create',
+      {
+        name,
+        ruleset_id: loadedAsset.value.ruleset_id,
+        module_id: moduleId.value,
+        is_listed_publicly: importOptions.value.isPublic,
+        allow_ob: false,
+      }
+    );
+    // 创建成功后直接跳转导演台（房间）
+    router.push(`/room/${result.campaign.id}`);
   } catch (e: unknown) {
     const err = e as { message?: string };
-    importError.value = err.message ?? '导入失败，请重试';
+    importError.value = err.message ?? '创建失败，请重试';
   } finally {
     importing.value = false;
   }
@@ -55,16 +112,15 @@ async function handleImportCampaign() {
 </script>
 
 <template>
-  <ViewerShell asset-type="module" :asset-id="moduleId">
+  <ViewerShell asset-type="module" :asset-id="moduleId" @loaded="onAssetLoaded">
 
     <!-- ── 模组专属：顶部操作区（"导入开新团"按钮） §14.7 ── -->
     <template #plugin-top="{ perm }">
       <div v-if="perm === 'acquired' || perm === 'author'" class="module-actions">
         <button
           class="module-actions__btn module-actions__btn--primary"
-          @click="importPanelOpen = true"
+          @click="openImportPanel"
         >
-          <!-- TODO: 需要图标 play-circle -->
           <SvgIcon name="icon-play-circle" :size="18" />
           导入开新团
         </button>
@@ -92,7 +148,7 @@ async function handleImportCampaign() {
         </dl>
         <button
           class="module-sidebar-panel__btn"
-          @click="importPanelOpen = true"
+          @click="openImportPanel"
         >
           <SvgIcon name="icon-play-circle" :size="16" />
           导入开团
@@ -115,22 +171,59 @@ async function handleImportCampaign() {
 
         <div class="import-drawer__body">
           <p class="import-drawer__desc">
-            将本模组内容（剧情章节、NPC、场地、线索、道具）实例化到导演台，创建新团后可立即开始游戏。
+            将本模组内容实例化到导演台，创建新团后可立即开始游戏。
           </p>
 
+          <!-- 导入内容勾选 §14.7 -->
+          <div class="import-drawer__section">
+            <p class="import-drawer__section-label">导入内容</p>
+            <div class="import-drawer__checks">
+              <label><input type="checkbox" v-model="importOptions.importSections" />剧情章节</label>
+              <label><input type="checkbox" v-model="importOptions.importNpcs" />NPC</label>
+              <label><input type="checkbox" v-model="importOptions.importScenes" />场景</label>
+              <label><input type="checkbox" v-model="importOptions.importClues" />线索</label>
+              <label><input type="checkbox" v-model="importOptions.importProps" />道具</label>
+            </div>
+          </div>
+
+          <!-- 团配置 -->
           <div class="import-drawer__field">
-            <label for="campaign-name">团名称（可选）</label>
+            <label for="campaign-name">团名称</label>
             <input
               id="campaign-name"
               v-model="importOptions.campaignName"
               type="text"
-              placeholder="留空将自动使用模组标题"
+              placeholder="留空自动使用模组标题"
               maxlength="50"
             />
           </div>
 
+          <div class="import-drawer__field">
+            <label for="player-count">人数上限</label>
+            <input
+              id="player-count"
+              v-model.number="importOptions.playerCountMax"
+              type="number"
+              min="1"
+              max="20"
+            />
+          </div>
+
+          <div class="import-drawer__field import-drawer__field--inline">
+            <label>
+              <input type="checkbox" v-model="importOptions.isPublic" />
+              公开房间（同步创建招募帖）
+            </label>
+          </div>
+
+          <!-- 规则包信息（只读） -->
+          <div v-if="loadedAsset?.ruleset_name" class="import-drawer__field">
+            <label>使用规则包</label>
+            <p class="import-drawer__readonly">{{ loadedAsset.ruleset_name }}</p>
+          </div>
+
           <p class="import-drawer__note">
-            导入后原模组更新不会同步到已创建的团。
+            导入后原模组更新不会同步到已创建的团。GM 可在导演台内一键跳转回叙阅器查看原模组。
           </p>
 
           <p v-if="importError" class="import-drawer__error">{{ importError }}</p>
@@ -337,6 +430,57 @@ async function handleImportCampaign() {
     font-size: 13px;
     color: var(--color-danger);
     margin: 0;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  &__section-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin: 0;
+  }
+
+  &__checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      font-size: 14px;
+      color: var(--text-body);
+      cursor: pointer;
+      font-weight: 400;
+    }
+  }
+
+  &__field--inline {
+    flex-direction: row;
+    align-items: center;
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-weight: 400;
+      cursor: pointer;
+    }
+  }
+
+  &__readonly {
+    font-size: 14px;
+    color: var(--text-body);
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-hover);
+    border-radius: var(--radius-md, 6px);
   }
 
   &__footer {

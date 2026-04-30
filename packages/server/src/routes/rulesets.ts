@@ -47,7 +47,11 @@ router.get('/:id', optionalAuthMiddleware, async (req, res): Promise<void> => {
         return;
       }
     }
-    res.json(ruleset);
+    // 规则包当前无付费购买体系，已登录用户 or 免费发布均视为已获取
+    const is_owned = ruleset.status === 'published'
+      ? true
+      : (req.user?.id === ruleset.author_id);
+    res.json({ ...ruleset, is_owned });
   } catch (err) {
     res.status(500).json({ error: 'Internal server error' });
   }

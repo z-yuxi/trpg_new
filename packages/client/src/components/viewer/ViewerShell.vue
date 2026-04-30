@@ -13,12 +13,17 @@ import SvgIcon from '../SvgIcon.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
 
-// ─── Props ────────────────────────────────────────────────────────────────────
+// ─── Props & Emits ────────────────────────────────────────────────────────────
 const props = defineProps<{
   /** 作品类型 */
   assetType: 'module' | 'ruleset';
   /** 作品 ID */
   assetId: string;
+}>();
+
+const emit = defineEmits<{
+  /** 作品数据加载完成后触发，传递完整 asset */
+  (e: 'loaded', asset: AssetData): void;
 }>();
 
 // ─── Store & Router ───────────────────────────────────────────────────────────
@@ -45,6 +50,8 @@ interface AssetData {
   } | null;
   status?: string;
   price?: number;
+  /** 服务端注入：当前用户是否已获取该作品（购买/免费/作者） */
+  is_owned?: boolean;
   ruleset_name?: string;
   difficulty?: string | null;
   min_players?: number | null;
@@ -62,26 +69,65 @@ const permLevel = ref<PermLevel>('guest');
 function detectPermLevel(data: AssetData): PermLevel {
   // 作者本人
   if (authStore.userId && data.author_id === authStore.userId) return 'author';
-  // TODO: 管理员判断：需后端在 /api/auth/me 返回 user_type 并写入 authStore
-  //       当前暂无 isAdmin 标志，admin 权限仅在服务端拦截，前端保守降级为 acquired
-  // TODO: acquired 需要后续接入用户馆藏检查接口，暂时免费内容（price=0）视为已获取
-  if (authStore.isLoggedIn && (data.price ?? 0) === 0) return 'acquired';
-  if (authStore.isLoggedIn && (data.price ?? 0) > 0) return 'guest';
+  // 服务端已注入 is_owned（购买/免费/作者均为 true）
+  if (data.is_owned) return 'acquired';
+  // 未登录且免费内容仍视为 acquired
   if (!authStore.isLoggedIn && (data.price ?? 0) === 0) return 'acquired';
+  // TODO: 管理员判断：需后端在 /api/auth/me 返回 user_type 并写入 authStore
   return 'guest';
 }
 
 // ─── 阅读进度 ─────────────────────────────────────────────────────────────────
 const scrollPercent = ref(0);
+const savedScrollPercent = ref<number | null>(null); // 服务端上次保存值
+const showResumeBtn = ref(false);
 const contentEl = ref<HTMLElement | null>(null);
 
 function updateScrollProgress() {
-  const el = contentEl.value;
-  if (!el) return;
   const scrollable = document.documentElement;
   const scrollTop = scrollable.scrollTop;
   const docHeight = scrollable.scrollHeight - scrollable.clientHeight;
   scrollPercent.value = docHeight > 0 ? Math.round((scrollTop / docHeight) * 100) : 0;
+}
+
+/** 防抖 4s 后保存进度到服务端 */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleProgressSave() {
+  if (!authStore.isLoggedIn) return;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    api.put(`/reading-progress/${props.assetType}/${props.assetId}`, {
+      scroll_percent: scrollPercent.value,
+    }).catch(() => {/* 静默失败，进度保存非关键路径 */});
+  }, 4000);
+}
+
+function onScroll() {
+  updateScrollProgress();
+  scheduleProgressSave();
+}
+
+/** 加载后拉取服务端进度，若 >5% 则显示回到上次位置按钮 */
+async function loadReadingProgress() {
+  if (!authStore.isLoggedIn) return;
+  try {
+    const data = await api.get<{ scroll_percent: number } | null>(
+      `/reading-progress/${props.assetType}/${props.assetId}`
+    );
+    if (data && data.scroll_percent > 5) {
+      savedScrollPercent.value = data.scroll_percent;
+      showResumeBtn.value = true;
+    }
+  } catch {/* 静默失败 */}
+}
+
+function resumeReading() {
+  if (savedScrollPercent.value === null) return;
+  const scrollable = document.documentElement;
+  const target = Math.round((savedScrollPercent.value / 100) * (scrollable.scrollHeight - scrollable.clientHeight));
+  window.scrollTo({ top: target, behavior: 'smooth' });
+  showResumeBtn.value = false;
 }
 
 // ─── 复制保护 §14.5 ───────────────────────────────────────────────────────────
@@ -141,6 +187,7 @@ async function loadAsset() {
     const data = await api.get<AssetData>(endpoint);
     asset.value = data;
     permLevel.value = detectPermLevel(data);
+    emit('loaded', data);
   } catch (e: unknown) {
     const err = e as { status?: number; message?: string };
     if (err.status === 404) {
@@ -159,13 +206,15 @@ const canViewFull = computed(() => permLevel.value !== 'guest');
 // ─── 生命周期 ─────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await loadAsset();
-  window.addEventListener('scroll', updateScrollProgress, { passive: true });
+  await loadReadingProgress();
+  window.addEventListener('scroll', onScroll, { passive: true });
   document.addEventListener('selectionchange', handleSelectionChange);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('scroll', updateScrollProgress);
+  window.removeEventListener('scroll', onScroll);
   document.removeEventListener('selectionchange', handleSelectionChange);
+  if (saveTimer) clearTimeout(saveTimer);
 });
 
 // ─── 后退 ─────────────────────────────────────────────────────────────────────
@@ -194,6 +243,12 @@ function goBack() {
         </h1>
 
         <div class="viewer-topbar__actions">
+          <!-- 回到上次阅读位置 §G01.15 -->
+          <button
+            v-if="showResumeBtn"
+            class="viewer-topbar__resume"
+            @click="resumeReading"
+          >回到上次阅读位置</button>
           <!-- 目录 -->
           <button
             class="viewer-topbar__btn"
@@ -333,14 +388,16 @@ function goBack() {
             v-html="asset.content"
           />
 
-          <!-- 试读边界提示 §14.3 §14.4 -->
+          <!-- 试读边界提示 §14.3 §14.4 — 文案见 G01.16 -->
           <div v-else-if="!canViewFull" class="viewer-paywall">
             <div class="viewer-paywall__gate">
-              <!-- TODO: 需要图标 lock -->
               <SvgIcon name="icon-lock" :size="32" />
-              <p>该作品需要购买后方可查看完整内容</p>
-              <button class="viewer-btn viewer-btn--primary">购买解锁</button>
-              <!-- TODO: 接入购买流程，当前为占位 -->
+              <p class="viewer-paywall__title">
+                {{ asset.metadata?.preview_ratio ? '当前仅开放试读' : '暂未开放试读' }}
+              </p>
+              <p class="viewer-paywall__sub">获取后可阅读完整内容</p>
+              <button class="viewer-btn viewer-btn--primary">获取完整内容</button>
+              <!-- TODO: 接入购买/领取流程 -->
             </div>
           </div>
 
@@ -477,6 +534,22 @@ function goBack() {
     color: var(--color-primary);
     background: var(--color-primary-light);
   }
+}
+
+/* ── 回到上次阅读位置 §G01.15 ───────────────────────────────── */
+.viewer-topbar__resume {
+  padding: var(--space-1) var(--space-3);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-full, 999px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+
+  &:hover { background: var(--color-primary); color: #fff; }
 }
 
 /* ── 更多菜单 ────────────────────────────────────────────────── */
@@ -838,10 +911,21 @@ function goBack() {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-3);
     color: var(--text-secondary);
+  }
 
-    p { margin: 0; font-size: 15px; }
+  &__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  &__sub {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary);
   }
 }
 

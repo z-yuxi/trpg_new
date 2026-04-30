@@ -82,7 +82,19 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
         return res.status(404).json({ error: 'Not found' });
       }
     }
-    res.json(data);
+    // 判断当前用户是否已获取该模组（作者/免费/已购均视为已获取）
+    let is_owned = data.price === 0; // 免费内容直接已获取
+    if (req.user) {
+      if (req.user.id === data.author_id) {
+        is_owned = true; // 作者本人
+      } else if (data.price > 0) {
+        const purchase = await db('user_module_purchases')
+          .where({ user_id: req.user.id, module_id: data.id })
+          .first();
+        is_owned = !!purchase;
+      }
+    }
+    res.json({ ...data, is_owned });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Query failed' });
   }
