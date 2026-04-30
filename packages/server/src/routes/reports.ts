@@ -38,7 +38,8 @@ router.post('/', requireAuth, async (req, res) => {
 // GET /api/reports (管理员) - MVP 简单实现
 router.get('/', requireAuth, async (req, res) => {
   const user = (req as any).user;
-  if (user?.role !== 'admin') return res.status(403).json({ error: '无权限' });
+  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
+  if (!isAdmin) return res.status(403).json({ error: '无权限' });
 
   const reports = await db('content_reports')
     .orderBy('created_at', 'desc')

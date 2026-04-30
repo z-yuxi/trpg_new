@@ -44,6 +44,46 @@ export const aiConfig = {
 };
 ```
 
+### 2.1 Provider 抽象与模型适配
+
+为支持未来多供应商（OpenAI/Claude/Ollama）接入，设计 Provider 适配层：
+
+```typescript
+// 适配器模式：统一不同供应商的接口差异
+interface AiProvider {
+  getBaseUrl(): string;
+  getModel(endpoint: 'pro' | 'flash'): string;
+  normalizeResponse(raw: any): { content: string; finishReason: string };
+}
+
+class DeepSeekProvider implements AiProvider {
+  getBaseUrl() { return 'https://api.deepseek.com/v1'; }
+  getModel(endpoint) { return endpoint === 'pro' ? 'deepseek-chat' : 'deepseek-chat'; }
+  normalizeResponse(raw) { return { content: raw.choices[0].message.content, finishReason: raw.choices[0].finish_reason }; }
+}
+
+class OpenaiProvider implements AiProvider { /* ... */ }
+
+// 工厂函数
+function getProvider(name: 'deepseek' | 'openai'): AiProvider { /* ... */ }
+```
+
+扩展建议：
+
+1. 每个 Provider 实现应独立，避免跨供应商逻辑耦合。
+2. 响应规范化后仅暴露 `{ content, finishReason }`，不依赖供应商特性。
+3. 环境变量 `AI_PROVIDER` 控制默认供应商，支持运行时切换。
+4. 成本计费需按实际供应商费率调整，参见 H03 扩展计费逻辑。
+
+**模型约束**：
+
+| 约束项 | 规则 |
+|--------|------|
+| 供应商 | 仅使用 DeepSeek，不接入其他供应商 |
+| 模型版本 | 固定使用 DeepSeek V4，版本升级需评审后统一切换 |
+| 用户自定义 API Key | 不开放。所有 AI 调用统一走平台配置的 API Key |
+| AI 主持人（AI GM） | 不实现。AI 不参与跑团房间内的实时叙事决策与规则判定 |
+
 ## 3. 会员配额与计费口径
 
 | 会员等级 | 模组导入 | 智能校对 | 日志摘要 | 规则生成 | 角色卡导入 |
@@ -95,6 +135,56 @@ CREATE TABLE ai_usage_log (
 2. `POST /api/ai/import-module`：异步模组分析（pro），返回 `202 + task_id`。
 3. `GET /api/ai/quota`：查询当月 AI 使用量。
 4. 配额耗尽返回 `429`（`AI_QUOTA_EXCEEDED`）；会员未开通返回 `403`（`AI_FEATURE_LOCKED`）。
+
+### 4.2 任务失败不中断策略
+
+AI 异步任务（校对、导入、摘要）采用分段处理架构。单段处理失败时，不中断整个任务，而是标记失败段落并继续处理下一段。
+
+**行为规则**：
+
+| 场景 | 行为 |
+|------|------|
+| 单段超时（>30 秒无响应） | 标记该段为失败，记录日志，自动处理下一段 |
+| 单段返回格式错误（非 JSON / Schema 校验失败） | 同上 |
+| 全部段落处理完毕后 | 汇总成功段和失败段，生成任务报告 |
+| 失败段落 | 用户可在任务详情中查看失败原因，选择「重试失败段落」（不消耗额外配额） |
+
+**超时配置**：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| 单段超时 | 30 秒 | 单个分段的最长处理时间 |
+| 重试次数 | 0（不自动重试） | 失败后由用户决定是否手动重试 |
+| 整个任务超时 | 10 分钟 | 超过后任务标记为「部分完成」 |
+
+### 4.3 分片→处理→合并管道
+
+对于超长文本任务（模组导入、跑团日志摘要），系统自动将输入文本切分为多段，逐段发送给 AI 处理，最终合并结果。
+
+**适用任务**：
+
+| 任务 | 单段上限 | 分片策略 |
+|------|:---:|----------|
+| 模组导入 | 3000 字/段 | 按标题层级切分；无标题时按固定长度切分，相邻段保留 200 字重叠 |
+| 日志摘要 | 2000 字/段 | 按时间片（每 30 分钟）切分；超长时间片再按固定长度切分 |
+
+**合并策略**：
+
+| 任务 | 合并方式 |
+|------|----------|
+| 模组导入 | 合并所有段的结构化实体（NPC/场景/线索），同名实体自动去重（相似度 > 80%），去重结果交用户确认 |
+| 日志摘要 | 所有段摘要汇总后，再调用一次 AI 进行提炼（最多 500 字），生成最终摘要 |
+
+**上下文传递**：
+
+每个分段送入 AI 时，携带精简上下文：
+
+| 上下文字段 | 内容 | Token 预算 |
+|-----------|------|:---:|
+| 系统指令 | 当前任务描述 | ~200 tokens |
+| 前一段摘要 | 前一段已处理的实体列表或事件摘要 | ~300 tokens |
+| 术语白名单 | 受保护术语（骰子表达式、角色名、地名） | ~100 tokens |
+| 当前分段正文 | 待处理的文本 | 受单段上限限制 |
 
 ## 5. 任务分流基线
 

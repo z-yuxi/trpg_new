@@ -1,0 +1,131 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - AI 校对
+  version: 1.0.0
+  description: 智能校对文本（同步，flash 端点）。
+
+paths:
+  /api/ai/check-text:
+    post:
+      summary: 智能校对文本
+      operationId: aiCheckText
+      tags:
+        - AI
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckTextRequest'
+      responses:
+        '200':
+          description: 校对结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckTextResponse'
+        '400':
+          description: 参数校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授权
+        '403':
+          description: 会员等级不支持此 AI 功能
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: AI_FEATURE_LOCKED
+                message: 当前会员等级不支持此 AI 功能，请升级为专业版或创作者版
+        '429':
+          description: 月度配额耗尽
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaExceededResponse'
+        '502':
+          description: AI 服务不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CheckTextRequest:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          description: 待校对文本。
+        rule_terms:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            maxLength: 64
+          description: 术语白名单，白名单词不应被标记为错误。
+    CheckIssue:
+      type: object
+      required:
+        - type
+        - original
+        - suggestion
+        - reason
+      properties:
+        type:
+          type: string
+          enum: [typo, punctuation, term, style]
+        original:
+          type: string
+        suggestion:
+          type: string
+        reason:
+          type: string
+    CheckTextResponse:
+      type: object
+      required: [issues]
+      properties:
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckIssue'
+    QuotaExceededResponse:
+      type: object
+      required: [error, message, used, quota]
+      properties:
+        error:
+          type: string
+          enum: [AI_QUOTA_EXCEEDED]
+        message:
+          type: string
+        used:
+          type: integer
+        quota:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

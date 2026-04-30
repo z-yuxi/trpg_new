@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
+import { payGate } from '../middleware/pay-gate';
 import { moduleService } from '../services/module-service';
 import { createModulePdfBuffer, importModuleFile } from '../services/module-transfer-service';
 import { db } from '../db';
@@ -137,7 +138,7 @@ router.post('/:id/import/confirm', authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/:id/export/pdf', authMiddleware, async (req, res) => {
+router.post('/:id/export/pdf', authMiddleware, payGate('module_pdf'), async (req, res) => {
   try {
     const module = await moduleService.getById(req.params['id']!);
     if (!module) {

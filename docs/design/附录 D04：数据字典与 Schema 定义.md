@@ -816,3 +816,68 @@ interface AiTaskUpdateEvent {
 1. 该事件通过 Socket.IO 事件名 `ai_task_update` 推送给目标用户房间（`user:{user_id}`）。
 2. `status='success'` 时应返回 `result`；`status='failed'` 时应返回 `error`。
 3. 客户端收到事件后应更新任务卡片状态，并在必要时触发结果拉取或错误提示。
+
+### 5.8 System Prompt 组成规范（从参考项目学习）
+
+为保证 LLM 输出的稳定性与可控性，System Prompt 应分层组成，而非单一巨型提示词：
+
+```typescript
+// 层级 1：系统角色与定位
+const SYSTEM_ROLE = `
+你是一个 TRPG 跑团平台的 AI 助手，专门帮助 GM 和玩家处理规则文本、模组导入、日志分析等任务。
+你的职责是理解、解析、总结跑团相关内容，但不参与游戏规则的执行——规则执行由本地规则引擎负责。
+`;
+
+// 层级 2：业务上下文（运行时组成）
+function buildContext(ruleTerms: string[], systemName: string) {
+  return `
+系统规则集：${systemName}
+核心术语库：${ruleTerms.join('、')}
+输出格式约束：严格 JSON，无 Markdown 装饰
+  `;
+}
+
+// 层级 3：具体任务指令
+const TASK_CHECK_TEXT = `
+任务：检查用户文本中的术语一致性与拼写错误
+输入：纯文本 + 术语列表
+输出：{ issues: Array<{type: 'spelling'|'terminology', original: string, suggestion: string, reason: string}> }
+`;
+
+const TASK_IMPORT_MODULE = `
+任务：解析 TRPG 模组文本，提取结构化内容
+输入：纯文本 + 可选前置总结 + 术语白名单
+输出：{ entities: Array<{name, type, properties}>, summary: string }
+规则：不创建不在术语列表内的新术语；模糊内容以 confidence 标记
+`;
+
+// 组装：在 callAI 时动态拼接
+function buildFullPrompt(taskType: TaskType, customContext?: string): string {
+  return `${SYSTEM_ROLE}\n${buildContext(...)}\n${getTaskInstruction(taskType)}\n${customContext || ''}`;
+}
+```
+
+关键原则：
+
+1. **分离：** 系统角色、业务上下文、任务指令独立定义，便于单独调试与版本管理。
+2. **重用：** 相同 Context 下不同 Task 可共享系统角色部分，减少冗余。
+3. **版本化：** 每类 prompt 绑定版本号，运行时记录，便于效果对比与回溯。
+4. **可测：** 单元测试隔离 prompt 组成逻辑，确保输出稳定性。
+
+### 5.9 任务类型与应用层工具集合（从参考项目学习）
+
+遵循"规则与叙事分离"原则，LLM 不直接修改平台状态，而是调用工具返回结果供用户预览或确认：
+
+| 任务类型 | 对应工具 | LLM 职责 | 本地引擎职责 | 用户确认 |
+| --- | --- | --- | --- | --- |
+| check_text | 术语校验工具 | 识别错误与建议 | 应用用户选中的修改 | 需确认每处修改 |
+| import_module | 模组解析工具 | 提取字段 + 转换格式 | 验证 Schema、入库 | 需预览后二次确认 |
+| generate_recipe | 规则生成工具 | 基于规则包生成配方 | 编译配方、验证依赖 | 需审阅后保存 |
+| log_summary | 日志分析工具 | 提取事件、生成摘要 | 关键帧识别、链接存储 | 可自动生成 |
+
+说明：
+
+1. **LLM 输出不直接入库**：所有 import/generate 任务需用户二次确认后由本地引擎处理。
+2. **工具封装**：每个工具应有独立的入参 Schema 与输出 Schema，由 Zod 或 JSON Schema 约束。
+3. **失败容错**：单条失败（如单个字段无法解析）应返回 partial result，而非整体失败。
+4. **幂等性**：相同输入应返回相同结果，便于客户端重试与缓存。

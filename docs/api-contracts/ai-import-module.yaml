@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: TRPG 平台 API - AI 模组分析
+  version: 1.0.0
+  description: 将模组文本分片提交 AI 异步分析（pro 端点）。
+
+paths:
+  /api/ai/import-module:
+    post:
+      summary: 提交模组分析任务
+      operationId: aiImportModule
+      tags:
+        - AI
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportModuleRequest'
+      responses:
+        '202':
+          description: 已入队，等待异步处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportModuleAcceptedResponse'
+        '400':
+          description: 参数校验失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 未授权
+        '403':
+          description: 会员等级不支持此 AI 功能
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: AI_FEATURE_LOCKED
+                message: 当前会员等级不支持此 AI 功能，请升级为专业版或创作者版
+        '429':
+          description: 月度配额耗尽
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaExceededResponse'
+        '503':
+          description: 队列不可用或入队失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ImportModuleRequest:
+      type: object
+      required:
+        - text_chunk
+      properties:
+        text_chunk:
+          type: string
+          minLength: 1
+          maxLength: 10000
+          description: 待分析文本分片。
+        prev_summary:
+          type: string
+          maxLength: 1000
+          description: 前一片段已识别实体摘要。
+        term_whitelist:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 64
+          description: 术语白名单，不可被改写。
+    ImportModuleAcceptedResponse:
+      type: object
+      required:
+        - task_id
+        - message
+      properties:
+        task_id:
+          type: string
+          description: 异步任务 ID。
+        message:
+          type: string
+    QuotaExceededResponse:
+      type: object
+      required: [error, message, used, quota]
+      properties:
+        error:
+          type: string
+          enum: [AI_QUOTA_EXCEEDED]
+        message:
+          type: string
+        used:
+          type: integer
+        quota:
+          type: integer
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

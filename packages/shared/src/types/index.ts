@@ -34,6 +34,7 @@ export type BenefitKey =
   | 'log_export'           // 导出跑团日志
   | 'export_pdf'           // 导出 PDF 版日志
   | 'character_card_pdf'   // 导出角色卡 PDF
+  | 'module_pdf'           // 导出模组 PDF
   | 'ai_summary'           // AI 剧情总结
   | 'ai_image'             // AI 配图
   | 'module_publish'       // 发布付费模组（需 creator）
@@ -45,9 +46,9 @@ export type BenefitKey =
 /** 每个会员档位享有的权益集合 */
 export const MEMBERSHIP_BENEFITS: Record<MembershipTier, BenefitKey[]> = {
   free: [],
-  pro: ['log_export', 'character_card_pdf', 'ai_summary', 'custom_avatar_frame', 'priority_support'],
+  pro: ['log_export', 'character_card_pdf', 'module_pdf', 'ai_summary', 'custom_avatar_frame', 'priority_support'],
   creator: [
-    'log_export', 'export_pdf', 'character_card_pdf', 'ai_summary', 'ai_image',
+    'log_export', 'export_pdf', 'character_card_pdf', 'module_pdf', 'ai_summary', 'ai_image',
     'module_publish', 'ruleset_publish', 'advanced_analytics',
     'custom_avatar_frame', 'priority_support',
   ],

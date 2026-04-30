@@ -268,4 +268,157 @@ cd E:\Desktop\trpg_new
 pnpm --filter @trpg/client dev
 ```
 
+---
+
+## 13. AI 机器人测试脚本使用指南
+
+本节说明如何使用 `packages/scripts/seeds/` 目录下的自动化测试脚本，一键驱动 5 个机器人账号完成发帖、表态、评论、举报的全链路测试。
+
+**适用场景**：社区功能联调、种子内容投放、全链路验收。
+
+---
+
+### 13.1 前置条件
+
+1. 后端服务已启动（见第 7 节），本地 API 地址为 `http://localhost:3000/api`。
+2. 数据库迁移已完成（见第 6 节），`users` 表中已存在 UID `1000095–1000099` 的机器人账号（若无，手动插入，见 13.4 节）。
+3. `.env.local` 文件中已填写 `DEEPSEEK_API_KEY`（测试时 AI 生成文案才能工作）。
+
+---
+
+### 13.2 环境变量配置
+
+在项目根目录新建或编辑 `.env.local`（**不提交到 Git**）：
+
+```env
+# DeepSeek API Key（用于 AI 生成帖子文案）
+DEEPSEEK_API_KEY=sk-your-deepseek-key
+
+# 本地 API 地址（默认即可）
+API_BASE_URL=http://localhost:3000/api
+```
+
+---
+
+### 13.3 安装脚本依赖
+
+```powershell
+cd E:\Desktop\trpg_new\packages\scripts
+npm install axios dotenv
+```
+
+---
+
+### 13.4 初始化机器人账号 Token
+
+**首次使用**或机器人账号 Token 过期时执行。
+
+脚本会用测试环境的固定验证码 `000000` 登录 5 个机器人账号，并打印各自的 `access_token`：
+
+```powershell
+cd E:\Desktop\trpg_new\packages\scripts\seeds
+node init-bot-tokens.js
+```
+
+输出示例：
+
+```
+===== 初始化机器人账号 Token =====
+
+✅ 叙言者 (UID 1000095) Token: eyJhbGci...
+✅ 帷幕之后 (UID 1000096) Token: eyJhbGci...
+✅ 墨菲斯 (UID 1000097) Token: eyJhbGci...
+✅ 夜骐 (UID 1000098) Token: eyJhbGci...
+✅ 旅人说书人 (UID 1000099) Token: eyJhbGci...
+```
+
+将每个账号的完整 Token 复制到 `ai-bot-test.config.js` 对应的 `token` 字段中：
+
+```javascript
+{ uid: 1000095, nickname: '叙言者', persona: 'coc_investigator', token: '在这里粘贴 Token' },
+```
+
+> **注意**：若后端验证码登录要求真实短信码，可临时将 `000000` 替换为数据库 `sms_verifications` 表中手动插入的固定验证码。
+
+---
+
+### 13.5 手动插入机器人账号（若数据库中不存在）
+
+以下 5 个账号是系统保留号段 `1000095–1000099`，不会与正式用户冲突：
+
+```sql
+INSERT INTO users (uid, nickname, phone, is_bot, user_type, status)
+VALUES
+  (1000095, '叙言者',   '13800000095', TRUE, 'player', 'active'),
+  (1000096, '帷幕之后', '13800000096', TRUE, 'player', 'active'),
+  (1000097, '墨菲斯',   '13800000097', TRUE, 'player', 'active'),
+  (1000098, '夜骐',     '13800000098', TRUE, 'player', 'active'),
+  (1000099, '旅人说书人','13800000099', TRUE, 'player', 'active');
+```
+
+---
+
+### 13.6 执行全链路测试
+
+确认配置和 Token 已就绪后，执行：
+
+```powershell
+cd E:\Desktop\trpg_new\packages\scripts\seeds
+node ai-bot-test.js
+```
+
+脚本会自动完成：
+
+| 步骤 | 操作 | 默认数量 |
+|:---:|------|:---:|
+| 1 | 调用 DeepSeek API 生成帖子文案 | 20 篇 |
+| 2 | 调用 `POST /api/posts` 发帖 | 20 次 |
+| 3 | 调用 `POST /api/posts/{id}/reactions` 表态 | 每帖 3 条 |
+| 4 | 调用 `POST /api/posts/{id}/replies` 评论 | 每帖 2 条 |
+| 5 | 调用 `POST /api/reports` 提交举报 | 每帖 1 条 |
+| 6 | 打印测试报告 | — |
+
+**调整参数**：修改 `ai-bot-test.config.js` 中的 `AI_POSTS` 和 `SIMULATION` 字段，无需改动主脚本。
+
+---
+
+### 13.7 测试报告解读
+
+脚本结束后会打印如下报告：
+
+```
+===== 测试完成 =====
+总发帖: 20 | 表态: 60 | 评论: 40 | 举报: 20
+耗时: X.X 分钟
+结论: 全部通过。
+```
+
+若有失败，错误会以 `❌` 开头打印具体的帖子 ID 和 HTTP 错误码，便于定位。
+
+---
+
+### 13.8 上线前清理机器人内容
+
+社区正式上线前，在 MySQL 中执行以下 SQL，将测试内容从信息流中隐藏，并将账号置为休眠：
+
+```sql
+-- 将所有机器人帖子从信息流中隐藏
+UPDATE posts SET is_hidden_from_feed = TRUE WHERE author_uid BETWEEN 1000095 AND 1000099;
+
+-- 将机器人账号置为休眠状态
+UPDATE users SET status = 'dormant' WHERE uid BETWEEN 1000095 AND 1000099;
+```
+
+---
+
+### 13.9 常见问题
+
+| 错误 | 原因 | 解决方式 |
+|------|------|---------|
+| `Cannot find module 'axios'` | 脚本依赖未安装 | 见 13.3 节 |
+| `401 Unauthorized` | Token 无效或过期 | 重新执行 `init-bot-tokens.js` |
+| `404 Not Found` on /api/posts | 后端未启动或路由未注册 | 确认后端服务正常运行 |
+| `DEEPSEEK_API_KEY is not defined` | 未配置 `.env.local` | 见 13.2 节 |
+| `ER_DUP_ENTRY` on uid | 机器人账号已存在 | 跳过 13.5 节 |
+
 完成。

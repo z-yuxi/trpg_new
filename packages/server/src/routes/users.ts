@@ -72,8 +72,8 @@ router.get('/me/settings', authMiddleware, async (req, res) => {
 // PUT /api/users/me
 router.put('/me', authMiddleware, async (req, res) => {
   const schema = z.object({
-    nickname: z.string().min(1).optional(),
-    avatar_url: z.string().min(1).optional(),
+    nickname: z.string().min(1).max(32).optional(),
+    avatar_url: z.string().min(1).max(512).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {

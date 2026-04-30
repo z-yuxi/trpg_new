@@ -98,6 +98,7 @@ async function activateCreator() {
 onMounted(async () => {
   if (!authStore.isLoggedIn) return;
   await loadUserDetail();
+  await loadMembershipInfo();
 
   try {
     const data = await api.get<Record<string, unknown>>('/users/me/stats');
@@ -245,6 +246,63 @@ function logout() {
 }
 
 const subMap: Record<string, string> = { free: '免费版', pro: 'Pro 版', creator: '创作者' };
+
+// ── 会员升级弹窗 ─────────────────────────────────────────────────────────────
+const showUpgradeModal = ref(false);
+const selectedSku = ref<string>('pro_yearly');
+const selectedChannel = ref<'alipay' | 'wechat'>('alipay');
+const orderLoading = ref(false);
+const membershipInfo = ref<{ tier: string; expires_at: string | null } | null>(null);
+
+const SKU_LIST = [
+  { sku: 'pro_monthly',     label: 'Pro 会员',  period: '月',  price: '¥29',  originalPrice: '', badge: '' },
+  { sku: 'pro_yearly',      label: 'Pro 会员',  period: '年',  price: '¥249', originalPrice: '¥348', badge: '省 ¥99' },
+  { sku: 'creator_monthly', label: '创作者版',  period: '月',  price: '¥49',  originalPrice: '', badge: '含全部权益' },
+  { sku: 'creator_yearly',  label: '创作者版',  period: '年',  price: '¥399', originalPrice: '¥588', badge: '省 ¥189' },
+];
+
+const BENEFIT_ROWS = [
+  { key: '创建团数量',   free: '≤3',  pro: '无限',  creator: '无限' },
+  { key: '网格地图',     free: '否',  pro: '是',    creator: '是' },
+  { key: '轨迹矩阵',     free: '否',  pro: '是',    creator: '是' },
+  { key: 'AI 调用配额',  free: '0',   pro: '有限',  creator: '更高' },
+  { key: '日志 PDF 导出',free: '否',  pro: '是',    creator: '是' },
+  { key: '模组/规则销售',free: '20% 抽成', pro: '20% 抽成', creator: '0% 抽成' },
+  { key: '创作者数据分析',free: '否', pro: '否',    creator: '是' },
+  { key: '优先客服',     free: '否',  pro: '是',    creator: '是' },
+];
+
+async function loadMembershipInfo() {
+  try {
+    const data = await api.get<{ tier: string; expires_at: string | null }>('/membership/benefits');
+    membershipInfo.value = data;
+  } catch { /* 忽略，非关键路径 */ }
+}
+
+async function createOrder() {
+  orderLoading.value = true;
+  try {
+    await api.post('/membership/orders', { sku: selectedSku.value, channel: selectedChannel.value });
+    ElMessage.success('订单已创建，请按弹出的支付页面完成支付');
+    showUpgradeModal.value = false;
+    await loadUserDetail();
+    await loadMembershipInfo();
+  } catch (e: any) {
+    ElMessage.error(e?.message ?? '创建订单失败，请稍后重试');
+  } finally {
+    orderLoading.value = false;
+  }
+}
+
+const membershipExpireText = computed(() => {
+  if (!membershipInfo.value?.expires_at) return null;
+  const d = new Date(membershipInfo.value.expires_at);
+  return `有效期至 ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+});
+
+onMounted(async () => {
+  if (authStore.isLoggedIn) await loadMembershipInfo();
+});
 </script>
 
 <template>
