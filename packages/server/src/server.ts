@@ -68,6 +68,80 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
+// ── 定时任务：每小时检查社区版模组认领缓冲期 ──────────────────────────────
+// 1. 缓冲期剩余 < 24h → 发站内信提醒贡献者（仅发一次）
+// 2. 缓冲期已到期 → 自动封存，状态 → archived_by_author
+cron.schedule('30 * * * *', async () => {
+  try {
+    const now = new Date();
+    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const { notificationService } = await import('./services/notification-service.js');
+    const { generateId } = await import('@trpg/shared');
+
+    // 1. 即将到期（缓冲期结束时间 <= 24h后 且 > 现在，且未封存）
+    const aboutToExpire = await db('modules')
+      .where('claim_deadline_at', '<=', in24h)
+      .where('claim_deadline_at', '>', now)
+      .whereNotIn('community_status', ['archived_by_author', 'private_use'])
+      .whereNotNull('contributor_user_id')
+      .select('id', 'name', 'contributor_user_id', 'claim_deadline_at');
+
+    for (const mod of aboutToExpire) {
+      // 检查是否已发过此警告（避免重复）
+      const alreadySent = await db('user_notifications')
+        .where({
+          user_id: mod.contributor_user_id,
+          type: 'module_claim_buffer_warning',
+        })
+        .whereRaw("JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.module_id')) = ?", [mod.id])
+        .first();
+      if (!alreadySent) {
+        await notificationService.createNotification({
+          userId: mod.contributor_user_id as string,
+          type: 'module_claim_buffer_warning',
+          title: '你的模组社区版即将封存',
+          content: `《${mod.name}》的社区版将在24小时内自动封存，请登录处理。`,
+          metadata: { module_id: mod.id, claim_deadline_at: (mod.claim_deadline_at as Date).toISOString() },
+        });
+      }
+    }
+
+    // 2. 已到期 → 自动封存
+    const expired = await db('modules')
+      .where('claim_deadline_at', '<=', now)
+      .whereNotIn('community_status', ['archived_by_author', 'private_use'])
+      .whereNotNull('claim_deadline_at')
+      .select('id', 'name', 'contributor_user_id');
+
+    for (const mod of expired) {
+      await db('modules').where({ id: mod.id }).update({
+        community_status: 'archived_by_author',
+        status: 'archived',
+        claim_deadline_at: null,
+        updated_at: now,
+      });
+      if (mod.contributor_user_id) {
+        await notificationService.createNotification({
+          userId: mod.contributor_user_id as string,
+          type: 'module_claim_decision',
+          title: '社区版模组已自动封存',
+          content: `《${mod.name}》缓冲期届满，已自动封存。贡献记录保留。`,
+          metadata: { module_id: mod.id, decision: 'archive', reason: 'deadline_expired' },
+        });
+      }
+    }
+
+    if (aboutToExpire.length > 0 || expired.length > 0) {
+      console.log(
+        `[Cron] Community claim buffer: warned=${aboutToExpire.length} archived=${expired.length} at ${now.toISOString()}`,
+      );
+    }
+  } catch (err: any) {
+    console.error('[Cron] Error processing community claim buffer:', err?.message ?? err);
+  }
+});
+
 // ── 定时任务：每 5 分钟处理超期邀请（invited 24h 未确认 → rejected，并提升候补）
 cron.schedule('*/5 * * * *', async () => {
   try {

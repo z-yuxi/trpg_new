@@ -730,6 +730,15 @@ export interface Module {
   suspended_reason?: string | null;
   /** 叙阅器配置（§14.8） */
   reader_settings?: ReaderSettings | null;
+  // ── 社区版字段（§4.8） ──
+  source_label?: ModuleSourceLabel;
+  community_status?: ModuleCommunityStatus | null;
+  upstream_module_id?: string | null;
+  contributor_user_id?: string | null;
+  original_source_url?: string | null;
+  original_source_note?: string | null;
+  claim_deadline_at?: Date | null;
+  derivative_policy?: ModuleDerivativePolicy | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -761,6 +770,77 @@ export interface UpdateModuleRequest {
 export interface AutoSaveModuleRequest {
   content: string;
   word_count?: number;
+}
+
+// ===== 社区版模组与衍生管理（§4.8） =====
+
+/** 模组来源标签（创建时永久确定） */
+export type ModuleSourceLabel =
+  | 'original'              // 原创
+  | 'author_version'        // 作者版
+  | 'community_pending'     // 社区贡献·待认领
+  | 'community_authorized'  // 社区贡献·已授权
+  | 'derivative'            // 衍生创作
+  | 'certified_independent'; // 已认证的独立创作
+
+/** 社区版模组当前可见状态 */
+export type ModuleCommunityStatus =
+  | 'private_use'       // 私有导入，仅上传者可见
+  | 'public_share'      // 公开分享，待认领
+  | 'pending_review'    // 等待原作者审核
+  | 'archived_by_author'; // 应作者要求已封存
+
+/** 衍生管理策略 */
+export type ModuleDerivativePolicy = 'open' | 'closed' | 'review';
+
+/** 致作者的信（申请公开/衍生时必填） */
+export interface ModuleClaimLetter {
+  id: string;
+  module_id: string;
+  applicant_user_id: string;
+  letter_type: 'public_share' | 'derivative';
+  content: string;
+  attachments: string[] | null;
+  ai_report: ModuleAiReport | null;
+  status: 'pending' | 'approved' | 'rejected';
+  author_reply: string | null;
+  created_at: Date;
+  reviewed_at: Date | null;
+  reviewed_by: string | null;
+}
+
+/** AI 审核报告（提交申请时自动生成） */
+export interface ModuleAiReport {
+  similarity_score: number;      // 0-1，与检测到的最相似原作的相似度
+  similar_module_id: string | null;
+  change_summary: string;        // 改动内容摘要
+  compliance_flags: string[];    // 合规性预检命中的标记
+  generated_at: string;          // ISO 时间
+}
+
+/** 模组贡献者记录 */
+export interface ModuleContributor {
+  id: string;
+  module_id: string;
+  user_id: string;
+  role: 'contributor' | 'honorary_collaborator';
+  created_at: Date;
+}
+
+/** 社区上传请求体（路径B：公开分享；路径A私有时 community_status = 'private_use'） */
+export interface CommunityUploadRequest {
+  /** 版权声明：搬运时必须为 'community' */
+  declaration: 'community';
+  original_source_url: string;   // 原发布链接（必填）
+  original_source_note?: string; // 来源说明（选填）
+  /** 解析结果校对后的字段 */
+  name: string;
+  description?: string;
+  content: string;
+  word_count?: number;
+  ruleset_id: string;
+  /** 私有导入 or 公开分享 */
+  community_status: 'private_use' | 'public_share';
 }
 
 // ===== 回合状态 =====

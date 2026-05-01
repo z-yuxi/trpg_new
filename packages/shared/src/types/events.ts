@@ -12,6 +12,13 @@ export type NotificationType =
   // 社区类
   | 'comment_floor' | 'comment_reply' | 'at_mention'
   | 'post_featured' | 'feature_rejected'
+  // 社区版模组类（§4.8）
+  | 'module_claimed'               // 作者认领了你上传的社区版
+  | 'module_claim_buffer_warning'  // 缓冲期最后24小时提醒（贡献者）
+  | 'module_claim_action_needed'   // 新认领待处理（作者端）
+  | 'module_claim_decision'        // 作者已决定保留/下架（贡献者）
+  | 'module_claim_letter_received' // 作者收到致作者的信
+  | 'module_claim_letter_replied'  // 申请者收到作者回复
   // 系统类
   | 'report_result' | 'system_announcement'
   | 'achievement_unlocked' | 'badge_earned'
@@ -24,7 +31,9 @@ export type NotificationCategory = 'trpg' | 'community' | 'system';
 /** 各分类包含的通知类型 */
 export const NOTIFICATION_CATEGORY_TYPES: Record<NotificationCategory, NotificationType[]> = {
   trpg: ['apply_approved', 'apply_rejected', 'waitlist_promoted', 'group_success', 'group_dissolved', 'move_approved', 'move_rejected', 'move_cancelled'],
-  community: ['comment_floor', 'comment_reply', 'at_mention', 'post_featured', 'feature_rejected'],
+  community: ['comment_floor', 'comment_reply', 'at_mention', 'post_featured', 'feature_rejected',
+    'module_claimed', 'module_claim_buffer_warning', 'module_claim_action_needed',
+    'module_claim_decision', 'module_claim_letter_received', 'module_claim_letter_replied'],
   system: ['report_result', 'system_announcement', 'achievement_unlocked', 'badge_earned', 'system', 'audit'],
 };
 
