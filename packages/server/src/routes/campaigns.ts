@@ -1576,4 +1576,80 @@ router.delete('/:id/clues/:clueId', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/campaigns/:id/end
+// GM 结束团：更新状态 → 取消移动 → 归档场景 → 通知 → WebSocket 推送
+// 设计依据：附录 C § 5.13.1
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/:id/end', async (req, res) => {
+  const campaignId = req.params.id;
+  const gmUserId = req.user!.id;
+
+  const campaign = await db('campaigns').where({ id: campaignId }).first();
+  if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
+  if (campaign.gm_user_id !== gmUserId) { res.status(403).json({ error: 'Only GM can end the campaign' }); return; }
+  if (campaign.status === 'ended') { res.status(409).json({ error: 'Campaign already ended' }); return; }
+
+  try {
+    await db.transaction(async (trx) => {
+      // 1. 更新团状态为 ended
+      await trx('campaigns').where({ id: campaignId }).update({ status: 'ended' });
+
+      // 2. 取消本团所有未执行的预约移动
+      await trx('scheduled_moves')
+        .where({ campaign_id: campaignId })
+        .whereIn('status', ['pending', 'approved'])
+        .update({ status: 'cancelled' });
+
+      // 3. 将所有场景标记为 archived
+      await trx('campaign_scenes')
+        .where({ campaign_id: campaignId })
+        .update({ status: 'archived' });
+    });
+
+    // 4. 获取所有需要通知的成员（gm + player，不含 observer）
+    const members = await db('campaign_members as cm')
+      .join('users as u', 'u.id', 'cm.user_id')
+      .where('cm.campaign_id', campaignId)
+      .whereIn('cm.role', ['gm', 'player'])
+      .select('cm.user_id', 'u.nickname');
+
+    // 5. 批量写入站内通知
+    const { notificationService } = await import('../services/notification-service.js');
+    const { generateId } = await import('@trpg/shared');
+    const now = new Date();
+    const notifRows = members.map((m: { user_id: string }) => ({
+      id: generateId(),
+      user_id: m.user_id,
+      type: 'campaign_ended',
+      title: `《${campaign.name as string}》已结束`,
+      content: `《${campaign.name as string}》已结束，点击留下你的跑团反馈`,
+      metadata: JSON.stringify({ campaign_id: campaignId }),
+      is_read: false,
+      created_at: now,
+    }));
+    if (notifRows.length > 0) {
+      await db('user_notifications').insert(notifRows);
+    }
+
+    // 6. 通过 WebSocket 向在线成员推送 campaign_ended 事件
+    try {
+      const { io: ioServer } = await import('../app.js');
+      if (ioServer) {
+        const roomNsp = ioServer.of('/room');
+        roomNsp.to(`campaign:${campaignId}`).emit('campaign_ended', {
+          campaign_id: campaignId,
+          campaign_name: campaign.name as string,
+        });
+      }
+    } catch {
+      // WebSocket 推送失败不阻断响应
+    }
+
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    serverErr(res, err);
+  }
+});
+
 export default router;

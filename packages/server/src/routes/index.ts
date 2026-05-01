@@ -25,6 +25,7 @@ import readingProgressRoutes from './reading-progress';
 import annotationsRoutes from './annotations';
 import paymentsRoutes from './payments';
 import trendingRoutes from './trending';
+import feedbackRoutes from './feedback';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -88,5 +89,7 @@ router.use('/reading-progress', readingProgressRoutes);
 router.use('/annotations', annotationsRoutes);
 router.use('/payments', paymentsRoutes);
 router.use('/trending', trendingRoutes);
+// feedbackRoutes 使用完整路径 /campaigns/:campaignId/feedback*
+router.use('/', feedbackRoutes);
 
 export default router;

@@ -34,6 +34,13 @@ vi.mock('../bots/bot-service', () => {
   };
   return { botService: mockBotService, BOT_UID_RANGE: { min: 1000095, max: 1000099 } };
 });
+vi.mock('../bots/content-quality-filter', () => ({
+  contentQualityFilter: {
+    check: vi.fn().mockResolvedValue({ passed: true }),
+  },
+  MIN_CONTENT_CHARS: 50,
+  MAX_REPEAT_RATIO: 0.7,
+}));
 vi.mock('../bots/publisher', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../bots/publisher')>();
   return {

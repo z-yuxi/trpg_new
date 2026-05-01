@@ -17,6 +17,7 @@ import { api } from '../utils/api';
 import { createScene, joinScene, listObPermissions, grantObPermission as apiGrantObPermission, revokeObPermission as apiRevokeObPermission, listCampaignMembers } from '../api/campaigns';
 import { getCharacter } from '../api/characters';
 import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
+import StarsAndWishesFeedbackModal from '../components/campaign/StarsAndWishesFeedbackModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -27,6 +28,10 @@ const messageStore = useMessageStore();
 const campaignId = route.params.id as string;
 const showGMConsole = ref(false);
 const mobileView = ref<'chat' | 'scenes' | 'assistant' | 'gm'>('chat');
+
+// ─ 反馈弹窗（campaign_ended WebSocket 触发） ─────────────────────────
+const showFeedbackModal = ref(false);
+const feedbackCampaignName = ref('');
 
 const scenes = ref<any[]>([]);
 const npcs = ref<any[]>([]);
@@ -544,9 +549,15 @@ onMounted(async () => {
       }
     }
   });
+
+  // \u56e2\u7ed3\u675f\u65f6\u5f39\u51fa\u53cd\u9988\u5f39\u7a97\n  socketClient.onCampaignEnded((data) => {
+    feedbackCampaignName.value = data.campaign_name;
+    showFeedbackModal.value = true;
+  });
 });
 
 onUnmounted(() => {
+  socketClient.offCampaignEnded();
   socketClient.leaveRoom();
   socketClient.disconnect();
 });
@@ -748,6 +759,13 @@ onUnmounted(() => {
       :is-owner="charCardModalIsOwner"
       @close="showCharCardModal = false"
       @updated="() => { showCharCardModal = false; }"
+    />
+
+    <!-- 团结束时即时弹出反馈框 -->
+    <StarsAndWishesFeedbackModal
+      v-model="showFeedbackModal"
+      :campaign-id="campaignId"
+      :campaign-name="feedbackCampaignName"
     />
   </div>
 </template>

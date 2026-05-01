@@ -11,6 +11,8 @@ import { listMyCampaigns, createCampaign, joinCampaignByCode } from '../api/camp
 import { listRulesets } from '../api/rulesets';
 import { listModules } from '../api/modules';
 import { showApiError } from '../utils/feedback';
+import EndCampaignDialog from '../components/campaign/EndCampaignDialog.vue';
+import StarsAndWishesFeedbackModal from '../components/campaign/StarsAndWishesFeedbackModal.vue';
 
 const router = useRouter();
 type CampaignListItem = {
@@ -147,6 +149,28 @@ function copyCode(code: string) {
   navigator.clipboard.writeText(code);
   ElMessage.success('已复制');
 }
+
+// ── 结束团 ────────────────────────────────────────────────────────────────────
+const showEndDialog = ref(false);
+const endTarget = ref<{ id: string; name: string } | null>(null);
+
+function openEndDialog(c: CampaignListItem) {
+  endTarget.value = { id: c.id, name: c.name };
+  showEndDialog.value = true;
+}
+
+function handleEnded() {
+  loadCampaigns();
+}
+
+// ── 补填反馈 ──────────────────────────────────────────────────────────────────
+const showFeedbackModal = ref(false);
+const feedbackTarget = ref<{ id: string; name: string } | null>(null);
+
+function openFeedback(c: CampaignListItem) {
+  feedbackTarget.value = { id: c.id, name: c.name };
+  showFeedbackModal.value = true;
+}
 </script>
 
 <template>
@@ -201,9 +225,23 @@ function copyCode(code: string) {
           <span class="role-badge" :class="c.role">{{ c.role === 'gm' ? 'GM' : '玩家' }}</span>
           <code class="room-code" @click="copyCode(c.room_code)" title="点击复制">{{ c.room_code }}</code>
         </div>
-        <TButton type="primary" size="sm" style="margin-top:12px" @click="router.push(`/room/${c.id}`)">
-          进入房间
-        </TButton>
+        <div class="c-actions">
+          <TButton type="primary" size="sm" @click="router.push(`/room/${c.id}`)">
+            {{ c.status === 'ended' ? '查看回放' : '进入房间' }}
+          </TButton>
+          <TButton
+            v-if="c.status === 'ended'"
+            type="secondary"
+            size="sm"
+            @click="openFeedback(c)"
+          >补填反馈</TButton>
+          <TButton
+            v-if="c.role === 'gm' && c.status !== 'ended'"
+            type="danger"
+            size="sm"
+            @click="openEndDialog(c)"
+          >结束团</TButton>
+        </div>
       </TCard>
     </div>
 
@@ -239,6 +277,23 @@ function copyCode(code: string) {
       </template>
     </ElDialog>
   </div>
+
+  <!-- 结束团确认弹窗 -->
+  <EndCampaignDialog
+    v-if="endTarget"
+    v-model="showEndDialog"
+    :campaign-id="endTarget.id"
+    :campaign-name="endTarget.name"
+    @ended="handleEnded"
+  />
+
+  <!-- 补填反馈弹窗 -->
+  <StarsAndWishesFeedbackModal
+    v-if="feedbackTarget"
+    v-model="showFeedbackModal"
+    :campaign-id="feedbackTarget.id"
+    :campaign-name="feedbackTarget.name"
+  />
 </template>
 
 <style scoped>
@@ -282,6 +337,7 @@ function copyCode(code: string) {
 .role-badge.player { background: #dbeafe; color: #1e40af; }
 .room-code { font-family: var(--font-mono); font-size: var(--text-sm); cursor: pointer; color: var(--color-text-secondary); letter-spacing: 2px; }
 .room-code:hover { color: var(--color-accent); }
+.c-actions { display: flex; gap: var(--space-2); margin-top: 12px; flex-wrap: wrap; }
 @media (max-width: 900px) {
   .page-header {
     flex-direction: column;

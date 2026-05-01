@@ -150,6 +150,14 @@ export class SocketClient {
     this.userSocket?.off('ai_task_update');
   }
 
+  onCampaignEnded(handler: (data: { campaign_id: string; campaign_name: string }) => void): void {
+    this.roomSocket?.on('campaign_ended', handler);
+  }
+
+  offCampaignEnded(): void {
+    this.roomSocket?.off('campaign_ended');
+  }
+
   disconnect(): void {
     this.roomSocket?.disconnect();
     this.userSocket?.disconnect();

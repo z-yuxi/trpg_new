@@ -5,6 +5,8 @@ import { ElMessage } from 'element-plus';
 import GMConsole from '../components/room/GMConsole.vue';
 import GmNowPanel from '../components/room/GmNowPanel.vue';
 import SvgIcon from '../components/SvgIcon.vue';
+import GmFeedbackPanel from '../components/campaign/GmFeedbackPanel.vue';
+import EndCampaignDialog from '../components/campaign/EndCampaignDialog.vue';
 import { useCampaignStore } from '../stores/campaign-store';
 import { useTheme } from '../composables/useTheme';
 import { api } from '../utils/api';
@@ -56,6 +58,18 @@ const moduleToConsoleTab: Partial<Record<DirectorModule, GmConsoleTab>> = {
 
 const activeConsoleTab = computed<GmConsoleTab>(() => moduleToConsoleTab[module.value] ?? 'scenes');
 const pendingMovesCount = ref(0);
+
+// ─ 记录面板内部 tab ──────────────────────────────────────────────
+type TimelineTab = 'trajectory' | 'feedback';
+const timelineTab = ref<TimelineTab>('trajectory');
+
+// ─ 结束团 ───────────────────────────────────────────────────────────
+const showEndDialog = ref(false);
+
+function handleCampaignEnded() {
+  // 结束后刷新团信息
+  loadData();
+}
 
 function switchModule(key: DirectorModule) {
   router.push(`/campaign/${campaignId.value}/gm/${key}`);
@@ -156,9 +170,54 @@ onMounted(() => {
         <div v-else-if="module === 'settings'" class="settings-placeholder">
           <h2>团设置</h2>
           <p class="placeholder-tip">高级功能开关、OB 权限、房间码等设置（规划中）</p>
+          <div class="settings-end-section">
+            <div class="settings-end-label">危险区域</div>
+            <button
+              class="end-campaign-btn"
+              :disabled="campaignStore.currentCampaign?.status === 'ended'"
+              @click="showEndDialog = true"
+            >
+              {{ campaignStore.currentCampaign?.status === 'ended' ? '团已结束' : '结束团' }}
+            </button>
+            <p class="settings-end-hint">结束后房间变为只读，所有成员将收到反馈邀请。此操作不可撤销。</p>
+          </div>
         </div>
 
         <!-- 场景/角色/线索/记录：复用 GMConsole -->
+        <template v-else-if="module === 'timeline' && !loading && campaignStore.currentCampaign">
+          <!-- 记录模块内部 Tab -->
+          <div class="timeline-tabs">
+            <button
+              class="tl-tab-btn"
+              :class="{ active: timelineTab === 'trajectory' }"
+              @click="timelineTab = 'trajectory'"
+            >轨迹矩阵</button>
+            <button
+              class="tl-tab-btn"
+              :class="{ active: timelineTab === 'feedback' }"
+              @click="timelineTab = 'feedback'"
+            >跑团反馈</button>
+          </div>
+          <GmFeedbackPanel
+            v-if="timelineTab === 'feedback'"
+            :campaign-id="campaignId"
+          />
+          <GMConsole
+            v-else
+            :campaign-id="campaignId"
+            :global-story-time="globalStoryTime"
+            :scenes="scenes"
+            :npcs="npcs"
+            :characters="characters"
+            :standalone="true"
+            default-tab="trajectory"
+            @scene-created="handleSceneCreated"
+            @npc-created="handleNpcCreated"
+            @play-as-npc="() => {}"
+          />
+        </template>
+
+        <!-- 其他模块 -->
         <GMConsole
           v-else-if="!loading && campaignStore.currentCampaign"
           :campaign-id="campaignId"
@@ -175,6 +234,15 @@ onMounted(() => {
         <div v-else-if="!loading" class="director-empty">请先进入房间再访问导演台</div>
       </main>
     </div>
+
+    <!-- 结束团确认弹窗 -->
+    <EndCampaignDialog
+      v-if="campaignStore.currentCampaign"
+      v-model="showEndDialog"
+      :campaign-id="campaignId"
+      :campaign-name="campaignStore.currentCampaign.name ?? ''"
+      @ended="handleCampaignEnded"
+    />
   </div>
 </template>
 
@@ -325,6 +393,71 @@ onMounted(() => {
   color: var(--color-text-primary);
 }
 .placeholder-tip { font-size: var(--text-sm); }
+
+/* ── 设置面板：结束团 ── */
+.settings-end-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger, #ef4444);
+  border-radius: var(--radius-lg);
+  max-width: 320px;
+}
+.settings-end-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-danger, #ef4444);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.end-campaign-btn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.end-campaign-btn:not(:disabled):hover { opacity: .88; }
+.end-campaign-btn:disabled { opacity: .5; cursor: not-allowed; }
+.settings-end-hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+  max-width: 260px;
+  margin: 0;
+}
+
+/* ── 记录面板内部 Tab ── */
+.timeline-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-card-border);
+  padding: 0 var(--space-4);
+  flex-shrink: 0;
+}
+.tl-tab-btn {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+.tl-tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
 
 /* ── 移动端：顶部横向 Tab ── */
 @media (max-width: 768px) {

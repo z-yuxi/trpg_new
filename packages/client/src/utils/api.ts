@@ -125,4 +125,12 @@ export const api = {
       method: 'DELETE',
     }).then((res) => handleResponse<T>(res));
   },
+
+  patch<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return fetchWithAuth(`${BASE}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }).then((res) => handleResponse<T>(res));
+  },
 };

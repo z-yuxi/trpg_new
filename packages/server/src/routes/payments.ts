@@ -365,7 +365,8 @@ router.post('/admin/manual-grant', authMiddleware, async (req, res) => {
       res.status(err.httpStatus).json({ error: err.message, code: err.code });
       return;
     }
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Manual grant failed' });
+    console.error('[Payments] manual-grant error:', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: 'Manual grant failed' });
   }
 });
 
@@ -406,7 +407,8 @@ router.post('/admin/refund', authMiddleware, async (req, res) => {
       res.status(err.httpStatus).json({ error: err.message, code: err.code });
       return;
     }
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Refund failed' });
+    console.error('[Payments] admin-refund error:', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: 'Refund failed' });
   }
 });
 

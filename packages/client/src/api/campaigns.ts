@@ -212,3 +212,56 @@ export function getTrajectoryMatrix(campaignId: string): Promise<TrajectoryMatri
 export function listCampaignMembers(campaignId: string): Promise<Array<{ user_id: string; nickname: string; character_id: string | null; role: 'gm' | 'player' }>> {
   return api.get(`/campaigns/${campaignId}/members`);
 }
+
+// ─── 结束团 ─────────────────────────────────────────────────────────────────
+
+export function endCampaign(campaignId: string): Promise<{ ok: boolean }> {
+  return api.post(`/campaigns/${campaignId}/end`, {}, key());
+}
+
+// ─── 跑团反馈（Stars and Wishes） ────────────────────────────────────────────
+
+export interface CampaignFeedback {
+  id: string;
+  campaign_id: string;
+  user_id: string;
+  star: string | null;
+  wish: string | null;
+  visibility: 'gm_only' | 'all_members';
+  is_deleted: boolean;
+  submitted_at: string;
+  updated_at: string | null;
+  nickname?: string;
+  avatar_url?: string | null;
+}
+
+export interface FeedbackSummary {
+  submitted: CampaignFeedback[];
+  pending: Array<{ user_id: string; nickname: string; avatar_url: string | null }>;
+}
+
+export function submitFeedback(
+  campaignId: string,
+  payload: { star?: string | null; wish?: string | null },
+): Promise<CampaignFeedback> {
+  return api.post(`/campaigns/${campaignId}/feedback`, payload, key());
+}
+
+export function getMyFeedback(campaignId: string): Promise<{ data: CampaignFeedback | null }> {
+  return api.get(`/campaigns/${campaignId}/feedback/me`);
+}
+
+export function getCampaignFeedbackSummary(campaignId: string): Promise<FeedbackSummary> {
+  return api.get(`/campaigns/${campaignId}/feedback`);
+}
+
+export function deleteMyFeedback(campaignId: string): Promise<void> {
+  return api.delete(`/campaigns/${campaignId}/feedback`);
+}
+
+export function updateFeedbackVisibility(
+  campaignId: string,
+  visibility: 'gm_only' | 'all_members',
+): Promise<{ ok: boolean }> {
+  return api.patch(`/campaigns/${campaignId}/feedback/visibility`, { visibility });
+}

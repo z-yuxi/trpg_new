@@ -8,6 +8,7 @@ export type NotificationType =
   | 'apply_approved' | 'apply_rejected' | 'waitlist_promoted'
   | 'group_success' | 'group_dissolved'
   | 'move_approved' | 'move_rejected' | 'move_cancelled'
+  | 'campaign_ended'
   // 社区类
   | 'comment_floor' | 'comment_reply' | 'at_mention'
   | 'post_featured' | 'feature_rejected'
@@ -68,6 +69,11 @@ export interface ServerToClientEvents {
   unread_count_changed: (data: { count: number }) => void;
   grid_token_moved: (data: { campaign_id: string; scene_id: string; token: GridToken }) => void;
   grid_area_marked: (data: { campaign_id: string; scene_id: string; overlays: GridOverlay[] }) => void;
+  /** GM 结束团后向所有参与者推送（在线用户立即收到反馈弹窗提示） */
+  campaign_ended: (data: {
+    campaign_id: string;
+    campaign_name: string;
+  }) => void;
   /** AI 异步任务进度推送（任务完成/失败时由 BullMQ Worker 推送给对应用户） */
   ai_task_update: (data: {
     task_id: string;
