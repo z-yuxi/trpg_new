@@ -309,6 +309,7 @@ function statusLabel(s: string) {
               </div>
             </div>
             <div class="module-actions">
+              <TButton type="ghost" size="sm" @click.stop="router.push(`/module/${m.id}`)">阅读</TButton>
               <TButton type="primary" size="sm" @click.stop="openQuickCreate(m.id, null)">创建房间</TButton>
             </div>
           </div>
@@ -342,7 +343,7 @@ function statusLabel(s: string) {
           </div>
           <p class="ruleset-desc">{{ rs.description || '暂无描述' }}</p>
           <div class="ruleset-actions">
-            <TButton type="secondary" size="sm" style="margin-top: var(--space-3)">查看详情</TButton>
+            <TButton type="secondary" size="sm" style="margin-top: var(--space-3)" @click.stop="router.push(`/ruleset/${rs.id}`)">查看详情</TButton>
             <TButton type="primary" size="sm" style="margin-top: var(--space-3)" @click.stop="openQuickCreate(null, rs.id)">创建房间</TButton>
           </div>
         </div>
