@@ -73,6 +73,32 @@ function walkNodes(nodes: unknown[], items: ModuleOutlineItem[], depth: number) 
         label: '☆ KP 信息',
         depth,
       });
+    } else if (node.type === 'branch_node') {
+      items.push({
+        id: node.attrs?.id || `branch-${items.length}`,
+        type: 'branch',
+        label: node.attrs?.condition ? `▸ ${node.attrs.condition}` : '▸ 条件分支',
+        depth,
+      });
+      if (Array.isArray(node.content)) {
+        walkNodes(node.content, items, depth + 1);
+      }
+      continue;
+    } else if (node.type === 'consequence_hint') {
+      items.push({
+        id: node.attrs?.id || `conseq-${items.length}`,
+        type: 'consequence',
+        label: node.attrs?.condition ? `▶ ${node.attrs.condition}` : '▶ 后果提示',
+        depth,
+      });
+    } else if (node.type === 'player_handout') {
+      const label: string = node.attrs?.label || '玩家资料';
+      items.push({
+        id: node.attrs?.id || `handout-${items.length}`,
+        type: 'handout',
+        label: `【】${label}`,
+        depth,
+      });
     } else if (LEGACY_BLOCK_TYPES.has(node.type)) {
       // 兼容旧格式文档
       const blockType = node.type.replace('_block', '') as ModuleOutlineItem['type'];

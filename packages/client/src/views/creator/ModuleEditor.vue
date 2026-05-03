@@ -917,6 +917,9 @@ function outlineItemIcon(type: ModuleOutlineItem['type']) {
     heading:      'icon-list',
     investigable: 'icon-scene',
     kp_info:      'icon-dice',
+    branch:       'icon-branch',
+    consequence:  'icon-scene',
+    handout:      'icon-clue',
     // 旧块类型保留（兼容旧格式文档）
     scene:   'icon-scene',
     npc:     'icon-npc',

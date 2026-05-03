@@ -1,7 +1,7 @@
 <template>
-  <div class="module-editor-core">
+  <div class="module-editor-core" @mousemove="resetToolbarFade" @keydown.capture="resetToolbarFade">
     <!-- 工具栏 -->
-    <div class="toolbar">
+    <div class="toolbar" :class="{ 'toolbar--faded': toolbarFaded }" @mouseenter="cancelToolbarFade" @mouseleave="scheduleToolbarFade">
       <button
         v-for="btn in toolbarButtons"
         :key="btn.label"
@@ -122,6 +122,7 @@ import { ConsequenceHintExtension } from './extensions/ConsequenceHintExtension'
 import { PlayerHandoutExtension } from './extensions/PlayerHandoutExtension';
 import { RuleRefExtension } from './extensions/RuleRefExtension';
 import { BranchNodeExtension } from './extensions/BranchNodeExtension';
+import { PunctuationPairExtension } from './extensions/PunctuationPairExtension';
 import { Extension } from '@tiptap/core';
 import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
 
@@ -150,6 +151,7 @@ const editor = useEditor({
     PlayerHandoutExtension,
     RuleRefExtension,
     BranchNodeExtension,
+    PunctuationPairExtension,
     Extension.create({
       name: 'viewMode',
       addProseMirrorPlugins() {
@@ -210,6 +212,25 @@ function tryParse(s: string) {
 }
 
 const wordCount = computed(() => editor.value?.storage['characterCount']?.characters() ?? 0);
+
+// 工具栏淡出（E-1.1：停止输入 3s 后透明度降至 0.3）
+const toolbarFaded = ref(false);
+let toolbarFadeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleToolbarFade() {
+  if (toolbarFadeTimer) clearTimeout(toolbarFadeTimer);
+  toolbarFadeTimer = setTimeout(() => { toolbarFaded.value = true; }, 3000);
+}
+
+function cancelToolbarFade() {
+  if (toolbarFadeTimer) clearTimeout(toolbarFadeTimer);
+  toolbarFaded.value = false;
+}
+
+function resetToolbarFade() {
+  cancelToolbarFade();
+  scheduleToolbarFade();
+}
 
 // 监听外部 modelValue 变化（加载时）
 watch(() => props.modelValue, (val) => {
@@ -453,11 +474,13 @@ function handleKeyup(e: KeyboardEvent) {
 onMounted(() => {
   document.addEventListener('keyup', handleKeyup);
   document.addEventListener('keydown', handleGlobalKeydown);
+  scheduleToolbarFade();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('keyup', handleKeyup);
   document.removeEventListener('keydown', handleGlobalKeydown);
+  if (toolbarFadeTimer) clearTimeout(toolbarFadeTimer);
   editor.value?.destroy();
 });
 
@@ -513,6 +536,17 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   border-bottom: 1px solid var(--border-default);
   background: var(--surface-card);
   flex-shrink: 0;
+  transition: opacity 0.4s ease;
+}
+
+.toolbar--faded {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.toolbar--faded:hover {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .toolbar-btn {
