@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import PageLayout from '../../components/layout/PageLayout.vue';
 import TButton from '../../components/base/TButton.vue';
 import TTag from '../../components/base/TTag.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
-import { api } from '../../utils/api';
+import { listMyRulesets, submitRulesetReview, deprecateRuleset } from '../../api/rulesets';
+import { listMyModules, submitModule, withdrawModule } from '../../api/modules';
+import { submitAppeal } from '../../api/creator';
 
 interface Ruleset {
   id: string;
@@ -72,12 +74,12 @@ const stats = computed(() => ({
 async function loadProducts() {
   loading.value = true;
   try {
-    const [rsData, modData] = await Promise.all([
-      api.get<Ruleset[]>('/rulesets/mine'),
-      api.get<Module[]>('/modules/mine'),
+    const [rsRes, modRes] = await Promise.all([
+      listMyRulesets(),
+      listMyModules(),
     ]);
-    rulesets.value = rsData;
-    modules.value = modData;
+    rulesets.value = (rsRes.data ?? []) as Ruleset[];
+    modules.value = (modRes ?? []) as Module[];
   } catch {
     ElMessage.error('加载作品列表失败');
   } finally {
@@ -102,6 +104,65 @@ function editProduct(item: ProductItem) {
   } else {
     router.push(`/creator/modules/${item.id}/edit`);
   }
+}
+
+async function submitForReview(item: ProductItem) {
+  try {
+    if (item.kind === 'ruleset') {
+      await submitRulesetReview(item.id);
+    } else {
+      await submitModule(item.id);
+    }
+    ElMessage.success('已提交审核，请等待审核结果');
+    await loadProducts();
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '提审失败');
+  }
+}
+
+async function doWithdraw(item: ProductItem) {
+  await ElMessageBox.confirm(
+    `确认撤回「${item.name}」的发布申请？`,
+    '撤回',
+    { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' }
+  );
+  try {
+    if (item.kind === 'ruleset') {
+      await deprecateRuleset(item.id);
+    } else {
+      await withdrawModule(item.id);
+    }
+    ElMessage.success('已撤回');
+    await loadProducts();
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '撤回失败');
+  }
+}
+
+async function doAppeal(item: ProductItem) {
+  if (item.kind !== 'module') return;
+  const { value: reason } = await ElMessageBox.prompt(
+    '请输入申诉理由（至少 10 字）',
+    '提交申诉',
+    { confirmButtonText: '提交', cancelButtonText: '取消', inputType: 'textarea', inputValidator: (v) => v?.length >= 10 ? true : '申诉理由至少 10 字' }
+  );
+  try {
+    await submitAppeal(item.id, reason);
+    ElMessage.success('申诉已提交，请等待审核处理');
+  } catch (e: unknown) {
+    ElMessage.error((e as Error)?.message ?? '申诉提交失败');
+  }
+}
+
+/** 当前状态可执行的操作列表 */
+function availableActions(item: ProductItem) {
+  const s = item.status;
+  return {
+    canEdit: ['draft', 'rejected'].includes(s),
+    canSubmit: s === 'draft',
+    canWithdraw: ['reviewing', 'published', 'public_notice'].includes(s),
+    canAppeal: item.kind === 'module' && ['rejected', 'suspended', 'archived'].includes(s),
+  };
 }
 
 function formatDate(str?: string) {
@@ -198,10 +259,13 @@ onMounted(loadProducts);
         </div>
 
         <div class="card-actions">
-          <TButton size="sm" type="secondary" @click="editProduct(item)">
+          <TButton v-if="availableActions(item).canEdit" size="sm" type="secondary" @click="editProduct(item)">
             <SvgIcon name="icon-edit" :size="14" />
             编辑
           </TButton>
+          <TButton v-if="availableActions(item).canSubmit" size="sm" type="primary" @click="submitForReview(item)">提交审核</TButton>
+          <TButton v-if="availableActions(item).canWithdraw" size="sm" type="danger" @click="doWithdraw(item)">撤回</TButton>
+          <TButton v-if="availableActions(item).canAppeal" size="sm" type="warning" @click="doAppeal(item)">申诉</TButton>
         </div>
       </article>
     </div>

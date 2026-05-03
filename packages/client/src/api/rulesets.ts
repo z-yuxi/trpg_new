@@ -45,6 +45,10 @@ export function listRulesets(params?: ListRulesetsParams): Promise<{ data: Rules
   return api.get(`/rulesets${qs}`);
 }
 
+export function listMyRulesets(): Promise<{ data: Ruleset[]; total: number }> {
+  return api.get('/rulesets/mine');
+}
+
 export function getRuleset(id: string): Promise<Ruleset> {
   return api.get(`/rulesets/${id}`);
 }

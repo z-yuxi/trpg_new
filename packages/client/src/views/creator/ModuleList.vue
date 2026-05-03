@@ -36,7 +36,7 @@ async function loadModules() {
       listMyRulesets(),
     ]);
 
-    modules.value = (modulePayload.data ?? []) as ModuleItem[];
+    modules.value = (modulePayload ?? []) as ModuleItem[];
 
     const list = rulesetPayload.data ?? [];
     rulesets.value = (list as { id: string; name: string }[]).map((item) => ({ id: item.id, name: item.name }));

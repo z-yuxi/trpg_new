@@ -135,7 +135,7 @@ onMounted(async () => {
         listMyModules(),
         listMyRulesets(),
       ]);
-      if (mineModulesRes.status === 'fulfilled') myModules.value = (mineModulesRes.value.data ?? []) as Module[];
+      if (mineModulesRes.status === 'fulfilled') myModules.value = (mineModulesRes.value ?? []) as Module[];
       if (mineRulesetsRes.status === 'fulfilled') myRulesets.value = (mineRulesetsRes.value.data ?? []) as Ruleset[];
     }
   } finally {

@@ -81,7 +81,7 @@ async function loadDashboard() {
     ]);
 
     rulesets.value = (rulesetPayload.data ?? []) as RulesetItem[];
-    modules.value = (modulePayload.data ?? []) as ModuleItem[];
+    modules.value = (modulePayload ?? []) as ModuleItem[];
   } finally {
     loading.value = false;
   }
