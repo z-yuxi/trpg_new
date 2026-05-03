@@ -47,4 +47,31 @@ router.get('/', requireAuth, async (req, res) => {
   res.json(reports);
 });
 
+// PATCH /api/reports/:id (管理员) - 更新举报状态
+router.patch('/:id', requireAuth, async (req, res) => {
+  const user = (req as any).user;
+  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
+  if (!isAdmin) return res.status(403).json({ error: '无权限' });
+
+  const { id } = req.params;
+  const { status, resolution_note } = req.body as { status?: string; resolution_note?: string };
+
+  const allowed = ['resolved', 'dismissed'];
+  if (!status || !allowed.includes(status)) {
+    return res.status(400).json({ error: 'status 必须是 resolved 或 dismissed' });
+  }
+
+  const updated = await db('content_reports')
+    .where({ id })
+    .update({
+      status,
+      resolution_note: resolution_note ? String(resolution_note).slice(0, 500) : null,
+      resolved_at: new Date(),
+      resolver_user_id: user.id,
+    });
+
+  if (!updated) return res.status(404).json({ error: '举报不存在' });
+  res.json({ id, status });
+});
+
 export default router;

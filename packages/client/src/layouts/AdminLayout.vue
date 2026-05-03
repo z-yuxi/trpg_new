@@ -10,6 +10,7 @@ const authStore = useAuthStore();
 const navItems = [
   { path: '/admin/dashboard',  icon: 'icon-npc',   label: '后台概览' },
   { path: '/admin/reports',    icon: 'icon-list',  label: '举报处理' },
+  { path: '/admin/content',    icon: 'icon-book',  label: '内容审核' },
   { path: '/admin/reputation', icon: 'icon-star',  label: '信誉审计' },
   { path: '/admin/metrics',    icon: 'icon-dice',  label: '运营指标' },
 ];

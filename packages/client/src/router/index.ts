@@ -131,6 +131,7 @@ const routes = [
       { path: '', redirect: '/admin/dashboard' },
       { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/AdminDashboard.vue'), meta: { title: '后台概览' } },
       { path: 'reports', name: 'AdminReports', component: () => import('../views/admin/AdminReports.vue'), meta: { title: '举报处理' } },
+      { path: 'content', name: 'AdminContent', component: () => import('../views/admin/AdminContent.vue'), meta: { title: '内容审核' } },
       { path: 'reputation', name: 'AdminReputation', component: () => import('../views/admin/AdminReputation.vue'), meta: { title: '信誉审计' } },
       { path: 'metrics', name: 'AdminMetrics', component: () => import('../views/admin/AdminMetrics.vue'), meta: { title: '运营指标' } },
     ],
