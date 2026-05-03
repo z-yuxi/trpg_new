@@ -627,6 +627,99 @@ router.post('/:id/rollback/:snapshotId', authMiddleware, async (req, res) => {
   }
 });
 
+// ── GET /api/modules/:id/search — 模组内全文搜索 ──────────────────────────
+// 在模组的 TipTap JSON 内容中搜索关键词，返回匹配的文本片段（高亮位置）
+const moduleSearchSchema = z.object({
+  q: z.string().min(1).max(200),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+router.get('/:id/search', authMiddleware, async (req, res) => {
+  const parsed = moduleSearchSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  const moduleId = req.params['id'];
+  const mod = await db('modules')
+    .where({ id: moduleId })
+    .first<{ author_id: string; content: string | null }>();
+  if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const { q, limit } = parsed.data;
+  const results = searchInModuleContent(mod.content, q, limit);
+  res.json({ query: q, results });
+});
+
+/**
+ * 在 TipTap JSON 内容中递归搜索关键词，返回带上下文的片段列表。
+ * 每个匹配项包含：文本上下文（前后各 40 字）、位置信息、所在节点路径。
+ */
+function searchInModuleContent(
+  contentJson: string | null,
+  query: string,
+  limit: number,
+): Array<{ text: string; context: string; nodeType: string }> {
+  if (!contentJson) return [];
+
+  let docNode: unknown;
+  try {
+    docNode = JSON.parse(contentJson);
+  } catch {
+    return [];
+  }
+
+  const results: Array<{ text: string; context: string; nodeType: string }> = [];
+  const lower = query.toLowerCase();
+  const CONTEXT = 40;
+
+  function walk(node: unknown, parentType = 'doc'): void {
+    if (results.length >= limit) return;
+    if (typeof node !== 'object' || node === null) return;
+
+    const n = node as Record<string, unknown>;
+    const type = (n['type'] as string) ?? parentType;
+
+    if (n['text'] && typeof n['text'] === 'string') {
+      const text = n['text'] as string;
+      const lowerText = text.toLowerCase();
+      let idx = 0;
+
+      while (results.length < limit) {
+        const pos = lowerText.indexOf(lower, idx);
+        if (pos === -1) break;
+
+        const start = Math.max(0, pos - CONTEXT);
+        const end = Math.min(text.length, pos + query.length + CONTEXT);
+        const context =
+          (start > 0 ? '…' : '') +
+          text.slice(start, end) +
+          (end < text.length ? '…' : '');
+
+        results.push({
+          text: text.slice(pos, pos + query.length),
+          context,
+          nodeType: type,
+        });
+
+        idx = pos + 1;
+      }
+    }
+
+    if (Array.isArray(n['content'])) {
+      for (const child of n['content'] as unknown[]) {
+        if (results.length >= limit) break;
+        walk(child, type);
+      }
+    }
+  }
+
+  walk(docNode);
+  return results;
+}
+
 export default router;
 
 // ============================================================

@@ -127,6 +127,24 @@ export function saveModuleTerms(id: string, terms: string[]): Promise<{ terms: M
   return api.put(`/modules/${id}/terms`, { terms }, key());
 }
 
+// ── 全文搜索 ──────────────────────────────────────────────
+
+export interface ModuleSearchResult {
+  text: string;
+  context: string;
+  nodeType: string;
+}
+
+export function searchModuleContent(
+  id: string,
+  query: string,
+  limit?: number,
+): Promise<{ query: string; results: ModuleSearchResult[] }> {
+  const params = new URLSearchParams({ q: query });
+  if (limit) params.set('limit', String(limit));
+  return api.get(`/modules/${id}/search?${params.toString()}`);
+}
+
 // ── 实体库（Entity Library）────────────────────────────────
 export type EntityType = 'npc' | 'scene' | 'clue';
 

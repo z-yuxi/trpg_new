@@ -78,15 +78,15 @@ export function validateCheckTextOutput(
 
     // 骰子表达式保护：original 含骰子表达式时，suggestion 中不得修改它
     if (DICE_RE.test(issue.original)) {
+      DICE_RE.lastIndex = 0;
       const origDice = issue.original.match(DICE_RE) ?? [];
-      for (const dice of origDice) {
-        if (!issue.suggestion.includes(dice)) {
-          // suggestion 丢失了原始骰子表达式，跳过此条
-          continue;
-        }
-      }
+      const diceModified = origDice.some((dice) => !issue.suggestion.includes(dice));
+      if (diceModified) { DICE_RE.lastIndex = 0; continue; }
     }
     DICE_RE.lastIndex = 0; // 重置有状态正则
+
+    // original 与 suggestion 完全相同时，跳过（无实际修改建议）
+    if (issue.original === issue.suggestion) continue;
 
     // 系统专名保护：original 含受保护缩写时，suggestion 不得将其删除
     const origUpperWords = issue.original.match(/\b[A-Z]{2,5}\b/g) ?? [];

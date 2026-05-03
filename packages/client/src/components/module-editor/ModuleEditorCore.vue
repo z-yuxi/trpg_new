@@ -51,9 +51,18 @@
         class="toolbar-btn"
         :class="{ 'active': termPanelVisible }"
         :title="'术语白名单' + (moduleTerms.length ? ` (${moduleTerms.length})` : '')"
-        @click="termPanelVisible = !termPanelVisible"
+        @click="termPanelVisible = !termPanelVisible; searchPanelVisible = false"
       >
         📝
+      </button>
+      <!-- 全文搜索按钮 -->
+      <button
+        class="toolbar-btn"
+        :class="{ 'active': searchPanelVisible }"
+        title="模组内搜索 (Ctrl+F)"
+        @click="searchPanelVisible = !searchPanelVisible; termPanelVisible = false"
+      >
+        🔍
       </button>
       <span class="toolbar-sep" />
       <span class="word-count">{{ wordCount }} 字</span>
@@ -93,6 +102,17 @@
             :initial-terms="moduleTerms"
             @saved="handleTermsSaved"
             @close="termPanelVisible = false"
+          />
+        </div>
+      </Transition>
+
+      <!-- 右侧全文搜索面板 -->
+      <Transition name="slide-left">
+        <div v-if="searchPanelVisible && props.moduleId" class="proofread-panel-wrapper">
+          <ModuleSearch
+            :module-id="props.moduleId"
+            @close="searchPanelVisible = false"
+            @locate="handleLocateSearchResult"
           />
         </div>
       </Transition>
@@ -194,6 +214,7 @@ import AiProofreadPanel from '../ai/AiProofreadPanel.vue';
 import { createProofreadDecorationPlugin, proofreadDecorationKey } from '../ai/ProofreadDecorationPlugin';
 import SnapshotTimeline from './SnapshotTimeline.vue';
 import TermWhitelistPanel from './TermWhitelistPanel.vue';
+import ModuleSearch from './ModuleSearch.vue';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -506,6 +527,21 @@ function handleTermsSaved(terms: string[]) {
   moduleTerms.value = terms;
 }
 
+// ── 全文搜索 ─────────────────────────────────
+const searchPanelVisible = ref(false);
+
+function handleLocateSearchResult(context: string, match: string) {
+  // 用 match 文本在编辑器中定位第一个匹配位置
+  if (!editor.value) return;
+  const { state } = editor.value;
+  const text = state.doc.textContent;
+  const pos = text.indexOf(match);
+  if (pos >= 0) {
+    editor.value.commands.setTextSelection({ from: pos + 1, to: pos + 1 + match.length });
+    editor.value.view.dom.scrollIntoView();
+  }
+}
+
 async function loadSnapshots() {
   if (!props.moduleId) return;
   snapshotLoading.value = true;
@@ -771,6 +807,15 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   if (e.shiftKey && e.key === 'P') {
     e.preventDefault();
     handleCheckText();
+    return;
+  }
+
+  // Ctrl+F → 模组内搜索
+  if (!e.shiftKey && e.key === 'f') {
+    e.preventDefault();
+    searchPanelVisible.value = !searchPanelVisible.value;
+    termPanelVisible.value = false;
+    aiProofreadVisible.value = false;
     return;
   }
 
