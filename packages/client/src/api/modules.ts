@@ -96,6 +96,22 @@ export function applyModuleEntities(id: string, entities: ModuleEntity[]): Promi
   return api.post(`/modules/${id}/entities/apply`, { entities }, key());
 }
 
+// ── AI 校对相关 API ────────────────────────────────────────
+
+export interface ModuleSnapshot {
+  id: string;
+  version_number: number;
+  created_at: string;
+}
+
+export function getModuleSnapshots(id: string): Promise<{ data: ModuleSnapshot[] }> {
+  return api.get(`/modules/${id}/snapshots`);
+}
+
+export function rollbackModuleToSnapshot(id: string, snapshotId: string): Promise<{ data: Module }> {
+  return api.post(`/modules/${id}/rollback/${snapshotId}`, {}, key());
+}
+
 // ── 实体库（Entity Library）────────────────────────────────
 export type EntityType = 'npc' | 'scene' | 'clue';
 

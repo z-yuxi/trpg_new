@@ -172,6 +172,10 @@ export class ModuleService {
   async autoSave(id: string, userId: string, content: string, wordCount?: number): Promise<boolean> {
     const existing = await db('modules').where({ id, author_id: userId }).first();
     if (!existing) return false;
+    
+    // autoSave 时创建版本快照（保留最近3个）
+    await this.createSnapshot(id, content);
+    
     await db('modules').where({ id }).update({
       content,
       word_count: wordCount ?? 0,
@@ -359,6 +363,94 @@ export class ModuleService {
       reason,
       created_at: now,
     });
+  }
+
+  /**
+   * 创建模组版本快照（autoSave 时自动调用）
+   * 保留最近 3 个版本
+   */
+  private async createSnapshot(moduleId: string, content: string): Promise<void> {
+    try {
+      // 查询当前最高版本号
+      const latest = await db('module_snapshots')
+        .where({ module_id: moduleId })
+        .orderBy('version_number', 'desc')
+        .first<{ version_number: number } | undefined>();
+
+      const nextVersion = (latest?.version_number ?? 0) + 1;
+
+      // 插入新快照
+      await db('module_snapshots').insert({
+        id: generateId(),
+        module_id: moduleId,
+        version_number: nextVersion,
+        content,
+        created_at: new Date(),
+      });
+
+      // 删除超过 3 个版本的旧快照（保留最近3个）
+      const snapshotsToDelete = await db('module_snapshots')
+        .where({ module_id: moduleId })
+        .orderBy('version_number', 'desc')
+        .offset(3)
+        .select('id');
+
+      if (snapshotsToDelete.length > 0) {
+        const ids = snapshotsToDelete.map((s: Record<string, unknown>) => s['id'] as string);
+        await db('module_snapshots').whereIn('id', ids).delete();
+      }
+    } catch (err) {
+      // 快照创建失败不应阻止 autoSave，仅记录错误
+      console.error('[ModuleService] snapshot create failed:', err);
+    }
+  }
+
+  /**
+   * 获取模组版本历史（最近3个）
+   */
+  async getSnapshots(moduleId: string): Promise<Array<{ id: string; version_number: number; created_at: Date }>> {
+    const snapshots = await db('module_snapshots')
+      .where({ module_id: moduleId })
+      .orderBy('version_number', 'desc')
+      .limit(3)
+      .select('id', 'version_number', 'created_at');
+    return snapshots;
+  }
+
+  /**
+   * 获取单个快照内容
+   */
+  async getSnapshot(snapshotId: string): Promise<{ content: string } | null> {
+    const snapshot = await db('module_snapshots')
+      .where({ id: snapshotId })
+      .first<{ content: string } | undefined>();
+    return snapshot ?? null;
+  }
+
+  /**
+   * 回滚到指定快照版本
+   */
+  async rollbackToSnapshot(moduleId: string, userId: string, snapshotId: string): Promise<boolean> {
+    const module = await db('modules').where({ id: moduleId, author_id: userId }).first();
+    if (!module) return false;
+
+    const snapshot = await db('module_snapshots')
+      .where({ id: snapshotId, module_id: moduleId })
+      .first<{ content: string } | undefined>();
+    if (!snapshot) return false;
+
+    // 在回滚前创建当前内容的快照（防止意外覆盖）
+    if (module.content) {
+      await this.createSnapshot(moduleId, module.content);
+    }
+
+    // 恢复内容
+    await db('modules').where({ id: moduleId }).update({
+      content: snapshot.content,
+      updated_at: new Date(),
+    });
+
+    return true;
   }
 
 

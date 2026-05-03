@@ -595,6 +595,38 @@ router.post('/:id/entities/apply', authMiddleware, requireCreator, async (req, r
   res.json({ updated_content: updatedContent });
 });
 
+// ── AI 校对相关路由（版本管理 + 回滚） ──────────────────────────────────────
+
+// GET /api/modules/:id/snapshots — 获取模组版本历史（最近3个）
+router.get('/:id/snapshots', authMiddleware, async (req, res) => {
+  try {
+    const moduleId = req.params['id'];
+    const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string }>();
+    if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+    if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const snapshots = await moduleService.getSnapshots(moduleId);
+    res.json({ data: snapshots });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
+// POST /api/modules/:id/rollback/:snapshotId — 回滚到指定快照版本
+router.post('/:id/rollback/:snapshotId', authMiddleware, async (req, res) => {
+  try {
+    const { id, snapshotId } = req.params;
+    const success = await moduleService.rollbackToSnapshot(id!, req.user!.id, snapshotId!);
+    if (!success) {
+      return res.status(404).json({ error: 'Module or snapshot not found' });
+    }
+    const module = await moduleService.getById(id!);
+    res.json({ data: module });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Rollback failed' });
+  }
+});
+
 export default router;
 
 // ============================================================

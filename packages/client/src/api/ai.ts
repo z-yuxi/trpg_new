@@ -31,3 +31,17 @@ export function getAiQuota(): Promise<{
 }> {
   return api.get('/ai/quota');
 }
+
+export interface CheckTextIssue {
+  type: 'typo' | 'punctuation' | 'term' | 'style';
+  original: string;
+  suggestion: string;
+  reason: string;
+}
+
+export function checkText(
+  text: string,
+  ruleTerms?: string[],
+): Promise<{ issues: CheckTextIssue[] }> {
+  return api.post('/ai/check-text', { text, rule_terms: ruleTerms ?? [] });
+}

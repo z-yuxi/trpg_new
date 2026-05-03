@@ -87,7 +87,7 @@ codebase-b/
 - **框架设计**: `docs/R01-AI-Agent框架设计规范.md`
 - **Agent行为准则**: `.ai/prompts/agent_*.md`
 - **开发规范**: `.ai/conventions/constitution.md`
-- **代码包A续开发路线**: `docs/B_DOCS/代码包A-AI续开发交付路线.md`
+
 
 ## 开发模式
 我们遵循**规范驱动开发(Spec-Driven Development)**。
