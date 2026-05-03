@@ -13,6 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
   const nickname = ref<string>('');
   const avatarUrl = ref<string>('');
   const isCreator = ref<boolean>(localStorage.getItem('is_creator') === '1');
+  const isAdmin = ref<boolean>(localStorage.getItem('is_admin') === '1');
 
   const isLoggedIn = computed(() => !!token.value && !isTokenExpired());
 
@@ -22,15 +23,40 @@ export const useAuthStore = defineStore('auth', () => {
     return Date.now() >= expiresAt;
   }
 
-  function setAuth(data: { token: string; userId: string; nickname: string; avatarUrl?: string; isCreator?: boolean; expiresIn?: number }): void {
+  function setAuth(data: {
+    token: string;
+    userId: string;
+    nickname: string;
+    avatarUrl?: string;
+    isCreator?: boolean;
+    isAdmin?: boolean;
+    userType?: string[];
+    expiresIn?: number;
+  }): void {
     token.value = data.token;
     userId.value = data.userId;
     nickname.value = data.nickname;
     avatarUrl.value = data.avatarUrl || '';
-    if (typeof data.isCreator === 'boolean') {
-      isCreator.value = data.isCreator;
-      localStorage.setItem('is_creator', data.isCreator ? '1' : '0');
+
+    // 优先使用 userType 数组派生角色，其次使用显式布尔字段（向后兼容）
+    if (Array.isArray(data.userType)) {
+      const creator = data.userType.includes('creator') || data.userType.includes('admin');
+      const admin = data.userType.includes('admin');
+      isCreator.value = creator;
+      isAdmin.value = admin;
+      localStorage.setItem('is_creator', creator ? '1' : '0');
+      localStorage.setItem('is_admin', admin ? '1' : '0');
+    } else {
+      if (typeof data.isCreator === 'boolean') {
+        isCreator.value = data.isCreator;
+        localStorage.setItem('is_creator', data.isCreator ? '1' : '0');
+      }
+      if (typeof data.isAdmin === 'boolean') {
+        isAdmin.value = data.isAdmin;
+        localStorage.setItem('is_admin', data.isAdmin ? '1' : '0');
+      }
     }
+
     localStorage.setItem('token', data.token);
     if (data.expiresIn) {
       localStorage.setItem('token_expires_at', String(Date.now() + data.expiresIn * 1000));
@@ -43,11 +69,13 @@ export const useAuthStore = defineStore('auth', () => {
     nickname.value = '';
     avatarUrl.value = '';
     isCreator.value = false;
+    isAdmin.value = false;
     localStorage.removeItem('token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('is_creator');
+    localStorage.removeItem('is_admin');
     localStorage.removeItem('token_expires_at');
   }
 
-  return { token, userId, nickname, avatarUrl, isLoggedIn, isCreator, setAuth, logout, isTokenExpired };
+  return { token, userId, nickname, avatarUrl, isLoggedIn, isCreator, isAdmin, setAuth, logout, isTokenExpired };
 });

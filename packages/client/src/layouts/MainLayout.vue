@@ -18,6 +18,7 @@ const currentPath = computed(() => route?.path ?? '/');
 const pageTitle = computed(() => (route?.meta?.title as string) ?? '');
 const canGoBack = computed(() => shouldShowBackButton(route));
 const showCreatorEntry = computed(() => authStore.isLoggedIn && authStore.isCreator);
+const showAdminEntry = computed(() => authStore.isLoggedIn && authStore.isAdmin);
 const isInCreator = computed(() => currentPath.value.startsWith('/creator'));
 
 const desktopNavItems = [
@@ -169,6 +170,13 @@ onUnmounted(() => {
                   <SvgIcon name="icon-settings" :size="16" />
                   <span>设置</span>
                 </button>
+                <template v-if="showAdminEntry">
+                  <div class="dropdown-divider" />
+                  <button class="dropdown-item" @click="navigateTo('/admin')">
+                    <SvgIcon name="icon-npc" :size="16" />
+                    <span>管理后台</span>
+                  </button>
+                </template>
                 <div class="dropdown-divider" />
                 <button class="dropdown-item danger" @click="handleLogout">
                   <SvgIcon name="icon-logout" :size="16" />

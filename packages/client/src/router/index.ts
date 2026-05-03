@@ -6,6 +6,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean;
     requiresCreator?: boolean;
+    requiresAdmin?: boolean;
     title?: string;
     disableBack?: boolean;
     isPrimaryTab?: boolean;
@@ -123,6 +124,18 @@ const routes = [
     ],
   },
   {
+    path: '/admin',
+    component: () => import('../layouts/AdminLayout.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: '管理后台' },
+    children: [
+      { path: '', redirect: '/admin/dashboard' },
+      { path: 'dashboard', name: 'AdminDashboard', component: () => import('../views/admin/AdminDashboard.vue'), meta: { title: '后台概览' } },
+      { path: 'reports', name: 'AdminReports', component: () => import('../views/admin/AdminReports.vue'), meta: { title: '举报处理' } },
+      { path: 'reputation', name: 'AdminReputation', component: () => import('../views/admin/AdminReputation.vue'), meta: { title: '信誉审计' } },
+      { path: 'metrics', name: 'AdminMetrics', component: () => import('../views/admin/AdminMetrics.vue'), meta: { title: '运营指标' } },
+    ],
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('../views/Login.vue'),
@@ -168,6 +181,12 @@ router.beforeEach((to, _from, next) => {
   }
   if (to.meta.requiresCreator) {
     if (!authStore.isCreator) {
+      next({ name: 'Forbidden' });
+      return;
+    }
+  }
+  if (to.meta.requiresAdmin) {
+    if (!authStore.isAdmin) {
       next({ name: 'Forbidden' });
       return;
     }

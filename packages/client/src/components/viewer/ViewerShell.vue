@@ -100,13 +100,14 @@ type PermLevel = 'guest' | 'acquired' | 'author' | 'admin';
 const permLevel = ref<PermLevel>('guest');
 
 function detectPermLevel(data: AssetData): PermLevel {
+  // 管理员优先（可查看任意内容并执行审核操作）
+  if (authStore.isAdmin) return 'admin';
   // 作者本人
   if (authStore.userId && data.author_id === authStore.userId) return 'author';
   // 服务端已注入 is_owned（购买/免费/作者均为 true）
   if (data.is_owned) return 'acquired';
   // 未登录且免费内容仍视为 acquired
   if (!authStore.isLoggedIn && (data.price ?? 0) === 0) return 'acquired';
-  // TODO: 管理员判断：需后端在 /api/auth/me 返回 user_type 并写入 authStore
   return 'guest';
 }
 
