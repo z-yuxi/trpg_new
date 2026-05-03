@@ -127,6 +127,15 @@
         <div v-else class="slash-empty">未找到实体</div>
       </div>
     </Transition>
+
+    <!-- 版本快照时间线 -->
+    <SnapshotTimeline
+      v-if="snapshots.length > 0 || snapshotLoading"
+      :snapshots="snapshots"
+      :loading="snapshotLoading"
+      :rolling="snapshotRolling"
+      @rollback="handleRollbackSnapshot"
+    />
   </div>
 </template>
 
@@ -159,9 +168,10 @@ import { PunctuationPairExtension } from './extensions/PunctuationPairExtension'
 import { Extension } from '@tiptap/core';
 import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
 import { checkText, type CheckTextIssue } from '../../api/ai';
-import { rollbackModuleToSnapshot } from '../../api/modules';
+import { rollbackModuleToSnapshot, getModuleSnapshots, type ModuleSnapshot } from '../../api/modules';
 import AiProofreadPanel from '../ai/AiProofreadPanel.vue';
 import { createProofreadDecorationPlugin, proofreadDecorationKey } from '../ai/ProofreadDecorationPlugin';
+import SnapshotTimeline from './SnapshotTimeline.vue';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -283,6 +293,11 @@ watch(() => props.modelValue, (val) => {
   if (JSON.stringify(parsed) !== current) {
     editor.value.commands.setContent(parsed);
   }
+});
+
+// 切换模组时重新加载快照
+watch(() => props.moduleId, (newId) => {
+  if (newId) loadSnapshots();
 });
 
 // ── 工具栏 ────────────────────────────────────────────────
@@ -443,6 +458,24 @@ const aiProofreadIssues = ref<CheckTextIssue[]>([]);
 const aiProofreadLoading = ref(false);
 const aiProofreadAccepted = ref<Set<number>>(new Set());
 
+// ── 版本快照（Snapshots）────────────────────
+const snapshots = ref<ModuleSnapshot[]>([]);
+const snapshotLoading = ref(false);
+const snapshotRolling = ref<string | null>(null);
+
+async function loadSnapshots() {
+  if (!props.moduleId) return;
+  snapshotLoading.value = true;
+  try {
+    const res = await getModuleSnapshots(props.moduleId);
+    snapshots.value = res.data ?? [];
+  } catch {
+    snapshots.value = [];
+  } finally {
+    snapshotLoading.value = false;
+  }
+}
+
 async function handleCheckText() {
   if (!editor.value) return;
   aiProofreadLoading.value = true;
@@ -551,14 +584,19 @@ function handleAcceptAllProofread() {
 
 async function handleRollbackSnapshot(snapshotId: string) {
   if (!props.moduleId) return;
+  snapshotRolling.value = snapshotId;
   try {
     const res = await rollbackModuleToSnapshot(props.moduleId, snapshotId);
     if (res.data?.content) {
       const parsed = JSON.parse(res.data.content as string);
       editor.value?.commands.setContent(parsed);
     }
+    // 重新加载快照列表（回滚会产生新快照）
+    await loadSnapshots();
   } catch (err: any) {
     console.error('回滚失败:', err?.message ?? 'Unknown error');
+  } finally {
+    snapshotRolling.value = null;
   }
 }
 
@@ -659,6 +697,8 @@ onMounted(() => {
   document.addEventListener('keyup', handleKeyup);
   document.addEventListener('keydown', handleGlobalKeydown);
   scheduleToolbarFade();
+  // 初始加载快照
+  loadSnapshots();
 });
 
 onBeforeUnmount(() => {
