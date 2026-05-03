@@ -12,8 +12,7 @@ const navItems = [
   { path: '/admin/reports',    icon: 'icon-list',  label: '举报处理' },
   { path: '/admin/content',    icon: 'icon-book',  label: '内容审核' },
   { path: '/admin/reputation', icon: 'icon-star',  label: '信誉审计' },
-  { path: '/admin/metrics',    icon: 'icon-dice',  label: '运营指标' },
-];
+  { path: '/admin/metrics',    icon: 'icon-dice',  label: '运营指标' },  { path: '/admin/ai',      icon: 'icon-sparkle', label: 'AI 监控' },];
 
 function isActive(path: string) {
   return route.path.startsWith(path);

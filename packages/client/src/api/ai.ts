@@ -20,6 +20,10 @@ export function getAiTasks(limit = 30): Promise<{ tasks: AiTask[] }> {
   return api.get(`/ai/tasks?limit=${limit}`);
 }
 
+export function retryAiTask(taskId: string): Promise<{ ok: boolean; task_id: string }> {
+  return api.post(`/ai/tasks/${taskId}/retry`, {});
+}
+
 export function getAiQuota(): Promise<{
   month: string;
   used: Partial<Record<AiTaskType, number>>;

@@ -120,6 +120,13 @@ export async function enqueueAiTask(
   data: Omit<AiJobData, 'taskId'>,
 ): Promise<string> {
   const taskId = generateId();
-  await getAiQueue().add('ai-task', { ...data, taskId });
+  await getAiQueue().add('ai-task', { ...data, taskId }, { jobId: taskId });
   return taskId;
+}
+
+/**
+ * 暴露队列实例，供重试端点使用。
+ */
+export function getAiQueueInstance(): Queue<AiJobData> {
+  return getAiQueue();
 }

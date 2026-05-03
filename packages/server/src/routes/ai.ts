@@ -9,11 +9,12 @@
  */
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
+import { Job } from 'bullmq';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth';
 import { checkAiQuota } from '../middleware/ai-quota';
 import { callAI } from '../services/ai-service';
-import { enqueueAiTask } from '../queue/ai-queue';
+import { enqueueAiTask, getAiQueueInstance } from '../queue/ai-queue';
 import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 import type { TaskType } from '../services/ai-service';
@@ -180,6 +181,40 @@ router.get('/tasks', async (req, res) => {
     .select('id', 'task_type', 'status', 'input_tokens', 'output_tokens', 'duration_ms', 'created_at');
 
   res.json({ tasks });
+});
+
+// ── POST /api/ai/tasks/:id/retry — 失败任务重试 ──────────────────────────────
+router.post('/tasks/:id/retry', async (req, res) => {
+  const taskId = req.params['id'];
+
+  // 确认是当前用户且任务状态为 failed
+  const task = await db('ai_usage_log')
+    .where({ id: taskId, user_id: req.user!.id, status: 'failed' })
+    .first();
+
+  if (!task) {
+    res.status(404).json({ error: 'NOT_FOUND', message: '未找到可重试的失败任务' });
+    return;
+  }
+
+  try {
+    // BullMQ 按 job id 取回 job 对象并重试（将 failed → waiting）
+    const queue = getAiQueueInstance();
+    const job = await Job.fromId(queue, taskId);
+    if (!job) {
+      res.status(409).json({ error: 'JOB_EXPIRED', message: '任务已过期，无法重试，请重新发起' });
+      return;
+    }
+
+    await job.retry('failed');
+    await db('ai_usage_log').where({ id: taskId }).update({ status: 'queued' });
+
+    res.json({ ok: true, task_id: taskId });
+  } catch (err: unknown) {
+    console.error('[ai:retry]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, '重试失败');
+    res.status(500).json({ error: 'RETRY_FAILED', message });
+  }
 });
 
 export default router;

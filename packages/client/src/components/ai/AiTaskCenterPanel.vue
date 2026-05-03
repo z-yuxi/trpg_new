@@ -9,7 +9,7 @@
  *   - 成功的 import_module 任务可点击「查看结果」重新打开实体审阅对话框
  */
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { getAiTasks, type AiTask } from '../../api/ai';
+import { getAiTasks, retryAiTask, type AiTask } from '../../api/ai';
 import { socketClient } from '../../socket/socket-client';
 
 const emit = defineEmits<{
@@ -99,6 +99,30 @@ function timeAgo(isoStr: string): string {
 // 统计：排队中 + 失败数（用于外部角标）
 const pendingCount = computed(() => tasks.value.filter((t) => t.status === 'queued').length);
 const failedCount  = computed(() => tasks.value.filter((t) => t.status === 'failed').length);
+
+// ── 重试失败任务 ─────────────────────────────────────────
+const retryingIds = ref<Set<string>>(new Set());
+
+async function retryTask(taskId: string) {
+  if (retryingIds.value.has(taskId)) return;
+  retryingIds.value = new Set([...retryingIds.value, taskId]);
+  try {
+    await retryAiTask(taskId);
+    // 乐观更新状态
+    const idx = tasks.value.findIndex((t) => t.id === taskId);
+    if (idx >= 0) {
+      tasks.value[idx] = { ...tasks.value[idx], status: 'queued', errorMsg: undefined };
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '重试失败';
+    const idx = tasks.value.findIndex((t) => t.id === taskId);
+    if (idx >= 0) {
+      tasks.value[idx] = { ...tasks.value[idx], errorMsg: msg };
+    }
+  } finally {
+    retryingIds.value = new Set([...retryingIds.value].filter((id) => id !== taskId));
+  }
+}
 </script>
 
 <template>
@@ -145,9 +169,16 @@ const failedCount  = computed(() => tasks.value.filter((t) => t.status === 'fail
                 <span class="atc-time">{{ timeAgo(task.created_at) }}</span>
               </div>
 
-              <!-- 失败原因 -->
-              <div v-if="task.status === 'failed' && task.errorMsg" class="atc-error-msg">
-                {{ task.errorMsg }}
+              <!-- 失败原因 + 重试 -->
+              <div v-if="task.status === 'failed'" class="atc-error-row">
+                <span v-if="task.errorMsg" class="atc-error-msg">{{ task.errorMsg }}</span>
+                <button
+                  class="atc-retry-btn"
+                  :disabled="retryingIds.has(task.id)"
+                  @click="retryTask(task.id)"
+                >
+                  {{ retryingIds.has(task.id) ? '重试中...' : '↺ 重试' }}
+                </button>
               </div>
 
               <!-- Token 用量（成功时显示） -->
@@ -241,11 +272,23 @@ const failedCount  = computed(() => tasks.value.filter((t) => t.status === 'fail
 .atc-time {
   font-size: 11px; color: var(--color-text-muted, #aaa); white-space: nowrap;
 }
+.atc-error-row {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 4px;
+}
 .atc-error-msg {
   font-size: 12px; color: #dc2626;
   background: #fee2e2; border-radius: 4px;
-  padding: 4px 8px; margin-bottom: 4px;
+  padding: 4px 8px; flex: 1;
   word-break: break-word;
+}
+.atc-retry-btn {
+  flex-shrink: 0;
+  font-size: 12px; padding: 3px 10px;
+  border: 1px solid #dc2626; border-radius: 4px;
+  background: none; color: #dc2626; cursor: pointer;
+  white-space: nowrap;
+  &:hover:not(:disabled) { background: #fee2e2; }
+  &:disabled { opacity: .5; cursor: default; }
 }
 .atc-tokens {
   font-size: 11px; color: var(--color-text-muted, #aaa);

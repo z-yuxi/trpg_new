@@ -197,6 +197,67 @@ export default router;
 
 // ── 内容审核路由（模组 & 规则包）已在此路由器中注册，挂载路径 /admin ──
 
+// ── GET /admin/ai/stats — AI 使用情况运营统计 ─────────────────────────────────
+
+router.get(
+  '/ai/stats',
+  authMiddleware,
+  requireAdmin,
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      // 近 30 天每天每任务类型的调用量与成功/失败分布
+      const daily = await db('ai_usage_log')
+        .select(
+          db.raw("strftime('%Y-%m-%d', created_at) as day"),
+          'task_type',
+          'status',
+          db.raw('count(*) as count'),
+        )
+        .where('created_at', '>=', db.raw("datetime('now', '-30 days')"))
+        .groupBy('day', 'task_type', 'status')
+        .orderBy('day', 'desc');
+
+      // 近 30 天 Token 消耗总量（按任务类型）
+      const tokenTotals = await db('ai_usage_log')
+        .select('task_type')
+        .sum('input_tokens as total_input')
+        .sum('output_tokens as total_output')
+        .where('created_at', '>=', db.raw("datetime('now', '-30 days')"))
+        .groupBy('task_type');
+
+      // 近 30 天 Top 用户（按调用次数，匿名化：只返回 user_id 前 8 位）
+      const topUsers = (await db('ai_usage_log')
+        .select(db.raw("substr(user_id, 1, 8) as uid_prefix"), 'task_type')
+        .count('id as count')
+        .where('created_at', '>=', db.raw("datetime('now', '-30 days')"))
+        .groupBy('user_id', 'task_type')
+        .orderBy('count', 'desc')
+        .limit(20)) as Array<{ uid_prefix: string; task_type: string; count: number | string }>;
+
+      // 整体汇总：总调用数、总成功数、总失败数
+      const summary = await db('ai_usage_log')
+        .select('status')
+        .count('id as count')
+        .where('created_at', '>=', db.raw("datetime('now', '-30 days')"))
+        .groupBy('status');
+
+      res.json({
+        daily,
+        token_totals: tokenTotals,
+        top_users: topUsers.map((r) => ({
+          uid_prefix: r.uid_prefix,
+          task_type: r.task_type,
+          count: Number(r.count),
+        })),
+        summary,
+      });
+    } catch (err: unknown) {
+      const message = safeErrorMessage(err, '获取 AI 统计失败');
+      res.status(500).json({ error: 'INTERNAL', message });
+    }
+  },
+);
+
 /**
  * POST /admin/content/modules/:id/approve
  * 强制审核通过（reviewing / public_notice → public）

@@ -140,6 +140,7 @@ const routes = [
       { path: 'content', name: 'AdminContent', component: () => import('../views/admin/AdminContent.vue'), meta: { title: '内容审核' } },
       { path: 'reputation', name: 'AdminReputation', component: () => import('../views/admin/AdminReputation.vue'), meta: { title: '信誉审计' } },
       { path: 'metrics', name: 'AdminMetrics', component: () => import('../views/admin/AdminMetrics.vue'), meta: { title: '运营指标' } },
+      { path: 'ai', name: 'AdminAi', component: () => import('../views/admin/AdminAi.vue'), meta: { title: 'AI 监控' } },
     ],
   },
   {
