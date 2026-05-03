@@ -71,6 +71,58 @@ router.get('/mine', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/modules/announcements — 公示处列表（public_notice 与 reviewing 状态）
+// 无需认证，公开可见；用于探索页「公示处」Tab
+router.get('/announcements', async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query['limit'] ?? 50)));
+    const rows = await db('modules as m')
+      .leftJoin('users as u', 'u.id', 'm.author_id')
+      .leftJoin('rulesets as r', 'r.id', 'm.ruleset_id')
+      .whereIn('m.status', ['public_notice', 'reviewing'])
+      .select(
+        'm.id', 'm.name', 'm.description', 'm.status', 'm.cover_url',
+        'm.author_id', 'm.price', 'm.created_at', 'm.updated_at', 'm.public_notice_end_at',
+        'u.nickname as author_name', 'r.name as ruleset_name',
+      )
+      .orderBy('m.created_at', 'desc')
+      .limit(limit);
+
+    const rulesetRows = await db('rulesets as r')
+      .leftJoin('users as u', 'u.id', 'r.author_id')
+      .whereIn('r.status', ['reviewing'])
+      .select('r.id', 'r.name', 'r.description', 'r.status', 'r.author_id', 'r.created_at', 'u.nickname as author_name')
+      .orderBy('r.created_at', 'desc')
+      .limit(limit);
+
+    res.json({
+      modules: rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description ?? '',
+        status: row.status,
+        cover_url: row.cover_url ?? null,
+        author_id: row.author_id,
+        author: row.author_name ?? '佚名',
+        price: Number(row.price ?? 0),
+        public_notice_end_at: row.public_notice_end_at ?? null,
+        type: 'module',
+      })),
+      rulesets: rulesetRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description ?? '',
+        status: row.status,
+        author_id: row.author_id,
+        author: row.author_name ?? '佚名',
+        type: 'ruleset',
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  }
+});
+
 // 获取单个模组（含 content）
 router.get('/:id', optionalAuthMiddleware, async (req, res) => {
   try {

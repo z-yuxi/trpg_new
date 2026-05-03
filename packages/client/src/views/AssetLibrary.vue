@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import TTag from '../components/base/TTag.vue';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
@@ -8,6 +8,7 @@ import QuickCreateCampaignDialog from '../components/campaign/QuickCreateCampaig
 import { discoverRulesets, discoverModules } from '../api/assets';
 import { listMyModules } from '../api/modules';
 import { listMyRulesets } from '../api/rulesets';
+import { api } from '../utils/api';
 import { useAuthStore } from '../stores/auth-store';
 import { useRouter } from 'vue-router';
 
@@ -36,6 +37,18 @@ interface Module {
   rating?: number;
   download_count?: number;
   ruleset_name?: string;
+}
+interface AnnouncementItem {
+  id: string;
+  name: string;
+  title?: string;
+  description: string;
+  status: string;
+  author: string;
+  author_id?: string;
+  price?: number;
+  public_notice_end_at?: string | null;
+  type: 'module' | 'ruleset';
 }
 
 /* ========== 状态 ========== */
@@ -68,17 +81,42 @@ const modules = ref<Module[]>([]);
 const myModules = ref<Module[]>([]);
 const myRulesets = ref<Ruleset[]>([]);
 
+// 公示处数据（懒加载）
+const announcementItems = ref<AnnouncementItem[]>([]);
+const announcementLoading = ref(false);
+const announcementLoaded = ref(false);
+
 function applySearch() {
   searchKeyword.value = searchInput.value.trim();
 }
 
 /* 筛选条件 */
-const filterRuleset  = ref('');
-const filterTheme    = ref('');
+const filterRuleset   = ref('');
 const filterDifficulty = ref('');
-const filterPlayers  = ref('');
-const filterStyle    = ref('');
-const filterSort     = ref('hot');
+const filterPlayers   = ref('');
+const filterStyle     = ref('');
+const filterSort      = ref('hot');
+
+/* ========== 动态筛选选项 ========== */
+// 从已加载规则包生成规则包筛选选项
+const rulesetOptions = computed(() => {
+  const seen = new Set<string>();
+  const opts: { label: string; value: string }[] = [];
+  for (const rs of rulesets.value) {
+    if (rs.name && !seen.has(rs.name)) {
+      seen.add(rs.name);
+      opts.push({ label: rs.name, value: rs.name });
+    }
+  }
+  // 也从模组的 ruleset_name 字段补充
+  for (const m of modules.value) {
+    if (m.ruleset_name && !seen.has(m.ruleset_name)) {
+      seen.add(m.ruleset_name);
+      opts.push({ label: m.ruleset_name, value: m.ruleset_name });
+    }
+  }
+  return opts.sort((a, b) => a.label.localeCompare(b.label, 'zh'));
+});
 
 /* ========== 加载数据 ========== */
 onMounted(async () => {
@@ -105,14 +143,33 @@ onMounted(async () => {
   }
 });
 
+// 切换到公示处 Tab 时懒加载
+watch(activeTab, async (tab) => {
+  if (tab === 'announcements' && !announcementLoaded.value) {
+    announcementLoading.value = true;
+    try {
+      const res = await api.get<{ modules: AnnouncementItem[]; rulesets: AnnouncementItem[] }>('/modules/announcements');
+      announcementItems.value = [
+        ...(res.modules ?? []),
+        ...(res.rulesets ?? []),
+      ];
+      announcementLoaded.value = true;
+    } catch {
+      // 静默失败，保持空列表
+    } finally {
+      announcementLoading.value = false;
+    }
+  }
+});
+
 /* ========== 本地过滤 ========== */
 const filteredModules = computed(() => {
   let list = modules.value;
   const kw = searchKeyword.value.toLowerCase();
   if (kw) list = list.filter(m => (m.title ?? m.name ?? '').toLowerCase().includes(kw));
-  if (filterRuleset.value)   list = list.filter(m => m.ruleset_name === filterRuleset.value);
+  if (filterRuleset.value)    list = list.filter(m => m.ruleset_name === filterRuleset.value);
   if (filterDifficulty.value) list = list.filter(m => m.difficulty === filterDifficulty.value);
-  if (filterStyle.value)     list = list.filter(m => m.style === filterStyle.value);
+  if (filterStyle.value)      list = list.filter(m => m.style === filterStyle.value);
   if (filterPlayers.value) {
     const n = parseInt(filterPlayers.value);
     list = list.filter(m => (!m.min_players || m.min_players <= n) && (!m.max_players || m.max_players >= n));
@@ -125,17 +182,6 @@ const filteredRulesets = computed(() => {
   const kw = searchKeyword.value.toLowerCase();
   if (kw) list = list.filter(r => r.name.toLowerCase().includes(kw));
   return list;
-});
-
-// 公示处：status=review 的模组 + 规则包（使用已加载数据，避免额外请求）
-const reviewItems = computed(() => {
-  const mods = modules.value
-    .filter(m => (m as unknown as { status?: string }).status === 'review')
-    .map(m => ({ id: m.id, title: m.title ?? m.name, name: m.name ?? m.title ?? '', author: m.author, description: '', type: 'module' as const }));
-  const rss = rulesets.value
-    .filter(r => r.status === 'review')
-    .map(r => ({ id: r.id, title: r.name, name: r.name, author: r.author, description: r.description ?? '', type: 'ruleset' as const }));
-  return [...mods, ...rss];
 });
 
 /* ========== 工具 ========== */
@@ -151,6 +197,9 @@ function priceLabel(price?: number) {
 function ratingLabel(r?: number) {
   if (!r) return '—';
   return r.toFixed(1);
+}
+function statusLabel(s: string) {
+  return { public_notice: '公示中', reviewing: '审核中' }[s] ?? s;
 }
 </script>
 
@@ -185,8 +234,10 @@ function ratingLabel(r?: number) {
         <TButton type="secondary" size="sm" @click="applySearch">搜索</TButton>
       </div>
       <template v-if="activeTab === 'modules'">
-        <select v-model="filterRuleset"   class="filter-select"><option value="">全部规则</option></select>
-        <select v-model="filterTheme"     class="filter-select"><option value="">全部题材</option></select>
+        <select v-model="filterRuleset" class="filter-select">
+          <option value="">全部规则</option>
+          <option v-for="opt in rulesetOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
         <select v-model="filterDifficulty" class="filter-select">
           <option value="">全部难度</option>
           <option value="easy">入门</option>
@@ -226,7 +277,7 @@ function ratingLabel(r?: number) {
         icon-name=""
         illustration-name="illust-empty"
         title="暂无模组"
-        description="模组接口尚未开放，敬请期待。"
+        description="当前还没有已发布的模组，或筛选条件无匹配结果。"
       />
       <div v-else class="card-grid">
         <div v-for="m in filteredModules" :key="m.id" class="module-card">
@@ -333,24 +384,27 @@ function ratingLabel(r?: number) {
         <h2 class="stories-title">公示处</h2>
         <p class="stories-desc">处于审核公示期（7天）的模组与规则包，欢迎社区提交意见。</p>
       </div>
-      <!-- 从 modules/rulesets 里筛选 status=review 的条目 -->
-      <div v-if="reviewItems.length === 0" class="review-empty">
+      <div v-if="announcementLoading" class="empty-state">加载中...</div>
+      <div v-else-if="announcementItems.length === 0" class="review-empty">
         <EmptyState
           title="当前公示栏为空"
           description="暂无处于审核期的内容，创作者发布后将在此展示 7 天。"
         />
       </div>
       <div v-else class="card-grid">
-        <div v-for="item in reviewItems" :key="item.id" class="ruleset-card">
+        <div v-for="item in announcementItems" :key="item.id" class="ruleset-card">
           <div class="ruleset-header">
-            <div class="ruleset-name">{{ item.title ?? item.name }}</div>
-            <TTag size="sm" color="default">公示中</TTag>
+            <div class="ruleset-name">{{ item.name }}</div>
+            <TTag size="sm" color="default">{{ statusLabel(item.status) }}</TTag>
           </div>
           <div class="ruleset-meta">
             <span class="meta-item">{{ item.author ?? '佚名' }}</span>
             <span class="meta-item">{{ item.type === 'module' ? '模组' : '规则包' }}</span>
           </div>
           <p class="ruleset-desc">{{ item.description || '暂无描述' }}</p>
+          <p v-if="item.public_notice_end_at" class="hint-text" style="margin-top: var(--space-2); font-size: var(--text-xs); color: var(--text-muted);">
+            公示截止：{{ new Date(item.public_notice_end_at).toLocaleDateString() }}
+          </p>
         </div>
       </div>
     </template>
