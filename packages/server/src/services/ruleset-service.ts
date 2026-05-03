@@ -349,7 +349,8 @@ export class RulesetService {
 
     // 注入角色数据（优先 mock_context，其次真实角色）
     const needsCharacterData = injectedGraph.nodes.some((n) => n.atom_type === 'character_skill_reader');
-    if (needsCharacterData) {
+    const needsFormulaVars = injectedGraph.nodes.some((n) => n.atom_type === 'formula_eval');
+    if (needsCharacterData || needsFormulaVars) {
       let characterData: { attributes: Record<string, number>; skills: Record<string, number>; resources: Record<string, { current: number; max: number }> } | null = null;
 
       if (body.mock_context) {
@@ -370,7 +371,17 @@ export class RulesetService {
       }
 
       if (characterData) {
-        injectedGraph = injectParamsIntoGraph(injectedGraph, { character_data: characterData });
+        if (needsCharacterData) {
+          injectedGraph = injectParamsIntoGraph(injectedGraph, { character_data: characterData });
+        }
+        if (needsFormulaVars) {
+          // formula_eval 需要平铺的属性+技能字典作为 variables
+          const formulaVariables: Record<string, number> = {
+            ...characterData.attributes,
+            ...characterData.skills,
+          };
+          injectedGraph = injectParamsIntoGraph(injectedGraph, { variables: formulaVariables });
+        }
       }
     }
 
@@ -739,6 +750,14 @@ export class RulesetService {
     // 4. 注入角色数据
     if (mock_context) {
       injectedGraph = injectParamsIntoGraph(injectedGraph, { character_data: mock_context });
+      // formula_eval 需要平铺属性+技能作为 variables
+      if (injectedGraph.nodes.some((n) => n.atom_type === 'formula_eval')) {
+        const formulaVariables: Record<string, number> = {
+          ...mock_context.attributes,
+          ...mock_context.skills,
+        };
+        injectedGraph = injectParamsIntoGraph(injectedGraph, { variables: formulaVariables });
+      }
     }
 
     // 5. 执行

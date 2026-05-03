@@ -211,8 +211,9 @@ function validateThresholdCheck(
   }
   if (params.target_source === 'fixed' && params.target_fixed == null) {
     errors.push({ path: `${prefix}.target_fixed`, code: 'MISSING_FIELD', message: "target_source='fixed' 时 target_fixed 是必填数值" });
-  }
-  if (!params.success_direction) {
+  }  if (params.target_source === 'formula' && !params.target_formula) {
+    errors.push({ path: `${prefix}.target_formula`, code: 'MISSING_FIELD', message: "target_source='formula' 时 target_formula 是必填字符串" });
+  }  if (!params.success_direction) {
     errors.push({ path: `${prefix}.success_direction`, code: 'MISSING_FIELD', message: '`success_direction` 是必填字段（lte / gte）' });
   }
   if (!params.tiers || !Array.isArray(params.tiers) || params.tiers.length === 0) {
@@ -236,7 +237,8 @@ function validateThresholdCheck(
  * 简化约定：
  *   - target_source='skill' / 'attribute'：生成 character_skill_reader 节点
  *   - target_source='fixed'：target 直接注入为 static
- *   - target_source='formula'：暂用 static=0 占位（Formula 编译阶段后补）
+ *   - target_source='formula'：生成 formula_eval 节点，formula 来自 target_formula 字段，
+ *     variables 由运行时注入角色属性+技能的平铺字典
  *   - tiers 序列化为 JSON 字符串传入 threshold_compare（threshold_compare 原子现有实现
  *     只做单比较，编译器在此输出兼容结构，执行时通过 conditional_branch 选择 tier）
  *
@@ -272,17 +274,24 @@ function compileThresholdCheck(recipeId: string, params: ThresholdCheckParams): 
         // character_data 在执行时由 command-resolver 注入
       },
     });
-  } else {
-    // fixed / formula：用 static 值；formula 先用 0 占位
+  } else if (params.target_source === 'fixed') {
     targetNodeId = id('target_static');
     nodes.push({
       node_id: targetNodeId,
       atom_type: 'result_collector',
       inputs: {
-        entries: {
-          type: 'static',
-          value: { value: params.target_source === 'fixed' ? (params.target_fixed ?? 0) : 0 },
-        },
+        entries: { type: 'static', value: { value: params.target_fixed ?? 0 } },
+      },
+    });
+  } else {
+    // formula：使用 formula_eval 原子；variables 将由运行时注入（角色属性+技能平铺后覆盖）
+    targetNodeId = id('target_formula');
+    nodes.push({
+      node_id: targetNodeId,
+      atom_type: 'formula_eval',
+      inputs: {
+        formula: { type: 'static', value: params.target_formula ?? '' },
+        variables: { type: 'static', value: {} }, // 运行时由 character_data 注入覆盖
       },
     });
   }
@@ -362,7 +371,7 @@ function validateResourceModify(
  * 约定：
  *   - delta.mode='dice'   → 先 dice_roll，再把 total 传给 resource_modify 的 delta
  *   - delta.mode='fixed'  → static 直接传入
- *   - delta.mode='formula'→ 暂时用 static=0 占位
+ *   - delta.mode='formula'→ 使用 formula_eval 原子，expression 作为公式，variables 由运行时注入
  *   - direction='decrease' → delta 传负值
  *   - current_value / max_value 在运行时由 command-resolver 读取角色资源注入
  */
@@ -383,16 +392,26 @@ function compileResourceModify(recipeId: string, params: ResourceModifyParams): 
         expression: { type: 'static', value: params.delta.expression! },
       },
     });
-  } else {
-    // fixed 或 formula（formula 占位为 0）
-    const fixedValue = params.delta.mode === 'fixed' ? (params.delta.value ?? 0) : 0;
+  } else if (params.delta.mode === 'fixed') {
     deltaNodeId = id('delta_static');
     deltaOutputKey = 'value';
     nodes.push({
       node_id: deltaNodeId,
       atom_type: 'result_collector',
       inputs: {
-        entries: { type: 'static', value: { value: fixedValue } },
+        entries: { type: 'static', value: { value: params.delta.value ?? 0 } },
+      },
+    });
+  } else {
+    // formula：使用 formula_eval 原子；variables 由运行时注入
+    deltaNodeId = id('delta_formula');
+    deltaOutputKey = 'value';
+    nodes.push({
+      node_id: deltaNodeId,
+      atom_type: 'formula_eval',
+      inputs: {
+        formula: { type: 'static', value: params.delta.expression ?? '' },
+        variables: { type: 'static', value: {} }, // 运行时由 character_data 注入覆盖
       },
     });
   }

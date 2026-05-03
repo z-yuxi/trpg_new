@@ -55,7 +55,7 @@ const currentRecipeSource = ref<RulesetRecipeSource | null>(null);
 
 function switchMode(to: EditorMode) {
   if (to === 'l3' && editorMode.value === 'l1') {
-    const ok = confirm('切换到可视化画布编辑？当前表单配置将自动转换为节点图。');
+    const ok = confirm('切换到节点画布（兼容模式）？该模式主要用于迁移旧规则集，新规则建议使用 Recipe 编辑。当前表单配置将自动转换为节点图。');
     if (!ok) return;
     // L1 → L3：将当前表单配置转换为节点图
     const result = convertL1ToL3({
@@ -583,8 +583,8 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
       <!-- L1/L3 模式切换标签 -->
       <div class="mode-tabs">
         <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')"><SvgIcon name="icon-list" :size="12" /> 表单 (L1)</button>
-        <button class="mode-tab" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')"><SvgIcon name="icon-grid" :size="12" /> 画布 (L3)</button>
-        <button class="mode-tab" :class="{ active: editorMode === 'recipe' }" @click="editorMode = 'recipe'"><SvgIcon name="icon-grid" :size="12" /> Recipe</button>
+        <button class="mode-tab mode-tab--recommended" :class="{ active: editorMode === 'recipe' }" @click="switchMode('recipe')"><SvgIcon name="icon-grid" :size="12" /> Recipe <span class="mode-tab-badge">推荐</span></button>
+        <button class="mode-tab mode-tab--compat" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')" title="节点画布是兼容/迁移工具，新规则推荐使用 Recipe 编辑"><SvgIcon name="icon-grid" :size="12" /> 画布 (兼容)</button>
         <button class="mode-tab" :class="{ active: editorMode === 'versions' }" @click="editorMode = 'versions'"><SvgIcon name="icon-history" :size="12" /> 版本</button>
       </div>
       <div class="header-right">
@@ -1060,6 +1060,11 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .mode-tabs { display: flex; gap: 2px; background: var(--surface-base, #f0f0f0); border-radius: 6px; padding: 2px; }
 .mode-tab { padding: 4px 14px; border: none; background: none; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: background 0.12s, color 0.12s; }
 .mode-tab.active { background: var(--surface-card); color: var(--text-primary); font-weight: 600; }
+.mode-tab--recommended { font-weight: 500; }
+.mode-tab--compat { opacity: 0.72; }
+.mode-tab--compat:hover { opacity: 1; }
+.mode-tab-badge { display: inline-block; margin-left: 3px; padding: 0 4px; font-size: 10px; line-height: 16px; background: var(--accent-primary, #6366f1); color: #fff; border-radius: 3px; vertical-align: middle; }
+.mode-tab.active .mode-tab-badge { background: var(--accent-primary-muted, #a5b4fc); color: var(--text-primary); }
 .editor-body { max-width: 880px; display: flex; flex-direction: column; gap: var(--space-5); }
 .editor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
 .back-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: var(--text-sm); padding: 0; }
