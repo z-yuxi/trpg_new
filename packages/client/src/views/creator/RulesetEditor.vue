@@ -2,7 +2,6 @@
 import { computed, ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import RuleCanvas from '../../components/rule-canvas/RuleCanvas.vue';
 import RecipeEditor from '../../components/rule-canvas/RecipeEditor.vue';
 import VersionPanel from '../../components/VersionPanel.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
@@ -10,12 +9,9 @@ import CharacterCardSchemaEditor from '../../components/rule-canvas/CharacterCar
 import RecruitmentFieldsEditor from '../../components/RecruitmentFieldsEditor.vue';
 import CommandOverridesEditor from '../../components/CommandOverridesEditor.vue';
 import { exportRulesetYaml, importRulesetYaml, pickYamlFile } from '../../utils/ruleset-yaml';
-import { convertL1ToL3 } from '../../utils/l1-to-l3-converter';
-import { detectL3ToL1 } from '../../utils/l3-to-l1-detector';
-import { deserializeFromGraph } from '../../utils/canvas-serializer';
 import { api, getToken } from '../../utils/api';
 import { getRuleset, createRuleset as apiCreateRuleset, updateRuleset, submitRulesetReview, deprecateRuleset, executeRecipe } from '../../api/rulesets';
-import type { CommandGraph, RulesetRecipeSource, ReaderSettings } from '@trpg/shared';
+import type { RulesetRecipeSource, ReaderSettings } from '@trpg/shared';
 import { READER_SETTINGS_PRESETS } from '@trpg/shared';
 
 interface SchemaField {
@@ -46,63 +42,12 @@ const rulesetId = route.params.id as string;
 const isNew = rulesetId === 'new';
 
 // ── 编辑模式 ─────────────────────────────────────────────────────────────────
-type EditorMode = 'l1' | 'l3' | 'recipe' | 'versions';
-const editorMode = ref<EditorMode>('l1');
-/** L3 画布当前的图数据（保存时写入后端） */
-const currentGraph = ref<CommandGraph | null>(null);
+type EditorMode = 'l1' | 'recipe' | 'versions';
+const editorMode = ref<EditorMode>('recipe');
 /** Recipe 格式数据 */
 const currentRecipeSource = ref<RulesetRecipeSource | null>(null);
 
 function switchMode(to: EditorMode) {
-  if (to === 'l3' && editorMode.value === 'l1') {
-    const ok = confirm('切换到节点画布（兼容模式）？该模式主要用于迁移旧规则集，新规则建议使用 Recipe 编辑。当前表单配置将自动转换为节点图。');
-    if (!ok) return;
-    // L1 → L3：将当前表单配置转换为节点图
-    const result = convertL1ToL3({
-      check_mode: checkMode.value,
-      default_dice: defaultDice.value,
-      success_formula: successFormula.value,
-      crit_success_max: critSuccessMax.value,
-      crit_fail_min: critFailMin.value,
-      bonus_dice: bonusDice.value,
-      difficulty_levels: difficultyLevels.value,
-      resources: resources.value,
-      attributes: attributes.value,
-      supported_commands: supportedCommands.value,
-    });
-    // 若只有 currentGraph 为空或节点更少时才覆盖（避免覆盖用户已编辑的画布）
-    if (!currentGraph.value || currentGraph.value.nodes.length === 0) {
-      currentGraph.value = result.graph;
-    }
-    if (result.used_defaults.length > 0) {
-      ElMessage.warning(`已使用默认骰池参数，请在 L1 表单中补充骰池目标值和成功阈值后重新转换（使用了默认值：${result.used_defaults.join(', ')}）`);
-    }
-    editorMode.value = to;
-    return;
-  }
-  if (to === 'l1' && editorMode.value === 'l3' && currentGraph.value && currentGraph.value.nodes.length > 0) {
-    // L3 → L1：尝试反向检测
-    const detected = detectL3ToL1(currentGraph.value);
-    if (!detected.matched) {
-      if (detected.reason === 'empty-graph') {
-        editorMode.value = to;
-        return;
-      }
-      // 自定义图，弹出警告
-      const ok = confirm('当前节点图包含自定义逻辑，切回表单模式将不会改变表单字段（自定义部分仍会在保存时写入）。是否继续？');
-      if (!ok) return;
-    } else {
-      // 匹配成功，回填表单
-      const ex = detected.extracted;
-      if (ex.check_mode) checkMode.value = ex.check_mode;
-      if (ex.default_dice) defaultDice.value = ex.default_dice;
-      if (typeof ex.crit_success_max === 'number') critSuccessMax.value = ex.crit_success_max;
-      if (typeof ex.crit_fail_min === 'number') critFailMin.value = ex.crit_fail_min;
-      ElMessage.success('节点图已识别为标准模板，表单已同步更新');
-    }
-    editorMode.value = to;
-    return;
-  }
   editorMode.value = to;
 }
 
@@ -222,7 +167,6 @@ type CustomCommand = {
   aliases: string;        // 逗号分隔
   gm_only: boolean;
   input_mapping: CustomInputMapping[];
-  graph_json: string;     // JSON 编辑器（L3 画布后续批次实现）
 };
 
 const customCommands = ref<CustomCommand[]>([]);
@@ -235,7 +179,6 @@ function addCustomCommand() {
     aliases: '',
     gm_only: false,
     input_mapping: [],
-    graph_json: JSON.stringify({ nodes: [], output_node_id: '' }, null, 2),
   });
   expandedCmdIdx.value = customCommands.value.length - 1;
 }
@@ -346,16 +289,7 @@ async function fetchRuleset() {
           aliases: (c.aliases ?? []).join(', '),
           gm_only: c.gm_only ?? false,
           input_mapping: c.input_mapping ?? [],
-          graph_json: JSON.stringify(c.graph ?? { nodes: [], output_node_id: '' }, null, 2),
         }));
-      }
-      // 恢复 L3 图数据（从 atoms 字段推断）
-      const atoms = (rs as any).atoms;
-      if (Array.isArray(atoms) && atoms.length > 0) {
-        currentGraph.value = {
-          nodes: atoms,
-          output_node_id: atoms[atoms.length - 1]?.node_id ?? '',
-        } as CommandGraph;
       }
       // 恢复角色卡 Schema
       const schema = (rs.character_card_schema as any)?._card_schema;
@@ -374,12 +308,13 @@ async function fetchRuleset() {
       // 恢复指令覆盖
       const co = (rs as any).command_overrides;
       if (Array.isArray(co)) commandOverrides.value = co;
-      // 恢复 recipe_source
+      // 恢复 recipe_source；有 recipe_source 则进入 recipe 模式，否则默认 l1
       const recipeSource = (rs as any).recipe_source;
       if (recipeSource) {
         currentRecipeSource.value = recipeSource as RulesetRecipeSource;
-        // legacy=false 的规则集默认进入 recipe 编辑模式
-        if ((rs as any).legacy === false) editorMode.value = 'recipe';
+        editorMode.value = 'recipe';
+      } else {
+        editorMode.value = 'l1';
       }
       // 恢复叙阅器设置
       const readerSettings = (rs as any).reader_settings;
@@ -392,15 +327,10 @@ async function fetchRuleset() {
 
 onMounted(fetchRuleset);
 
-function onMerged(result: object) {
-  const merged = result as { merged_graph?: { atoms: unknown[] } };
-  if (merged?.merged_graph?.atoms) {
-    currentGraph.value = {
-      nodes: merged.merged_graph.atoms,
-      output_node_id: (merged.merged_graph.atoms[merged.merged_graph.atoms.length - 1] as any)?.node_id ?? '',
-    } as CommandGraph;
-    ElMessage.success('已应用合并结果，请切换到画布查看并保存');
-  }
+function onMerged(_result: object) {
+  // L3 画布已移除，合并结果只需重新加载规则集
+  ElMessage.success('已从上游合并，请刷新页面查看最新内容');
+  fetchRuleset();
 }
 
 // ── YAML 导出/导入 ────────────────────────────────────────────────────
@@ -452,35 +382,13 @@ async function save() {
     supported_commands: supportedCommands.value,
   };
   // 序列化自定义命令到 commands 字段
-  const serializedCustomCommands = customCommands.value.map((cmd) => {
-    let graph = { nodes: [], output_node_id: '' };
-    try { graph = JSON.parse(cmd.graph_json); } catch { /* keep empty */ }
-    return {
-      trigger: cmd.trigger,
-      description: cmd.description,
-      aliases: cmd.aliases.split(',').map((s) => s.trim()).filter(Boolean),
-      gm_only: cmd.gm_only,
-      input_mapping: cmd.input_mapping,
-      graph,
-    };
-  });
-  // 若 L3 模式有图数据，合并进 atoms/connections
-  const graphPayload = currentGraph.value && currentGraph.value.nodes.length > 0
-    ? {
-        atoms: currentGraph.value.nodes,
-        connections: currentGraph.value.nodes
-          .flatMap((n) =>
-            Object.entries(n.inputs)
-              .filter(([, v]) => (v as any).type === 'ref')
-              .map(([inputKey, v]) => ({
-                from_node: (v as any).node_id,
-                from_output: (v as any).output_key,
-                to_node: n.node_id,
-                to_input: inputKey,
-              })),
-          ),
-      }
-    : {};
+  const serializedCustomCommands = customCommands.value.map((cmd) => ({
+    trigger: cmd.trigger,
+    description: cmd.description,
+    aliases: cmd.aliases.split(',').map((s) => s.trim()).filter(Boolean),
+    gm_only: cmd.gm_only,
+    input_mapping: cmd.input_mapping,
+  }));
 
   const body = {
     name: formName.value.trim(),
@@ -525,7 +433,6 @@ async function save() {
       custom_commands: serializedCustomCommands,
       supported_commands: supportedCommands.value,
     },
-    ...graphPayload,
     reader_settings: rsDraft.value,
   };
   try {
@@ -580,11 +487,10 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
     <!-- Header -->
     <div class="editor-header">
       <button class="back-btn" @click="router.back()">← 返回工坊</button>
-      <!-- L1/L3 模式切换标签 -->
+      <!-- 模式切换标签 -->
       <div class="mode-tabs">
-        <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')"><SvgIcon name="icon-list" :size="12" /> 表单 (L1)</button>
+        <button class="mode-tab" :class="{ active: editorMode === 'l1' }" @click="switchMode('l1')"><SvgIcon name="icon-list" :size="12" /> 表单（角色卡 Schema）</button>
         <button class="mode-tab mode-tab--recommended" :class="{ active: editorMode === 'recipe' }" @click="switchMode('recipe')"><SvgIcon name="icon-grid" :size="12" /> Recipe <span class="mode-tab-badge">推荐</span></button>
-        <button class="mode-tab mode-tab--compat" :class="{ active: editorMode === 'l3' }" @click="switchMode('l3')" title="节点画布是兼容/迁移工具，新规则推荐使用 Recipe 编辑"><SvgIcon name="icon-grid" :size="12" /> 画布 (兼容)</button>
         <button class="mode-tab" :class="{ active: editorMode === 'versions' }" @click="editorMode = 'versions'"><SvgIcon name="icon-history" :size="12" /> 版本</button>
       </div>
       <div class="header-right">
@@ -604,19 +510,8 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
       </div>
     </div>
 
-    <!-- L3 可视化画布 -->
-    <div v-if="editorMode === 'l3'" class="l3-canvas-container">
-      <RuleCanvas
-        :ruleset-id="rulesetId"
-        :auth-token="getToken() ?? undefined"
-        :initial-graph="currentGraph ?? undefined"
-        @update:graph="(g) => (currentGraph = g)"
-        @save="(g) => { currentGraph = g; save(); }"
-      />
-    </div>
-
     <!-- 版本管理面板 -->
-    <div v-else-if="editorMode === 'versions'" class="versions-container">
+    <div v-if="editorMode === 'versions'" class="versions-container">
       <VersionPanel
         :ruleset-id="rulesetId"
         :auth-token="getToken() ?? ''"
@@ -858,11 +753,6 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
                 </tbody>
               </table>
             </div>
-            <!-- 执行图 JSON 编辑器（L3 画布后续批次实现） -->
-            <div class="subsection">
-              <label class="form-label">执行图 JSON（L3 画布将在后续批次提供可视化编辑）</label>
-              <textarea v-model="cmd.graph_json" class="json-editor" rows="6" spellcheck="false" />
-            </div>
           </div>
         </div>
       </section>
@@ -1037,7 +927,6 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
   .editor-header .mode-tabs,
   .save-btn, .action-btn { pointer-events: none; opacity: 0.5; }
 }
-.l3-canvas-container { flex: 1; overflow: hidden; min-height: 0; }
 .versions-container { flex: 1; overflow: auto; min-height: 0; }
 .recipe-container { flex: 1; overflow: auto; min-height: 0; padding: 16px; }
 
@@ -1061,8 +950,6 @@ function removeAttribute(i: number) { attributes.value.splice(i, 1); }
 .mode-tab { padding: 4px 14px; border: none; background: none; border-radius: 4px; cursor: pointer; font-size: 13px; color: var(--text-secondary); transition: background 0.12s, color 0.12s; }
 .mode-tab.active { background: var(--surface-card); color: var(--text-primary); font-weight: 600; }
 .mode-tab--recommended { font-weight: 500; }
-.mode-tab--compat { opacity: 0.72; }
-.mode-tab--compat:hover { opacity: 1; }
 .mode-tab-badge { display: inline-block; margin-left: 3px; padding: 0 4px; font-size: 10px; line-height: 16px; background: var(--accent-primary, #6366f1); color: #fff; border-radius: 3px; vertical-align: middle; }
 .mode-tab.active .mode-tab-badge { background: var(--accent-primary-muted, #a5b4fc); color: var(--text-primary); }
 .editor-body { max-width: 880px; display: flex; flex-direction: column; gap: var(--space-5); }

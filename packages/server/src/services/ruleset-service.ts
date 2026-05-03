@@ -254,6 +254,16 @@ export class RulesetService {
     if (data.name !== undefined) updatePayload['name'] = data.name;
     if (data.version !== undefined) updatePayload['version'] = data.version;
     if (data.description !== undefined) updatePayload['description'] = data.description;
+
+    // ── 收紧保护：已迁移到 Recipe（legacy=0）的规则集不允许再写 atoms/connections ──
+    const hasAtomUpdate = data.atoms !== undefined || data.connections !== undefined;
+    if (hasAtomUpdate && !ruleset.legacy) {
+      throw Object.assign(
+        new Error('This ruleset uses Recipe format. atoms/connections are not allowed.'),
+        { code: 'CANNOT_UPDATE_ATOMS_ON_RECIPE_RULESET' },
+      );
+    }
+
     if (data.atoms !== undefined) updatePayload['atoms'] = JSON.stringify(data.atoms);
     if (data.connections !== undefined) updatePayload['connections'] = JSON.stringify(data.connections);
     if (data.commands !== undefined) updatePayload['commands'] = JSON.stringify(data.commands);
