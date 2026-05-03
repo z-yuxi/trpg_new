@@ -17,7 +17,7 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: '举报原因无效' });
   }
 
-  const allowed_types = ['message', 'post', 'user'];
+  const allowed_types = ['message', 'post', 'user', 'module', 'ruleset'];
   if (!allowed_types.includes(content_type)) {
     return res.status(400).json({ error: '不支持的内容类型' });
   }
