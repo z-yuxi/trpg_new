@@ -23,8 +23,19 @@
         class="toolbar-btn"
         :title="blk.label"
         @click="insertBlock(blk.id)"
-      ><SvgIcon :name="blk.icon" :size="14" /></button>
+      ><SvgIcon v-if="blk.icon.startsWith('icon-')" :name="blk.icon" :size="14" /><template v-else>{{ blk.icon }}</template></button>
       <span class="toolbar-spacer" />
+      <div class="view-mode-group">
+        <button
+          v-for="mode in viewModes"
+          :key="mode.id"
+          class="toolbar-btn view-mode-btn"
+          :class="{ active: currentViewMode === mode.id }"
+          :title="mode.label"
+          @click="switchViewMode(mode.id)"
+        >{{ mode.label }}</button>
+      </div>
+      <span class="toolbar-sep" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
 
@@ -57,27 +68,63 @@
         <div v-if="filteredSlashItems.length === 0" class="slash-empty">无匹配</div>
       </div>
     </Transition>
+
+    <!-- Mention @ 菜单 -->
+    <Transition name="fade">
+      <div
+        v-if="mentionMenuVisible"
+        class="slash-menu mention-menu"
+        :style="mentionMenuStyle"
+        @mousedown.prevent
+      >
+        <div v-if="mentionLoading" class="slash-empty">搜索中…</div>
+        <template v-else-if="mentionItems.length > 0">
+          <div
+            v-for="(item, i) in mentionItems"
+            :key="item.id"
+            class="slash-item"
+            :class="{ 'slash-item--active': i === mentionActiveIndex }"
+            @click="applyMentionItem(item)"
+          >
+            <span class="slash-item-icon mention-type-icon">◆</span>
+            <span class="slash-item-label">{{ item.name }}</span>
+            <span class="mention-item-type">{{ item.type }}</span>
+          </div>
+        </template>
+        <div v-else class="slash-empty">未找到实体</div>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { listModuleEntities, type EntityItem } from '../../api/modules';
 import { useEditor, EditorContent } from '@tiptap/vue-3';
 import SvgIcon from '../SvgIcon.vue';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 
-import { SceneBlockExtension } from './extensions/SceneBlockExtension';
-import { NpcBlockExtension } from './extensions/NpcBlockExtension';
-import { EventBlockExtension } from './extensions/EventBlockExtension';
-import { ClueBlockExtension } from './extensions/ClueBlockExtension';
-import { CheckBlockExtension } from './extensions/CheckBlockExtension';
-import { DialogBlockExtension } from './extensions/DialogBlockExtension';
+// 旧块扩展——已注释，新方案不注册（待新方案验证通过后删除）
+// import { SceneBlockExtension } from './extensions/SceneBlockExtension';
+// import { NpcBlockExtension } from './extensions/NpcBlockExtension';
+// import { EventBlockExtension } from './extensions/EventBlockExtension';
+// import { ClueBlockExtension } from './extensions/ClueBlockExtension';
+// import { CheckBlockExtension } from './extensions/CheckBlockExtension';
+// import { DialogBlockExtension } from './extensions/DialogBlockExtension';
 
-// ── Props / Emits ──────────────────────────────────────────
+// 新原子块扩展
+import { InvestigableNodeExtension } from './extensions/InvestigableNodeExtension';
+import { KpInfoExtension } from './extensions/KpInfoExtension';
+import { NpcMentionExtension } from './extensions/NpcMentionExtension';
+import { Extension } from '@tiptap/core';
+import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
+
+// ── Props / Emits ──────────────────────────
 const props = defineProps<{
   modelValue?: string | null;
+  moduleId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -90,14 +137,17 @@ const editor = useEditor({
   content: props.modelValue ? tryParse(props.modelValue) : '',
   extensions: [
     StarterKit,
-    Placeholder.configure({ placeholder: '输入 "/" 可插入内容块，或直接编写内容…' }),
+    Placeholder.configure({ placeholder: '输入 "/" 插入结构化块，输入 "@" 插入 NPC 引用…' }),
     CharacterCount,
-    SceneBlockExtension,
-    NpcBlockExtension,
-    EventBlockExtension,
-    ClueBlockExtension,
-    CheckBlockExtension,
-    DialogBlockExtension,
+    InvestigableNodeExtension,
+    KpInfoExtension,
+    NpcMentionExtension,
+    Extension.create({
+      name: 'viewMode',
+      addProseMirrorPlugins() {
+        return [createViewModePlugin('edit')];
+      },
+    }),
   ],
   onUpdate({ editor }) {
     emit('update:modelValue', JSON.stringify(editor.getJSON()));
@@ -105,6 +155,25 @@ const editor = useEditor({
   },
   editorProps: {
     handleKeyDown(_view: unknown, event: KeyboardEvent): boolean {
+      if (mentionMenuVisible.value) {
+        if (event.key === 'ArrowDown') {
+          mentionActiveIndex.value = (mentionActiveIndex.value + 1) % Math.max(1, mentionItems.value.length);
+          return true;
+        }
+        if (event.key === 'ArrowUp') {
+          mentionActiveIndex.value = (mentionActiveIndex.value - 1 + Math.max(1, mentionItems.value.length)) % Math.max(1, mentionItems.value.length);
+          return true;
+        }
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          const item = mentionItems.value[mentionActiveIndex.value];
+          if (item) applyMentionItem(item);
+          return true;
+        }
+        if (event.key === 'Escape') {
+          closeMentionMenu();
+          return true;
+        }
+      }
       if (slashMenuVisible.value) {
         if (event.key === 'ArrowDown') {
           slashActiveIndex.value = (slashActiveIndex.value + 1) % filteredSlashItems.value.length;
@@ -147,12 +216,8 @@ watch(() => props.modelValue, (val) => {
 // ── 工具栏 ────────────────────────────────────────────────
 // 块类型工具栏按钮
 const blockButtons = [
-  { id: 'scene_block',  icon: 'icon-scene',   label: '插入场景块' },
-  { id: 'npc_block',   icon: 'icon-npc',     label: '插入NPC块' },
-  { id: 'event_block', icon: 'icon-calendar', label: '插入事件块' },
-  { id: 'clue_block',  icon: 'icon-clue',    label: '插入线索块' },
-  { id: 'check_block', icon: 'icon-dice',    label: '插入检定块' },
-  { id: 'dialog_block',icon: 'icon-message', label: '插入对话块' },
+  { id: 'investigable_node', icon: '▼', label: '插入调查节点' },
+  { id: 'kp_info',           icon: '☆', label: '插入KP信息' },
 ];
 
 const toolbarButtons = computed(() => {
@@ -191,12 +256,8 @@ const allSlashItems: SlashItem[] = [
   { id: 'bullet', icon: '•', label: '无序列表', action: () => editor.value?.chain().focus().toggleBulletList().run() },
   { id: 'ordered', icon: '1.', label: '有序列表', action: () => editor.value?.chain().focus().toggleOrderedList().run() },
   { id: 'divider', icon: '—', label: '分割线', action: () => editor.value?.chain().focus().setHorizontalRule().run() },
-  { id: 'scene', icon: 'icon-scene',    label: '场景块', action: () => insertBlock('scene_block') },
-  { id: 'npc', icon: 'icon-npc',        label: 'NPC 块', action: () => insertBlock('npc_block') },
-  { id: 'event', icon: 'icon-calendar', label: '事件块', action: () => insertBlock('event_block') },
-  { id: 'clue', icon: 'icon-clue',      label: '线索块', action: () => insertBlock('clue_block') },
-  { id: 'check', icon: 'icon-dice',     label: '检定块', action: () => insertBlock('check_block') },
-  { id: 'dialog', icon: 'icon-message', label: '对话块', action: () => insertBlock('dialog_block') },
+  { id: 'investigable_node', icon: '▼', label: '调查节点', action: () => insertBlock('investigable_node') },
+  { id: 'kp_info',           icon: '☆', label: 'KP 信息',  action: () => insertBlock('kp_info') },
 ];
 
 const filteredSlashItems = computed(() => {
@@ -208,7 +269,21 @@ const filteredSlashItems = computed(() => {
 function insertBlock(type: string) {
   if (!editor.value) return;
   const id = Math.random().toString(36).slice(2, 10);
-  editor.value.chain().focus().insertContent({ type, attrs: { id }, content: [] }).run();
+  editor.value.chain().focus().insertContent({ type, attrs: { id }, content: [{ type: 'paragraph' }] }).run();
+}
+
+// ── 视图模式切换 ──────────────────────────────────────────
+const currentViewMode = ref<ViewMode>('edit');
+const viewModes = [
+  { id: 'edit'   as const, label: '编辑' },
+  { id: 'kp'     as const, label: 'KP视角' },
+  { id: 'player' as const, label: '玩家视角' },
+] as const;
+
+function switchViewMode(mode: ViewMode) {
+  if (!editor.value) return;
+  currentViewMode.value = mode;
+  setViewMode(editor.value.view, mode);
 }
 
 function applySlashItem(item: SlashItem | undefined) {
@@ -230,12 +305,106 @@ function closeSlashMenu() {
   slashActiveIndex.value = 0;
 }
 
+// ── Mention 菜单（@ 触发）─────────────────────
+const mentionMenuVisible = ref(false);
+const mentionQuery = ref('');
+const mentionItems = ref<EntityItem[]>([]);
+const mentionActiveIndex = ref(0);
+const mentionMenuStyle = ref({ top: '0px', left: '0px' });
+const mentionLoading = ref(false);
+let mentionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function closeMentionMenu() {
+  mentionMenuVisible.value = false;
+  mentionQuery.value = '';
+  mentionItems.value = [];
+  mentionActiveIndex.value = 0;
+  if (mentionDebounceTimer) clearTimeout(mentionDebounceTimer);
+}
+
+async function fetchMentionItems(keyword: string) {
+  if (!props.moduleId) return;
+  mentionLoading.value = true;
+  try {
+    const res = await listModuleEntities(props.moduleId, { keyword: keyword || undefined });
+    mentionItems.value = (res.data ?? []).slice(0, 10);
+  } catch {
+    mentionItems.value = [];
+  } finally {
+    mentionLoading.value = false;
+  }
+}
+
+function applyMentionItem(item: EntityItem) {
+  if (!editor.value) return;
+  const { state } = editor.value;
+  const { from } = state.selection;
+  const queryLen = mentionQuery.value.length + 1; // +1 for "@"
+  editor.value
+    .chain()
+    .focus()
+    .deleteRange({ from: from - queryLen, to: from })
+    .insertContent({
+      type: 'npc_mention',
+      attrs: { id: item.id, label: item.name, type: item.type },
+    })
+    .run();
+  closeMentionMenu();
+}
+
 // 监听键盘输入以触发 "/" 菜单
 function handleKeyup(e: KeyboardEvent) {
   if (!editor.value) return;
   const { state } = editor.value;
   const { from } = state.selection;
   const textBefore = state.doc.textBetween(Math.max(0, from - 20), from, '\n');
+  // 处理 Mention @ 菜单
+  if (mentionMenuVisible.value) {
+    if (e.key === 'ArrowDown') {
+      mentionActiveIndex.value = (mentionActiveIndex.value + 1) % Math.max(1, mentionItems.value.length);
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      mentionActiveIndex.value = (mentionActiveIndex.value - 1 + Math.max(1, mentionItems.value.length)) % Math.max(1, mentionItems.value.length);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      const item = mentionItems.value[mentionActiveIndex.value];
+      if (item) applyMentionItem(item);
+      return;
+    }
+    if (e.key === 'Escape') {
+      closeMentionMenu();
+      return;
+    }
+  }
+
+  // 检测 @ 触发（@ 后跟汉字不触发）
+  const mentionMatch = textBefore.match(/@([^\s\u4e00-\u9fa5]*)$/);
+  if (mentionMatch) {
+    const q = mentionMatch[1] ?? '';
+    mentionQuery.value = q;
+    mentionActiveIndex.value = 0;
+    mentionMenuVisible.value = true;
+    const coords = editor.value.view.coordsAtPos(from - q.length - 1);
+    const editorRect = (editor.value.view.dom as HTMLElement).closest('.module-editor-core')?.getBoundingClientRect();
+    if (editorRect) {
+      const menuH = 240;
+      const spaceBelow = editorRect.bottom - coords.bottom;
+      const top = spaceBelow > menuH
+        ? coords.bottom - editorRect.top + 4
+        : coords.top - editorRect.top - menuH - 4;
+      mentionMenuStyle.value = {
+        top: `${top}px`,
+        left: `${Math.max(0, coords.left - editorRect.left)}px`,
+      };
+    }
+    if (mentionDebounceTimer) clearTimeout(mentionDebounceTimer);
+    mentionDebounceTimer = setTimeout(() => fetchMentionItems(q), 300);
+  } else if (mentionMenuVisible.value) {
+    closeMentionMenu();
+  }
+
   const slashMatch = textBefore.match(/\/(\w*)$/);
   if (slashMatch) {
     slashQuery.value = slashMatch[1] ?? '';
@@ -403,9 +572,50 @@ onBeforeUnmount(() => {
 .slash-item:hover,
 .slash-item--active { background: var(--surface-hover); }
 
+.view-mode-group {
+  display: flex;
+  gap: 2px;
+}
+
+.view-mode-btn {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+/* 玩家视角下 kp_info 折叠为虚线细线 */
+:deep(.kp-info--player-collapsed) {
+  height: 8px !important;
+  overflow: hidden;
+  background: repeating-linear-gradient(
+    90deg,
+    #F5A623 0px, #F5A623 6px,
+    transparent 6px, transparent 12px
+  );
+  border-radius: 2px;
+  margin: 4px 0;
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+:deep(.kp-info--player-collapsed > *) {
+  display: none !important;
+}
+
 .slash-item-icon { width: 20px; text-align: center; font-size: 16px; }
 
 .slash-empty { padding: 12px; color: var(--color-text-secondary, #888); font-size: 13px; text-align: center; }
+
+.mention-menu { min-width: 220px; }
+.mention-type-icon { color: #9013FE; }
+.mention-item-type {
+  font-size: 11px;
+  color: var(--color-text-secondary, #888);
+  background: var(--surface-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: auto;
+}
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }

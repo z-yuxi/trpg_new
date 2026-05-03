@@ -93,9 +93,9 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
     },
   },
 
-  /** ra：属性检定（1d100 ≤ 属性值），需角色数据；/ra 力量 */
+  /** ra：技能检定（1d100 ≤ 技能值），需角色数据；/ra 侦查 */
   ra: {
-    description: '属性检定（1d100 ≤ 属性值）',
+    description: '技能检定（1d100 ≤ 技能值）',
     param_map: [{ positional: 0, key: 'field_name' }],
     graph: {
       nodes: [
@@ -105,7 +105,7 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
           atom_type: 'character_skill_reader',
           inputs: {
             character_data: { type: 'static', value: null },   // 运行时注入
-            field_type: { type: 'static', value: 'attribute' },
+            field_type: { type: 'static', value: 'skill' },
             field_name: { type: 'static', value: '' },         // 由 param_map / params 注入
           },
         },
@@ -123,9 +123,9 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
     },
   },
 
-  /** rc：标准检定（1d100 ≤ 技能值），需角色数据；/rc 侦查 */
+  /** rc：属性检定（1d100 ≤ 属性值），需角色数据；/rc 力量 */
   rc: {
-    description: '标准检定（1d100 ≤ 技能值）',
+    description: '属性检定（1d100 ≤ 属性值）',
     param_map: [{ positional: 0, key: 'field_name' }],
     graph: {
       nodes: [
@@ -135,7 +135,7 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
           atom_type: 'character_skill_reader',
           inputs: {
             character_data: { type: 'static', value: null },
-            field_type: { type: 'static', value: 'skill' },
+            field_type: { type: 'static', value: 'attribute' },
             field_name: { type: 'static', value: '' },
           },
         },
@@ -214,21 +214,9 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
     },
   },
 
-  /** ti：幕间成长（掷 1d10 作为成长骰，服务层负责批量处理所有已标记技能） */
+  /** ti：临时疯狂检定（temporary insanity，基于当前理智值） */
   ti: {
-    description: '幕间成长（掷 1d10，技能成长量）',
-    graph: {
-      nodes: [
-        { node_id: 'growth_dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d10' } } },
-      ],
-      output_node_id: 'growth_dice',
-    },
-  },
-
-  /** li：灵感检定（1d100 > 技能值 = 成功，反向检定）；/li 侦查 */
-  li: {
-    description: '灵感检定（1d100 > 技能值为成功，反向检定）',
-    param_map: [{ positional: 0, key: 'field_name' }],
+    description: '临时疯狂检定（1d100 ≤ 当前理智值）',
     graph: {
       nodes: [
         { node_id: 'dice', atom_type: 'dice_roll', inputs: { expression: { type: 'static', value: '1d100' } } },
@@ -237,8 +225,8 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
           atom_type: 'character_skill_reader',
           inputs: {
             character_data: { type: 'static', value: null },
-            field_type: { type: 'static', value: 'skill' },
-            field_name: { type: 'static', value: '' },
+            field_type: { type: 'static', value: 'resource_current' },
+            field_name: { type: 'static', value: '理智值' },
           },
         },
         {
@@ -247,11 +235,43 @@ export const DEFAULT_COMMANDS: Record<string, CommandDef> = {
           inputs: {
             value: { type: 'ref', node_id: 'dice', output_key: 'total' },
             threshold: { type: 'ref', node_id: 'reader', output_key: 'value' },
-            operator: { type: 'static', value: '>' },
+            operator: { type: 'static', value: '<=' },
           },
         },
       ],
       output_node_id: 'cmp',
+    },
+  },
+
+  /** li：总结疯狂症状（lasting insanity） */
+  li: {
+    description: '总结疯狂症状（1d10 抽取）',
+    graph: {
+      nodes: [
+        {
+          node_id: 'symptom',
+          atom_type: 'random_table',
+          inputs: {
+            roll_expression: { type: 'static', value: '1d10' },
+            table_entries: {
+              type: 'static',
+              value: [
+                { weight: 1, value: '失忆' },
+                { weight: 1, value: '偏执' },
+                { weight: 1, value: '暴力冲动' },
+                { weight: 1, value: '幻觉' },
+                { weight: 1, value: '恐惧症' },
+                { weight: 1, value: '躁狂' },
+                { weight: 1, value: '抑郁' },
+                { weight: 1, value: '强迫行为' },
+                { weight: 1, value: '人格分离' },
+                { weight: 1, value: '逃避现实' },
+              ],
+            },
+          },
+        },
+      ],
+      output_node_id: 'symptom',
     },
   },
 

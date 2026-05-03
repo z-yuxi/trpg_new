@@ -685,9 +685,12 @@ export type ModuleReportType = 'plagiarism' | 'violation' | 'other';
 /** 模组大纲条目（发布时自动生成缓存） */
 export interface ModuleOutlineItem {
   id: string;
-  type: 'heading' | 'scene' | 'npc' | 'event' | 'clue' | 'check' | 'dialog';
+  type: 'heading' | 'scene' | 'npc' | 'event' | 'clue' | 'check' | 'dialog'
+       | 'investigable' | 'kp_info';
   label: string;
-  level?: number; // heading 层级 1-3
+  level?: number;       // heading 层级 1-3
+  depth?: number;       // 嵌套深度（investigable_node 用）
+  hasContent?: boolean; // 子内容是否有实际文字（完成度指示条）
 }
 
 /** 模组内业务块基础接口 */

@@ -4,7 +4,8 @@
  */
 import type { ModuleOutlineItem } from '@trpg/shared';
 
-const BLOCK_NAME_KEY: Record<string, string> = {
+// 旧块类型映射（兼容旧格式文档）
+const LEGACY_BLOCK_NAME_KEY: Record<string, string> = {
   scene_block:  'scene_name',
   npc_block:    'npc_name',
   event_block:  'event_name',
@@ -13,7 +14,7 @@ const BLOCK_NAME_KEY: Record<string, string> = {
   dialog_block: 'dialog_title',
 };
 
-const BUSINESS_BLOCK_TYPES = new Set(Object.keys(BLOCK_NAME_KEY));
+const LEGACY_BLOCK_TYPES = new Set(Object.keys(LEGACY_BLOCK_NAME_KEY));
 
 /**
  * 遍历 TipTap doc JSON，提取标题节点 + 业务块节点构成大纲
@@ -29,11 +30,11 @@ export function extractOutline(docJson: unknown): ModuleOutlineItem[] {
     doc = (docJson ?? {}) as typeof doc;
   }
 
-  walkNodes(doc.content ?? [], items);
+  walkNodes(doc.content ?? [], items, 0);
   return items;
 }
 
-function walkNodes(nodes: unknown[], items: ModuleOutlineItem[]) {
+function walkNodes(nodes: unknown[], items: ModuleOutlineItem[], depth: number) {
   for (const raw of nodes) {
     const node = raw as Record<string, any>;
     if (!node || typeof node.type !== 'string') continue;
@@ -48,9 +49,34 @@ function walkNodes(nodes: unknown[], items: ModuleOutlineItem[]) {
           level: node.attrs?.level ?? 1,
         });
       }
-    } else if (BUSINESS_BLOCK_TYPES.has(node.type)) {
+    } else if (node.type === 'investigable_node') {
+      const label: string = node.attrs?.label || '未命名调查节点';
+      const hasContent = Array.isArray(node.content) && node.content.some(
+        (c: any) => c?.type !== 'paragraph' || flattenText(c.content).length > 0,
+      );
+      items.push({
+        id: node.attrs?.id || `inv-${items.length}`,
+        type: 'investigable',
+        label,
+        depth,
+        hasContent,
+      });
+      // 递归子内容（嵌套调查节点）
+      if (Array.isArray(node.content)) {
+        walkNodes(node.content, items, depth + 1);
+      }
+      continue;
+    } else if (node.type === 'kp_info') {
+      items.push({
+        id: node.attrs?.id || `kp-${items.length}`,
+        type: 'kp_info',
+        label: '☆ KP 信息',
+        depth,
+      });
+    } else if (LEGACY_BLOCK_TYPES.has(node.type)) {
+      // 兼容旧格式文档
       const blockType = node.type.replace('_block', '') as ModuleOutlineItem['type'];
-      const nameKey = BLOCK_NAME_KEY[node.type]!;
+      const nameKey = LEGACY_BLOCK_NAME_KEY[node.type]!;
       const label: string = node.attrs?.[nameKey] || `未命名${blockType}`;
       items.push({
         id: node.attrs?.id || `block-${items.length}`,
@@ -59,9 +85,9 @@ function walkNodes(nodes: unknown[], items: ModuleOutlineItem[]) {
       });
     }
 
-    // 递归子内容（如容器节点）
-    if (Array.isArray(node.content)) {
-      walkNodes(node.content, items);
+    // 递归子内容（非 investigable_node 避免二次递归）
+    if (Array.isArray(node.content) && node.type !== 'investigable_node') {
+      walkNodes(node.content, items, depth);
     }
   }
 }

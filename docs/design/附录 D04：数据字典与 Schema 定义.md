@@ -97,6 +97,101 @@
 | skill_bindings[] | array | 是 | 技能绑定列表（如 `[{"skill_ref":"library","value":20}]`） |
 | special_traits[] | array | 否 | 特殊特性 ID 列表 |
 
+### 1.6 module_terms（模组术语表）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| module_id | string(64) | 是 | 关联 `modules.id` |
+| term | string(64) | 是 | 术语原文 |
+| created_at | timestamp | 否 | 创建时间，默认 `now()` |
+
+约束：`unique(module_id, term)`。
+
+### 1.7 热度统计字段扩展（modules / forum_threads）
+
+| 表 | 字段 | 类型 | 必填 | 说明 |
+|----|------|------|------|------|
+| modules | reaction_count | int unsigned | 是 | 用户表态计数，默认 0 |
+| modules | comment_count | int unsigned | 是 | 评论计数，默认 0 |
+| modules | is_featured | boolean | 是 | 申精推荐标记，默认 false |
+| forum_threads | like_count | int unsigned | 是 | 帖子点赞数，默认 0 |
+| forum_threads | is_featured | boolean | 是 | 申精推荐标记，默认 false |
+
+### 1.8 机器人支持字段扩展（users / forum_threads / forum_posts）
+
+| 表 | 字段 | 类型 | 必填 | 说明 |
+|----|------|------|------|------|
+| users | is_bot | tinyint unsigned | 是 | 是否机器人账号，默认 0 |
+| users | bot_status | enum('active','hibernated') | 否 | 机器人状态 |
+| users | bot_label | string(64) | 否 | 机器人角色标签 |
+| forum_threads | is_bot_generated | tinyint unsigned | 是 | 主题是否机器人生成 |
+| forum_posts | is_bot_generated | tinyint unsigned | 是 | 回复是否机器人生成 |
+
+### 1.9 campaign_feedback（跑团反馈表）
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| campaign_id | string(64) | 是 | 关联 `campaigns.id` |
+| user_id | string(64) | 是 | 反馈提交者 |
+| star | string(500) | 否 | Star 文本 |
+| wish | string(500) | 否 | Wish 文本 |
+| visibility | enum('gm_only','all_members') | 是 | 可见范围 |
+| is_deleted | boolean | 是 | 软删除标记，默认 false |
+| submitted_at | timestamp | 是 | 提交时间 |
+| updated_at | timestamp | 否 | 更新时间 |
+
+约束：`unique(campaign_id, user_id)`。
+
+### 1.10 社区版模组字段扩展（modules / module_claim_letters / module_contributors）
+
+`modules` 新增：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| source_label | enum | 是 | 来源标签（original / author_version / community_pending / community_authorized / derivative / certified_independent） |
+| community_status | enum | 否 | 社区态（private_use / public_share / pending_review / archived_by_author） |
+| upstream_module_id | string(64) | 否 | 上游模组 ID |
+| contributor_user_id | string(64) | 否 | 贡献者用户 ID |
+| original_source_url | string(1024) | 否 | 原发布链接 |
+| original_source_note | text | 否 | 来源说明 |
+| claim_deadline_at | datetime | 否 | 认领截止时间 |
+| derivative_policy | enum('open','closed','review') | 否 | 衍生策略 |
+
+`module_claim_letters`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| module_id | string(64) | 是 | 关联模组 |
+| applicant_user_id | string(64) | 是 | 申请人 |
+| letter_type | enum('public_share','derivative') | 是 | 申请类型 |
+| content | longtext | 是 | 信件正文 |
+| attachments | json | 否 | 附件 |
+| ai_report | json | 否 | AI 审核报告 |
+| status | enum('pending','approved','rejected') | 是 | 审核状态 |
+| author_reply | text | 否 | 作者回复 |
+| created_at | timestamp | 否 | 创建时间 |
+| reviewed_at | datetime | 否 | 审核时间 |
+| reviewed_by | string(64) | 否 | 审核人 |
+
+`module_contributors`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| module_id | string(64) | 是 | 关联模组 |
+| user_id | string(64) | 是 | 贡献者用户 |
+| role | enum('contributor','honorary_collaborator') | 是 | 贡献身份 |
+| created_at | timestamp | 否 | 创建时间 |
+
+### 1.11 scenes 氛围字段扩展
+
+| 表 | 字段 | 类型 | 必填 | 说明 |
+|----|------|------|------|------|
+| scenes | atmosphere_keywords | json | 否 | 氛围关键词数组，默认 `[]` |
+
 ---
 
 ## 2. 运行时数据结构

@@ -96,3 +96,24 @@ export function applyModuleEntities(id: string, entities: ModuleEntity[]): Promi
   return api.post(`/modules/${id}/entities/apply`, { entities }, key());
 }
 
+// ── 实体库（Entity Library）────────────────────────────────
+export type EntityType = 'npc' | 'scene' | 'clue';
+
+export interface EntityItem {
+  id: string;
+  name: string;
+  type: EntityType;
+  description?: string;
+}
+
+export function listModuleEntities(
+  moduleId: string,
+  params?: { type?: EntityType; keyword?: string },
+): Promise<{ data: EntityItem[] }> {
+  const entries = Object.entries(params ?? {}).filter(([, v]) => v !== undefined);
+  const qs = entries.length
+    ? '?' + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()
+    : '';
+  return api.get(`/modules/${moduleId}/entities${qs}`);
+}
+

@@ -17,8 +17,8 @@ export async function up(knex: Knex): Promise<void> {
     t.string('author_user_id', 64).notNullable().index();
     /** 购买价格（人民币分） */
     t.integer('price_cents').unsigned().notNullable();
-    /** 平台分成比例（整数百分比，默认 30） */
-    t.integer('platform_fee_pct').unsigned().notNullable().defaultTo(30);
+    /** 平台分成比例（整数百分比，默认 20） */
+    t.integer('platform_fee_pct').unsigned().notNullable().defaultTo(20);
     /** 作者实收（分） = price_cents * (1 - platform_fee_pct/100) */
     t.integer('author_amount_cents').unsigned().notNullable();
     /** 关联支付订单（免费模组可为 null） */

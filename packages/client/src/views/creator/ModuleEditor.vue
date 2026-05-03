@@ -90,20 +90,53 @@
           <SvgIcon name="icon-chevron-right" :size="12" class="outline-toggle-icon" :class="{ 'outline-toggle-icon--expanded': !outlineCollapsed }" />
         </button>
         <div v-if="!outlineCollapsed" class="outline-content">
-          <div class="outline-title">大纲</div>
-          <div v-if="outlineItems.length === 0" class="outline-empty">（内容为空）</div>
-          <div
-            v-for="item in outlineItems"
-            :key="item.id"
-            class="outline-item"
-            :class="`outline-item--${item.type}`"
-            @click="scrollToBlock(item.id)"
-          >
-            <span class="outline-indent" :style="{ paddingLeft: `${(item.level ?? 0) * 12}px` }">
-              <SvgIcon :name="outlineItemIcon(item.type)" :size="12" class="outline-item-icon" />
-              {{ item.label }}
-            </span>
+          <div class="outline-header">
+            <span class="outline-title">大纲</span>
+            <div class="outline-view-tabs">
+              <button
+                v-for="tab in outlineViewTabs"
+                :key="tab.id"
+                class="outline-tab"
+                :class="{ 'outline-tab--active': outlineView === tab.id }"
+                @click="outlineView = tab.id"
+              >{{ tab.label }}</button>
+            </div>
           </div>
+          <div v-if="outlineItems.length === 0" class="outline-empty">（内容为空）</div>
+          <template v-else>
+            <!-- 时间轴视图：平铺列表，按 heading 分组 -->
+            <template v-if="outlineView === 'timeline'">
+              <div
+                v-for="item in outlineItems"
+                :key="item.id"
+                class="outline-item"
+                :class="`outline-item--${item.type}`"
+                @click="scrollToBlock(item.id)"
+              >
+                <span class="outline-indent" :style="{ paddingLeft: `${((item.level ?? 1) - 1) * 12}px` }">
+                  <SvgIcon :name="outlineItemIcon(item.type)" :size="12" class="outline-item-icon" />
+                  <span class="outline-item-label">{{ item.label }}</span>
+                  <span v-if="item.type === 'heading' && item.level === 2" class="outline-progress" :class="item.hasContent ? 'outline-progress--done' : 'outline-progress--empty'" />
+                </span>
+              </div>
+            </template>
+            <!-- 空间树视图：按 investigable_node 深度缩进 -->
+            <template v-else>
+              <div
+                v-for="item in outlineItems"
+                :key="item.id"
+                class="outline-item"
+                :class="`outline-item--${item.type}`"
+                @click="scrollToBlock(item.id)"
+              >
+                <span class="outline-indent" :style="{ paddingLeft: `${(item.depth ?? (item.level ?? 1) - 1) * 16}px` }">
+                  <SvgIcon :name="outlineItemIcon(item.type)" :size="12" class="outline-item-icon" />
+                  <span class="outline-item-label">{{ item.label }}</span>
+                  <span v-if="item.type === 'investigable'" class="outline-progress" :class="item.hasContent ? 'outline-progress--done' : 'outline-progress--empty'" />
+                </span>
+              </div>
+            </template>
+          </template>
         </div>
       </aside>
 
@@ -112,28 +145,29 @@
         <ModuleEditorCore
           v-if="editorReady"
           v-model="editorContent"
+          :module-id="moduleId"
           @word-count="onWordCount"
         />
         <div v-else class="editor-loading">加载中...</div>
       </main>
 
       <!-- 右侧 AI 校对面板 -->
-      <aside class="props-panel" :class="{ 'props-panel--hidden': !aiPanelVisible }">
-        <div class="props-title">
-          AI 校对结果
-          <div class="props-title-actions">
+      <aside v-if="aiPanelVisible && aiPanelDocked" class="props-panel">
+        <FloatingPanel
+          title="AI 校对"
+          :docked="true"
+          @undock="aiPanelDocked = false"
+          @close="aiPanelVisible = false"
+        >
+        <div class="props-panel-inner">
+          <!-- 历史切换 -->
+          <div v-if="aiCheckHistory.length" class="ai-history-toggle-row">
             <button
-              v-if="aiCheckHistory.length"
               class="history-toggle-btn"
               :class="{ 'history-toggle-btn--active': aiHistoryPanelOpen }"
               @click="aiHistoryPanelOpen = !aiHistoryPanelOpen"
-              title="校对历史"
             >历史 ({{ aiCheckHistory.length }})</button>
-            <button class="panel-close-btn" @click="aiPanelVisible = false">×</button>
           </div>
-        </div>
-
-        <!-- 校对历史展开面板 -->
         <div v-if="aiHistoryPanelOpen && aiCheckHistory.length" class="ai-history-panel">
           <div class="ai-history-title">最近 {{ aiCheckHistory.length }} 次校对</div>
           <ul class="ai-history-list">
@@ -182,7 +216,27 @@
         <div v-if="aiQuotaInfo" class="ai-quota-bar">
           本月已用 {{ aiQuotaInfo.used }}/{{ aiQuotaInfo.quota }} 次
         </div>
+        </div><!-- /props-panel-inner -->
+        </FloatingPanel>
       </aside>
+
+      <!-- 浮动模式的 AI 面板（从边栏拖出后渲染） -->
+      <FloatingPanel
+        v-if="aiPanelVisible && !aiPanelDocked"
+        title="AI 校对"
+        :docked="false"
+        @dock="aiPanelDocked = true"
+        @close="aiPanelVisible = false"
+      >
+        <div class="props-panel-inner">
+          <div v-if="aiCheckBusy" class="ai-loading">分析中，请稍候...</div>
+          <div v-else-if="aiIssues.length === 0 && aiChecked" class="ai-empty">未发现问题，文本状态良好。</div>
+          <div v-else-if="aiIssues.length === 0" class="ai-empty">点击「AI 校对」开始分析当前内容。</div>
+          <div v-if="aiQuotaInfo" class="ai-quota-bar">
+            本月已用 {{ aiQuotaInfo.used }}/{{ aiQuotaInfo.quota }} 次
+          </div>
+        </div>
+      </FloatingPanel>
     </div>
 
     <ImportConfirmDialog
@@ -336,6 +390,7 @@ import ImportConfirmDialog from '../../components/module-editor/ImportConfirmDia
 import AiEntityReviewDialog from '../../components/module-editor/AiEntityReviewDialog.vue';
 import AiTaskCenterPanel from '../../components/ai/AiTaskCenterPanel.vue';
 import ModuleEditorCore from '../../components/module-editor/ModuleEditorCore.vue';
+import FloatingPanel from '../../components/module-editor/FloatingPanel.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 import { getModule, updateModule, autoSaveModule, submitModule as apiSubmitModule, withdrawModule as apiWithdrawModule, getModuleTerms, saveModuleTerms, applyModuleEntities, type ModuleEntity } from '../../api/modules';
@@ -427,6 +482,7 @@ interface AiIssue {
 }
 
 const aiPanelVisible = ref(false);
+const aiPanelDocked = ref(true);
 const aiCheckBusy = ref(false);
 const aiChecked = ref(false);
 const aiIssues = ref<AiIssue[]>([]);
@@ -847,18 +903,28 @@ const noticeCountdown = computed(() => {
 });
 
 // ── 大纲 ─────────────────────────────────────────────────
+type OutlineView = 'timeline' | 'spatial';
+const outlineView = ref<OutlineView>('timeline');
+const outlineViewTabs = [
+  { id: 'timeline' as const, label: '时间轴' },
+  { id: 'spatial'  as const, label: '空间树' },
+];
+
 const outlineItems = ref<ModuleOutlineItem[]>([]);
 
 function outlineItemIcon(type: ModuleOutlineItem['type']) {
-  return {
-    heading: 'icon-list',
-    scene: 'icon-scene',
-    npc: 'icon-npc',
-    event: 'icon-timeline',
-    clue: 'icon-clue',
-    check: 'icon-dice',
-    dialog: 'icon-broadcast',
-  }[type] ?? 'icon-list';
+  return ({
+    heading:      'icon-list',
+    investigable: 'icon-scene',
+    kp_info:      'icon-dice',
+    // 旧块类型保留（兼容旧格式文档）
+    scene:   'icon-scene',
+    npc:     'icon-npc',
+    event:   'icon-timeline',
+    clue:    'icon-clue',
+    check:   'icon-dice',
+    dialog:  'icon-broadcast',
+  } as Record<string, string>)[type] ?? 'icon-list';
 }
 
 function scrollToBlock(id: string) {
@@ -1131,7 +1197,36 @@ function goBack() {
 .outline-toggle-icon--expanded { transform: rotate(180deg); }
 
 .outline-content { padding: 12px 8px; overflow-y: auto; flex: 1; }
-.outline-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary, #888); text-transform: uppercase; margin-bottom: 8px; padding: 0 4px; }
+
+.outline-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.outline-title { font-size: 12px; font-weight: 600; color: var(--color-text-secondary, #888); text-transform: uppercase; flex: 1; }
+
+.outline-view-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.outline-tab {
+  font-size: 11px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-secondary, #888);
+  transition: background 0.12s;
+}
+
+.outline-tab:hover { background: var(--surface-hover); }
+.outline-tab--active { background: var(--color-primary-light, #e8f0fe); color: var(--color-primary, #4A90D9); font-weight: 600; }
+
 .outline-empty { font-size: 12px; color: var(--color-text-placeholder, #bbb); padding: 4px; }
 
 .outline-item {
@@ -1152,7 +1247,26 @@ function goBack() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
 }
+
+.outline-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-progress {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.outline-progress--done { background: #48bb78; }
+.outline-progress--empty { background: #cbd5e0; }
+
 
 .outline-item-icon { color: var(--text-muted, #666); flex-shrink: 0; }
 
@@ -1190,6 +1304,15 @@ function goBack() {
 }
 
 .props-panel--hidden { display: none; }
+
+/* FloatingPanel 包装后内容区 */
+.props-panel-inner { padding: 12px; }
+
+.ai-history-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
 
 .props-title {
   font-size: 13px; font-weight: 600; color: var(--color-text-secondary, #888);

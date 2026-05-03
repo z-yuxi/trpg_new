@@ -13,9 +13,8 @@
 
 ## K.1 设计原则
 
-- **规则无关**：不依赖特定规则包的内部字段名，使用通用语义标识。
-- **人类可读**：JSON 格式；规范键名固定使用英文 `snake_case`，中文通过 `display_name/aliases` 显示与匹配。
-- **可扩展**：通过 `custom_fields` 容纳任意自定义数据。
+- **规则无关**：不依赖特定规则包的内部字段名，使用通用语义标识（`snake_case` 键名）。
+- **人类可读**：JSON 格式；规范键名固定使用英文 `snake_case`。
 - **版本化**：通过 `schema_version` 标识格式版本，保证向后兼容。
 
 ## K.2 顶层结构
@@ -33,12 +32,9 @@ interface CSONDocument {
 
 ```typescript
 interface CSONMetadata {
-  name: string;                   // 角色名（必填）
-  player_name?: string;           // 玩家名/所有者
-  avatar_url?: string;            // 头像图片链接
-  description?: string;           // 背景故事、外貌描述等
-  created_at?: string;            // ISO 8601 格式，创建时间
-  updated_at?: string;            // ISO 8601 格式，最后更新时间
+  created_at: string;             // ISO 8601，导出时间
+  exported_by: string;            // 导出者标识
+  platform_version: string;       // 平台版本号
 }
 ```
 
@@ -46,16 +42,15 @@ interface CSONMetadata {
 
 ```typescript
 interface CSONCharacter {
-  attributes: Record<string, number>;      // 基础属性，如 "strength": 60
-  skills: Record<string, number>;          // 技能，如 "spot_hidden": 60
-  resources: Record<string, CSONResource>; // 资源池，如 "hp": { current, max }
-  custom_fields?: Record<string, any>;     // 自定义扩展（装备、法术等）
-}
-
-interface CSONResource {
-  current: number;
-  max: number;
-  temp?: number;                  // 临时加成
+  name: string;                                 // 角色名
+  ruleset_ref: string;                          // 规则包 ID
+  occupation_id?: string;                       // 职业 ID（可选）
+  attributes: Record<string, number>;           // 属性键值
+  skills: Record<string, number>;               // 技能键值
+  resources: Record<string, { current: number; max: number }>; // 资源池
+  equipment: string[];                          // 装备列表
+  background?: string;                          // 背景故事
+  avatar_custom_data?: object;                  // 立绘自定义数据
 }
 ```
 
@@ -63,10 +58,8 @@ interface CSONResource {
 
 ```typescript
 interface CSONSource {
-  ruleset_name?: string;          // 原始规则包名称，如 "克苏鲁的呼唤 第七版"
-  ruleset_version?: string;
-  platform?: string;              // 来源平台，如 "hktrpg", "dicepp"
-  original_format?: string;       // 原始格式，如 "hktrpg_character"
+  campaign_id?: string;           // 来源团 ID（可选）
+  character_code?: string;        // 来源角色码（可选）
 }
 ```
 
@@ -76,14 +69,14 @@ interface CSONSource {
 {
   "schema_version": "1.0",
   "meta": {
-    "name": "哈维·沃尔特",
-    "player_name": "玩家A",
-    "avatar_url": "https://cdn.example.com/avatars/harvey.png",
-    "description": "一位退役警探，面容沧桑，右脸颊有一道旧刀疤。",
     "created_at": "2026-04-10T08:00:00Z",
-    "updated_at": "2026-04-11T12:30:00Z"
+    "exported_by": "共叙",
+    "platform_version": "0.1.0"
   },
   "character": {
+    "name": "哈维·沃尔特",
+    "ruleset_ref": "ruleset_coc7_official",
+    "occupation_id": "detective",
     "attributes": { "strength": 60, "constitution": 50, "size": 65, "dexterity": 55, "appearance": 45, "intelligence": 70, "willpower": 60, "education": 75 },
     "skills": { "spot_hidden": 60, "library_use": 40, "psychology": 50, "fighting_brawl": 55, "firearms_handgun": 45 },
     "resources": {
@@ -92,40 +85,23 @@ interface CSONSource {
       "san": { "current": 55, "max": 60 },
       "luck": { "current": 50, "max": 50 }
     },
-    "custom_fields": {
-      "occupation": "警探",
-      "age": 42,
-      "equipment": ["手枪", "警徽", "手电筒"],
-      "display_labels": {
-        "attributes": {
-          "strength": "力量",
-          "constitution": "体质"
-        },
-        "skills": {
-          "spot_hidden": "侦查",
-          "library_use": "图书馆使用"
-        }
-      }
-    }
+    "equipment": ["手枪", "警徽", "手电筒"],
+    "background": "一位退役警探，面容沧桑，右脸颊有一道旧刀疤。"
   },
   "source": {
-    "ruleset_name": "克苏鲁的呼唤 第七版",
-    "platform": "trpg-platform",
-    "original_format": "cson"
+    "character_code": "CHAR-001"
   }
 }
 ```
 
 ## K.4 导入时的智能匹配流程
 
-1. **规则包匹配**：
-  - `source.ruleset_name` 缺失或为空：不做自动匹配，直接要求用户手动选择规则包。
-  - 存在 `source.ruleset_name`：进行相似度匹配；最高分 `>80%` 时进入候选。
-  - 若“最高分并列”：不自动选择，要求用户手动选择。
-  - 若“唯一最高分且 >80%”：自动选择。
-2. **字段映射**：利用目标规则包的 `field_aliases` 将 CSON 键名映射为内部标识。未匹配字段原样存入 `custom_fields`，并记录 `warnings[].code='UNKNOWN_FIELDS_IGNORED'`。
-3. **资源初始化**：同名资源导入当前/最大值；不存在的资源放入 `custom_fields.resources` 保留。
-4. **冲突处理**：严重不兼容时弹出警告，允许用户“强制导入”；强制导入仍保留未匹配字段到 `custom_fields`，仅跳过无法映射到结构化核心字段的部分。
+1. **规则包定位**：
+  - 读取 `character.ruleset_ref`（规则包 ID），在平台内精确查找对应规则包。
+  - 若未找到：要求用户手动选择目标规则包。
+2. **字段映射**：将 `character` 中的 `attributes`/`skills`/`resources` 按目标规则包的 `field_aliases` 进行键名校验；未识别字段记录 `warnings[].code='UNKNOWN_FIELDS_IGNORED'`。
+3. **资源初始化**：同名资源导入 `current`/`max` 值；不存在的资源跳过并记录 warning。
+4. **冲突处理**：严重不兼容时弹出警告，允许用户选择"强制导入"；强制导入时忽略无法映射的字段。
 
 ## K.5 与社区格式的关系
 
@@ -171,8 +147,8 @@ interface ImportMeta {
   import_format: 'cson';
   version: string;
   imported_at: string;          // ISO 8601
-  source_ruleset_name: string | null;
-  matched_ruleset_id: string | null;
+  source_ruleset_name: string | null;  // 由 character.ruleset_ref 查找到的规则包名称
+  matched_ruleset_id: string | null;   // 成功匹配的规则包 ID（= character.ruleset_ref）
   match_score: number;          // 0-1
   fields_matched: number;
   fields_total: number;
@@ -213,7 +189,7 @@ interface ImportCsonResponse {
   "data": {
     "character_id": "char_abc123",
     "name": "张三",
-    "ruleset_id": "coc7",
+    "ruleset_id": "ruleset_coc7_official",
     "attributes": {
       "strength": 60,
       "dexterity": 70,
@@ -226,16 +202,15 @@ interface ImportCsonResponse {
     "resources": {
       "hp": { "current": 12, "max": 12 },
       "san": { "current": 60, "max": 60 }
-    },
-    "custom_fields": {}
+    }
   },
   "warnings": [],
   "meta": {
     "import_format": "cson",
     "version": "1.0",
     "imported_at": "2026-04-26T15:23:00Z",
-    "source_ruleset_name": "coc7",
-    "matched_ruleset_id": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
+    "matched_ruleset_id": "ruleset_coc7_official",
     "match_score": 0.95,
     "fields_matched": 12,
     "fields_total": 12
@@ -251,7 +226,7 @@ interface ImportCsonResponse {
   "data": {
     "character_id": "char_def456",
     "name": "李四",
-    "ruleset_id": "coc7",
+    "ruleset_id": "ruleset_coc7_official",
     "attributes": {
       "strength": 55,
       "dexterity": 60
@@ -261,22 +236,17 @@ interface ImportCsonResponse {
     },
     "resources": {
       "hp": { "current": 10, "max": 10 }
-    },
-    "custom_fields": {
-      "luck_points": 50,
-      "credit_rating": 30,
-      "personal_notes": "来自旧平台的自定义字段"
     }
   },
   "warnings": [
     {
       "code": "UNKNOWN_FIELDS_IGNORED",
-      "message": "字段 'luck_points' 未被当前规则包识别，已保留到 custom_fields",
+      "message": "字段 'luck_points' 未被当前规则包识别，已跳过",
       "field_path": "luck_points"
     },
     {
       "code": "UNKNOWN_FIELDS_IGNORED",
-      "message": "字段 'credit_rating' 未被当前规则包识别，已保留到 custom_fields",
+      "message": "字段 'credit_rating' 未被当前规则包识别，已跳过",
       "field_path": "credit_rating"
     }
   ],
@@ -284,8 +254,8 @@ interface ImportCsonResponse {
     "import_format": "cson",
     "version": "1.0",
     "imported_at": "2026-04-26T15:23:00Z",
-    "source_ruleset_name": "coc7",
-    "matched_ruleset_id": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
+    "matched_ruleset_id": "ruleset_coc7_official",
     "match_score": 0.88,
     "fields_matched": 9,
     "fields_total": 12,
@@ -348,7 +318,7 @@ interface ImportCsonResponse {
     "import_format": "cson",
     "version": "v1.0-beta",
     "imported_at": "2026-04-26T15:23:00Z",
-    "source_ruleset_name": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
     "matched_ruleset_id": null,
     "match_score": 0,
     "fields_matched": 0,
@@ -366,13 +336,13 @@ interface ImportCsonResponse {
   "warnings": [],
   "error": {
     "code": "IMPORT_SCHEMA_INVALID",
-    "message": "角色卡结构校验失败：必填字段 'meta.name' 缺失",
+    "message": "角色卡结构校验失败：必填字段 'character.name' 缺失",
     "failed_stage": "import",
     "failed_node_id": null,
     "details": {
       "validation_errors": [
         {
-          "field_path": "meta.name",
+          "field_path": "character.name",
           "constraint": "required",
           "message": "必填字段缺失"
         }
@@ -383,7 +353,7 @@ interface ImportCsonResponse {
     "import_format": "cson",
     "version": "1.0",
     "imported_at": "2026-04-26T15:23:00Z",
-    "source_ruleset_name": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
     "matched_ruleset_id": null,
     "match_score": 0,
     "fields_matched": 0,
@@ -583,8 +553,8 @@ interface ImportCsonConfirmRequest {
     "import_format": "cson",
     "version": "1.0",
     "imported_at": "2026-04-26T16:10:00Z",
-    "source_ruleset_name": "coc7",
-    "matched_ruleset_id": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
+    "matched_ruleset_id": "ruleset_coc7_official",
     "match_score": 0.91,
     "fields_matched": 10,
     "fields_total": 12
@@ -614,7 +584,7 @@ interface ImportCsonConfirmRequest {
   "data": {
     "character_id": "char_xyz789",
     "name": "王五",
-    "ruleset_id": "coc7",
+    "ruleset_id": "ruleset_coc7_official",
     "attributes": {
       "strength": 55,
       "dexterity": 65
@@ -624,16 +594,15 @@ interface ImportCsonConfirmRequest {
     },
     "resources": {
       "luck": { "current": 45, "max": 45 }
-    },
-    "custom_fields": {}
+    }
   },
   "warnings": [],
   "meta": {
     "import_format": "cson",
     "version": "1.0",
     "imported_at": "2026-04-26T16:12:00Z",
-    "source_ruleset_name": "coc7",
-    "matched_ruleset_id": "coc7",
+    "source_ruleset_name": "克苏鲁的呼唤 第七版",
+    "matched_ruleset_id": "ruleset_coc7_official",
     "match_score": 0.91,
     "fields_matched": 12,
     "fields_total": 12
@@ -647,9 +616,8 @@ interface ImportCsonConfirmRequest {
 
 - 导出字段键名始终使用规范英文 `snake_case`，不回写导入时的原始中文键名。
 - `schema_version` 固定输出当前支持版本 `1.0`。
-- `display_labels`：若存在则作为 `custom_fields.display_labels` 原样保留；若不存在不自动生成。
-- `custom_fields`：原样回写，不做语义提升或结构裁剪。
-- 标准资源（`hp/mp/san/luck`）写入 `character.resources`；未知资源保留在 `custom_fields.resources`。
+- 标准资源（`hp/mp/san/luck`）写入 `character.resources`。
+- `character.equipment` 导出为字符串数组，不做类型转换。
 - 若系统判断“导入 -> 平台内表示 -> 导出”后无法满足结构等价，允许导出，但必须返回 `warnings[].code='ROUNDTRIP_LOSSY'`。
 
 ### K.10.2 导出响应结构
@@ -697,12 +665,13 @@ interface ExportCsonResponse {
   "data": {
     "schema_version": "1.0",
     "meta": {
-      "name": "哈维·沃尔特",
-      "player_name": "玩家A",
       "created_at": "2026-04-10T08:00:00Z",
-      "updated_at": "2026-04-26T16:30:00Z"
+      "exported_by": "共叙",
+      "platform_version": "0.1.0"
     },
     "character": {
+      "name": "哈维·沃尔特",
+      "ruleset_ref": "ruleset_coc7_official",
       "attributes": {
         "strength": 60,
         "constitution": 50,
@@ -716,22 +685,11 @@ interface ExportCsonResponse {
         "hp": { "current": 11, "max": 11 },
         "san": { "current": 55, "max": 60 }
       },
-      "custom_fields": {
-        "occupation": "警探",
-        "resources": {
-          "energy_shield": { "current": 3, "max": 3 }
-        },
-        "display_labels": {
-          "skills": {
-            "spot_hidden": "侦查"
-          }
-        }
-      }
+      "equipment": ["手枪", "警徽"],
+      "background": "一位退役警探"
     },
     "source": {
-      "ruleset_name": "克苏鲁的呼唤 第七版",
-      "platform": "trpg-platform",
-      "original_format": "cson"
+      "character_code": "CHAR-001"
     }
   },
   "warnings": [],
@@ -887,13 +845,13 @@ interface ExportCsonResponse {
 | 场景 | 输入 | 期望状态 | 关键断言 |
 |------|------|----------|----------|
 | 标准导入成功 | 合法 CSON 1.0 | `success` | 标准字段进入结构化字段；无 warning |
-| 强制导入 | 含未知字段/未知资源 | `partial_success` | 未知字段进入 `custom_fields`；未知资源进入 `custom_fields.resources`；返回 warning |
-| ruleset 缺失 | `source.ruleset_name` 缺失且未手选 | `failed` | `error.code='IMPORT_RULESET_REQUIRED'` |
+| 强制导入 | 含未识别键名的字段 | `partial_success` | 未识别字段跳过并返回 warning |
+| ruleset 缺失 | `character.ruleset_ref` 无法匹配且未手选 | `failed` | `error.code='IMPORT_RULESET_REQUIRED'` |
 | alias 冲突 | 同一原始键命中多个候选 | `needs_confirmation` | `error.code='IMPORT_ALIAS_CONFLICT'`；返回候选列表 |
 | 结构校验失败 | 缺失必填字段或结构错误 | `failed` | `error.code='IMPORT_SCHEMA_INVALID'` |
 | 版本格式错误 | 非 `major.minor` | `failed` | `error.code='INVALID_VERSION_FORMAT'` |
 | 标准导出成功 | 平台内合法角色卡 | `success` | 导出键名为英文 `snake_case`；`schema_version='1.0'` |
-| round-trip 有损 | 未知资源或旧版遗留字段 | `success` | 返回 `ROUNDTRIP_LOSSY`；`roundtrip_equivalent=false` |
+| round-trip 有损 | 导入导出过程中字段丢失 | `success` | 返回 `ROUNDTRIP_LOSSY`；`roundtrip_equivalent=false` |
 
 ### K.11.3 平台实现级建议测试
 
@@ -951,10 +909,10 @@ Round-trip 自动化断言直接复用 K.10 的“结构等价”定义，至少
 
 - [ ] **状态与错误码一致性**：`success/partial_success/needs_confirmation/failed` 与 `EngineErrorCode`（含 `IMPORT_ALIAS_CONFLICT`、`IMPORT_RULESET_REQUIRED`）在接口定义、流程说明、示例 JSON 三处一致。
 - [ ] **warning 表达一致性**：全文仅使用 `warnings[].code` 作为 warning 标识表达，不再出现 `warning_code` 旧口径。
-- [ ] **键名规范一致性**：规范字段全部采用英文 `snake_case`；中文仅出现在 `display_labels`/`aliases` 或说明文案中。
+- [ ] **键名规范一致性**：规范字段全部采用英文 `snake_case`；中文仅出现在说明文案或业务自定义字段中。
 - [ ] **冲突确认闭环**：存在 alias 冲突时必须返回 `needs_confirmation`，并要求一次性完成全部 `resolution_map` 确认后才能完成正式导入。
-- [ ] **未知字段保真**：unknown fields 与 unknown resources 均可追踪保留（分别进入 `custom_fields` 与 `custom_fields.resources`），不得静默丢失。
-- [ ] **导出与版本规则**：导出固定 `schema_version='1.0'`，`custom_fields` 原样回写，`display_labels` 若存在则作为 `custom_fields.display_labels` 保留。
+- [ ] **字段完整性**：`character` 所有标准字段（`name`、`ruleset_ref`、`attributes`、`skills`、`resources`、`equipment`）须完整导出，不得静默丢失。
+- [ ] **导出与版本规则**：导出固定 `schema_version='1.0'`，并按实现写入 `meta.created_at/exported_by/platform_version`。
 - [ ] **round-trip 告警规则**：不满足结构等价时允许导出，但必须返回 `warnings[].code='ROUNDTRIP_LOSSY'` 且 `roundtrip_equivalent=false`。
 - [ ] **测试基线达成**：K.11 协议级 8 类必测场景全部通过，兼容性矩阵（CSON/HKTRPG/SZF/rpgsheet）至少完成首轮验证。
 
