@@ -43,6 +43,9 @@ const AI_CONFIG = {
 // 重试延迟：3s, 9s（共 2 次重试）
 const RETRY_DELAYS_MS = [3_000, 9_000];
 
+/** 单次 AI 调用超时（ms），含重试间隔后总上限约 90s */
+const AI_REQUEST_TIMEOUT_MS = 60_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -55,6 +58,8 @@ async function fetchDeepSeek(
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
     try {
       const resp = await fetch(`${AI_CONFIG.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -62,6 +67,7 @@ async function fetchDeepSeek(
           'Content-Type': 'application/json',
           Authorization: `Bearer ${AI_CONFIG.apiKey}`,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           model: cfg.model,
           messages,
@@ -86,12 +92,16 @@ async function fetchDeepSeek(
         outputTokens: data.usage?.completion_tokens ?? 0,
       };
     } catch (err) {
-      lastError = err as Error;
+      lastError = err instanceof Error && err.name === 'AbortError'
+        ? new Error(`DeepSeek 请求超时（>${AI_REQUEST_TIMEOUT_MS / 1000}s）`)
+        : err as Error;
       const delay = RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) {
         console.warn(`[AI] 第 ${attempt + 1} 次调用失败，${delay / 1000}s 后重试:`, lastError.message);
         await sleep(delay);
       }
+    } finally {
+      clearTimeout(timeoutHandle);
     }
   }
 

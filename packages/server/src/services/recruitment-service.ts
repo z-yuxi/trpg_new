@@ -318,35 +318,40 @@ export class RecruitmentService {
       if (character['ruleset_id'] !== post.ruleset_id) throw new Error('角色卡规则包与招募帖不匹配');
     }
 
-    const existed = await db('recruitment_applications')
-      .where({ post_id: params.post_id, applicant_user_id: params.applicant_user_id })
-      .first();
-    if (existed) throw new Error('你已提交过申请');
-
-    const isWaiting = params.apply_type === 'waiting' || post.status === 'full';
+    // MEDIUM-fix: 将重复检查+插入放入事务，防止并发竞态导致重复申请
     const id = generateId();
+    await db.transaction(async (trx) => {
+      // forUpdate 行锁：并发申请时只有一个能获得锁并继续
+      const existed = await trx('recruitment_applications')
+        .where({ post_id: params.post_id, applicant_user_id: params.applicant_user_id })
+        .forUpdate()
+        .first();
+      if (existed) throw new Error('你已提交过申请');
 
-    if (isWaiting) {
-      const pos = await nextWaitingPosition(params.post_id);
-      await db('recruitment_applications').insert({
-        id,
-        post_id: params.post_id,
-        applicant_user_id: params.applicant_user_id,
-        character_id: params.character_id ?? null,
-        message: params.message,
-        status: 'waiting',
-        waiting_position: pos,
-      });
-    } else {
-      await db('recruitment_applications').insert({
-        id,
-        post_id: params.post_id,
-        applicant_user_id: params.applicant_user_id,
-        character_id: params.character_id ?? null,
-        message: params.message,
-        status: 'pending',
-      });
-    }
+      const isWaiting = params.apply_type === 'waiting' || post.status === 'full';
+
+      if (isWaiting) {
+        const pos = await nextWaitingPosition(params.post_id);
+        await trx('recruitment_applications').insert({
+          id,
+          post_id: params.post_id,
+          applicant_user_id: params.applicant_user_id,
+          character_id: params.character_id ?? null,
+          message: params.message,
+          status: 'waiting',
+          waiting_position: pos,
+        });
+      } else {
+        await trx('recruitment_applications').insert({
+          id,
+          post_id: params.post_id,
+          applicant_user_id: params.applicant_user_id,
+          character_id: params.character_id ?? null,
+          message: params.message,
+          status: 'pending',
+        });
+      }
+    });
 
     return rowToApplication(
       (await db('recruitment_applications').where({ id }).first()) as Record<string, unknown>,

@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../db', () => ({
   db: Object.assign(vi.fn(), {
     fn: { now: vi.fn().mockReturnValue('CURRENT_TIMESTAMP') },
+    transaction: vi.fn(),
   }),
 }));
 vi.mock('../services/campaign-service', () => ({
@@ -37,6 +38,7 @@ function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any
     limit:       vi.fn(),
     max:         vi.fn(),
     count:       vi.fn(),
+    forUpdate:   vi.fn(),
     insert:      vi.fn().mockResolvedValue([1]),
     update:      vi.fn().mockResolvedValue(1),
     decrement:   vi.fn().mockResolvedValue(1),
@@ -47,7 +49,7 @@ function makeChain(firstValue: unknown = null, resolveRows: unknown[] = []): any
   for (const key of [
     'where', 'andWhere', 'whereIn', 'whereNot', 'whereNotNull',
     'leftJoin', 'select', 'orderBy', 'offset', 'limit',
-    'max', 'count',
+    'max', 'count', 'forUpdate',
   ]) {
     chain[key].mockReturnValue(chain);
   }
@@ -96,6 +98,8 @@ describe('RecruitmentService 状态机', () => {
   beforeEach(() => {
     service = new RecruitmentService();
     vi.clearAllMocks();
+    // 让 transaction 执行回调，并将 mockDb 本身作为 trx 传入
+    (mockDb as any).transaction.mockImplementation(async (cb: (trx: typeof mockDb) => Promise<unknown>) => cb(mockDb));
   });
 
   // ── createApplication ─────────────────────────────────────────
@@ -194,10 +198,6 @@ describe('RecruitmentService 状态机', () => {
       const app = makeApp({ status: 'pending' });
       const updatedApp = makeApp({ status: 'rejected', reject_reason: '不合适' });
       const chain = makeChain(app);
-      // db.first 调用顺序：
-      //   1. 申请查询 → app
-      //   2. promoteNextWaiting: 帖查询 → null（早退，不继续）
-      //   3. 最终返回申请 → updatedApp
       chain.first
         .mockResolvedValueOnce(app)
         .mockResolvedValueOnce(null)        // promoteNextWaiting: post → null → early return
@@ -229,11 +229,6 @@ describe('RecruitmentService 状态机', () => {
       const confirmedApp = makeApp({ status: 'confirmed', invited_expires_at: null });
       const post = makePost({ player_count_max: 2 });
       const chain = makeChain(app);
-      // db.first 调用顺序：
-      //   1. 申请查询 → app
-      //   2. recalculatePostCounters: 帖查询 → post
-      //   3. recalculatePostCounters: count confirmed (.count().first()) → { total: 1 }
-      //   4. 最终返回申请 → confirmedApp
       chain.first
         .mockResolvedValueOnce(app)
         .mockResolvedValueOnce(post)           // recalculate: 帖查询
