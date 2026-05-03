@@ -99,7 +99,14 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
   }
 
   const { text_chunk, prev_summary, term_whitelist = [] } = parsed.data;
-  const prevCtx = prev_summary ? `\n\n上一片段已识别实体摘要：${prev_summary}` : '';
+
+  // MEDIUM-fix: 清洗 prev_summary 中可能的 prompt injection 内容
+  // 移除双换行后的指令注入模式（只允许简单的实体摘要文本）
+  const safePrevSummary = prev_summary
+    ? prev_summary.replace(/\n{2,}/g, '\n').replace(/[`'"\\]/g, '').slice(0, 800)
+    : undefined;
+
+  const prevCtx = safePrevSummary ? `\n\n上一片段已识别实体摘要：${safePrevSummary}` : '';
   const termsCtx = term_whitelist.length
     ? `\n\n专属术语（保留原文，不可改写）：${term_whitelist.join('、')}`
     : '';
@@ -186,14 +193,40 @@ router.get('/tasks', async (req, res) => {
 // ── POST /api/ai/tasks/:id/retry — 失败任务重试 ──────────────────────────────
 router.post('/tasks/:id/retry', async (req, res) => {
   const taskId = req.params['id'];
+  const user = req.user!;
 
   // 确认是当前用户且任务状态为 failed
   const task = await db('ai_usage_log')
-    .where({ id: taskId, user_id: req.user!.id, status: 'failed' })
+    .where({ id: taskId, user_id: user.id, status: 'failed' })
     .first();
 
   if (!task) {
     res.status(404).json({ error: 'NOT_FOUND', message: '未找到可重试的失败任务' });
+    return;
+  }
+
+  // HIGH-fix: 重试前重新检查配额，防止通过旧失败任务绕过月度限制
+  const taskType = task.task_type as TaskType;
+  const MONTHLY_QUOTA: Record<string, Record<string, number>> = {
+    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
+    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
+    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
+  };
+  const tier = (user.subscription_type as string | undefined) ?? 'free';
+  const quota = (MONTHLY_QUOTA[tier] ?? MONTHLY_QUOTA['free'])[taskType] ?? 0;
+  if (quota === 0) {
+    res.status(403).json({ error: 'AI_FEATURE_LOCKED', message: '当前会员等级不支持此 AI 功能' });
+    return;
+  }
+  const monthStart = new Date();
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const usedRow = await db('ai_usage_log')
+    .where({ user_id: user.id, task_type: taskType, status: 'success' })
+    .where('created_at', '>=', monthStart)
+    .count('id as c')
+    .first<{ c: number | string }>();
+  if (Number(usedRow?.c ?? 0) >= quota) {
+    res.status(429).json({ error: 'AI_QUOTA_EXCEEDED', message: '本月 AI 使用次数已达上限，无法重试' });
     return;
   }
 

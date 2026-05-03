@@ -217,9 +217,13 @@ router.post('/webhook/:channel', async (req, res) => {
         return;
       }
     } else {
-      // 无公钥配置时降级为 HMAC（仅测试环境）
+      // 无公钥时降级为 HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed）
       const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_ALIPAY;
-      if (hmacSecret && !verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
+      if (!hmacSecret) {
+        res.status(503).json({ error: 'Alipay webhook not configured' });
+        return;
+      }
+      if (!verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
         res.status(401).json({ error: 'Invalid signature' });
         return;
       }
@@ -233,8 +237,14 @@ router.post('/webhook/:channel', async (req, res) => {
         signature: req.headers['wechatpay-signature'] as string,
         serial:    req.headers['wechatpay-serial'] as string,
       };
+      // LOW-fix: 校验时间戳在 ±5 分钟内，防重放
+      const tsMs = Number(headers.timestamp) * 1000;
+      if (!headers.timestamp || Number.isNaN(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+        res.status(401).json({ error: 'WeChat Pay timestamp expired or missing' });
+        return;
+      }
       const rawBody = JSON.stringify(req.body);
-      if (!headers.timestamp || !verifyWechatPayV3Signature(headers, rawBody, wechatPublicKey)) {
+      if (!verifyWechatPayV3Signature(headers, rawBody, wechatPublicKey)) {
         res.status(401).json({ error: 'Invalid WeChat Pay signature' });
         return;
       }
@@ -258,9 +268,13 @@ router.post('/webhook/:channel', async (req, res) => {
         }
       }
     } else {
-      // 无证书配置时降级为 HMAC（仅测试环境）
+      // 无证书时降级为 HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed）
       const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_WECHAT;
-      if (hmacSecret && !verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
+      if (!hmacSecret) {
+        res.status(503).json({ error: 'WeChat Pay webhook not configured' });
+        return;
+      }
+      if (!verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
         res.status(401).json({ error: 'Invalid signature' });
         return;
       }
