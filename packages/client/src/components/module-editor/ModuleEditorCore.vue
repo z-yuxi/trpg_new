@@ -36,12 +36,45 @@
         >{{ mode.label }}</button>
       </div>
       <span class="toolbar-sep" />
+      <!-- AI 校对按钮 -->
+      <button
+        class="toolbar-btn"
+        :class="{ 'active': aiProofreadVisible }"
+        :disabled="aiProofreadLoading"
+        :title="aiProofreadLoading ? '校对中…' : 'AI 智能校对 (Ctrl+Shift+P)'"
+        @click="handleCheckText"
+      >
+        ✨
+      </button>
+      <span class="toolbar-sep" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
 
-    <!-- 编辑区域 -->
-    <div class="editor-scroll">
-      <editor-content :editor="editor" class="editor-body" />
+    <!-- 编辑区域 + AI 校对面板容器 -->
+    <div class="editor-container">
+      <!-- 左侧编辑区 -->
+      <div class="editor-scroll">
+        <editor-content :editor="editor" class="editor-body" />
+      </div>
+
+      <!-- 右侧 AI 校对面板 -->
+      <Transition name="slide-left">
+        <div
+          v-if="aiProofreadVisible"
+          class="proofread-panel-wrapper"
+          @keydown.capture="handleGlobalKeydown"
+        >
+          <AiProofreadPanel
+            :issues="aiProofreadIssues"
+            :loading="aiProofreadLoading"
+            @accept="handleAcceptProofread"
+            @reject="handleRejectProofread"
+            @locate="handleLocateProofread"
+            @acceptAll="handleAcceptAllProofread"
+            @close="closeAiProofreadPanel"
+          />
+        </div>
+      </Transition>
     </div>
 
     <!-- Slash 命令菜单 -->
@@ -125,6 +158,9 @@ import { BranchNodeExtension } from './extensions/BranchNodeExtension';
 import { PunctuationPairExtension } from './extensions/PunctuationPairExtension';
 import { Extension } from '@tiptap/core';
 import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
+import { checkText, type CheckTextIssue } from '../../api/ai';
+import { rollbackModuleToSnapshot } from '../../api/modules';
+import AiProofreadPanel from '../ai/AiProofreadPanel.vue';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -394,6 +430,101 @@ function applyMentionItem(item: EntityItem) {
   closeMentionMenu();
 }
 
+// ── AI 校对（Proofread）─────────────────────
+const aiProofreadVisible = ref(false);
+const aiProofreadIssues = ref<CheckTextIssue[]>([]);
+const aiProofreadLoading = ref(false);
+const aiProofreadAccepted = ref<Set<number>>(new Set());
+
+async function handleCheckText() {
+  if (!editor.value) return;
+  aiProofreadLoading.value = true;
+  aiProofreadIssues.value = [];
+  aiProofreadAccepted.value.clear();
+  
+  try {
+    const content = JSON.stringify(editor.value.getJSON());
+    const result = await checkText(content);
+    aiProofreadIssues.value = result.issues;
+    aiProofreadVisible.value = true;
+  } catch (err: any) {
+    console.error('AI 校对失败:', err?.message ?? 'Unknown error');
+    aiProofreadVisible.value = false;
+  } finally {
+    aiProofreadLoading.value = false;
+  }
+}
+
+function handleAcceptProofread(issue: CheckTextIssue, _index: number) {
+  if (!editor.value) return;
+  // 在编辑器内容中查找并替换 original → suggestion
+  const current = JSON.stringify(editor.value.getJSON());
+  // 简单的字符串替换（生产环境需更精细的位置查找）
+  const updated = current.replace(issue.original, issue.suggestion);
+  try {
+    const parsed = JSON.parse(updated);
+    editor.value.commands.setContent(parsed);
+  } catch {
+    // 如果 JSON 解析失败，忽略此修改
+  }
+}
+
+function handleRejectProofread(issue: CheckTextIssue, index: number) {
+  // 标记为已忽略
+  aiProofreadAccepted.value.add(index);
+}
+
+function handleLocateProofread(issue: CheckTextIssue) {
+  if (!editor.value) return;
+  // 查找文本在编辑器中的位置并高亮
+  const { state, view } = editor.value;
+  const text = state.doc.textContent;
+  const pos = text.indexOf(issue.original);
+  if (pos >= 0) {
+    editor.value.chain().focus().setSelection(pos, pos + issue.original.length).run();
+    // 滚动到该位置
+    view.dispatch(view.state.tr.setMeta('scroll', 'center'));
+  }
+}
+
+function handleAcceptAllProofread() {
+  if (!editor.value || aiProofreadIssues.value.length === 0) return;
+  let content = JSON.stringify(editor.value.getJSON());
+  
+  // 批量应用所有未忽略的修改
+  for (let i = 0; i < aiProofreadIssues.value.length; i++) {
+    if (!aiProofreadAccepted.value.has(i)) {
+      const issue = aiProofreadIssues.value[i];
+      content = content.replace(issue.original, issue.suggestion);
+    }
+  }
+  
+  try {
+    const parsed = JSON.parse(content);
+    editor.value.commands.setContent(parsed);
+    aiProofreadVisible.value = false;
+  } catch {
+    // 如果 JSON 解析失败，忽略此修改
+  }
+}
+
+async function handleRollbackSnapshot(snapshotId: string) {
+  if (!props.moduleId) return;
+  try {
+    const res = await rollbackModuleToSnapshot(props.moduleId, snapshotId);
+    if (res.data?.content) {
+      const parsed = JSON.parse(res.data.content as string);
+      editor.value?.commands.setContent(parsed);
+    }
+  } catch (err: any) {
+    console.error('回滚失败:', err?.message ?? 'Unknown error');
+  }
+}
+
+function closeAiProofreadPanel() {
+  aiProofreadVisible.value = false;
+}
+
 // 监听键盘输入以触发 "/" 菜单
 function handleKeyup(e: KeyboardEvent) {
   if (!editor.value) return;
@@ -497,6 +628,13 @@ function handleGlobalKeydown(e: KeyboardEvent) {
     return;
   }
 
+  // Ctrl+Shift+P → AI 智能校对
+  if (e.shiftKey && e.key === 'P') {
+    e.preventDefault();
+    handleCheckText();
+    return;
+  }
+
   // Ctrl+. → 在光标位置插入 kp_info 块
   if (!e.shiftKey && e.key === '.') {
     e.preventDefault();
@@ -580,6 +718,22 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 .editor-scroll {
   flex: 1;
   overflow-y: auto;
+}
+
+.editor-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.proofread-panel-wrapper {
+  width: 350px;
+  min-width: 300px;
+  max-width: 400px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-body {
@@ -711,4 +865,12 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.slide-left-enter-active, .slide-left-leave-active { 
+  transition: all 0.25s ease; 
+}
+.slide-left-enter-from, .slide-left-leave-to { 
+  transform: translateX(100%);
+  opacity: 0;
+}
 </style>
