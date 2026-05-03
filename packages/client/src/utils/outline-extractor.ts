@@ -17,6 +17,44 @@ const LEGACY_BLOCK_NAME_KEY: Record<string, string> = {
 const LEGACY_BLOCK_TYPES = new Set(Object.keys(LEGACY_BLOCK_NAME_KEY));
 
 /**
+ * 从 TipTap doc JSON 中提取所有可见纯文本内容，段落间以换行分隔。
+ * 用于将编辑器内容转换为 AI 可分析的纯文本输入。
+ *
+ * @param docJson  TipTap getJSON() 返回的对象，或其 JSON 字符串，或纯字符串
+ */
+export function extractDocumentPlainText(docJson: unknown): string {
+  if (typeof docJson === 'string') {
+    // 尝试解析为 TipTap JSON；若失败则视作纯文本直接返回
+    try {
+      const parsed = JSON.parse(docJson) as { content?: unknown[] };
+      if (parsed && typeof parsed === 'object' && 'content' in parsed) {
+        const parts: string[] = [];
+        walkForText(parsed.content ?? [], parts);
+        return parts.join('\n');
+      }
+    } catch { /* 非 JSON，按纯文本处理 */ }
+    return docJson;
+  }
+  const doc = (docJson ?? {}) as { content?: unknown[] };
+  const parts: string[] = [];
+  walkForText(doc.content ?? [], parts);
+  return parts.join('\n');
+}
+
+function walkForText(nodes: unknown[], out: string[]) {
+  for (const raw of nodes) {
+    const node = raw as Record<string, any>;
+    if (!node || typeof node.type !== 'string') continue;
+    if (node.type === 'text' && typeof node.text === 'string') {
+      out.push(node.text);
+    }
+    if (Array.isArray(node.content)) {
+      walkForText(node.content, out);
+    }
+  }
+}
+
+/**
  * 遍历 TipTap doc JSON，提取标题节点 + 业务块节点构成大纲
  * @param docJson  TipTap getJSON() 返回的对象，或其 JSON 字符串
  */

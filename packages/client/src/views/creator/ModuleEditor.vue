@@ -394,7 +394,7 @@ import FloatingPanel from '../../components/module-editor/FloatingPanel.vue';
 import SvgIcon from '../../components/SvgIcon.vue';
 import { api } from '../../utils/api';
 import { getModule, updateModule, autoSaveModule, submitModule as apiSubmitModule, withdrawModule as apiWithdrawModule, getModuleTerms, saveModuleTerms, applyModuleEntities, type ModuleEntity } from '../../api/modules';
-import { extractOutline } from '../../utils/outline-extractor';
+import { extractOutline, extractDocumentPlainText } from '../../utils/outline-extractor';
 import { getToken } from '../../utils/api';
 import { socketClient } from '../../socket/socket-client';
 import type { Module, ModuleOutlineItem, ReaderSettings } from '@trpg/shared';
@@ -696,17 +696,34 @@ async function handleAiCheck() {
 const aiImportBusy = ref(false);
 
 async function handleAiImportAnalysis() {
-  const text = editorContent.value;
-  if (!text || aiImportBusy.value) return;
+  const rawContent = editorContent.value;
+  if (!rawContent || aiImportBusy.value) return;
+
+  // 从 TipTap JSON 提取纯文本，避免将 JSON 结构符号送入 AI
+  const plainText = extractDocumentPlainText(rawContent);
+  if (!plainText.trim()) {
+    alert('当前内容为空，无法进行 AI 结构分析。');
+    return;
+  }
+
   aiImportBusy.value = true;
   try {
-    const res = await api.post<{ task_id: string; message: string }>('/ai/import-module', {
-      text_chunk: text.slice(0, 10000),
+    // 使用 full_text 全文模式，服务端自动分片（最大 80000 字）
+    const res = await api.post<{ task_id: string; chunk_count?: number; message: string }>('/ai/import-module', {
+      full_text: plainText.slice(0, 80000),
       term_whitelist: moduleTerms.value.length ? moduleTerms.value : undefined,
     });
     pendingAiImportTaskId.value = res.task_id;
     aiTaskPendingCount.value += 1;
-    aiTaskFailedCount.value = 0; // 重置失败角标（新任务已提交）
+    aiTaskFailedCount.value = 0;
+    if (res.chunk_count && res.chunk_count > 1) {
+      // 多片时给用户一个提示（非阻塞）
+      const msg = document.createElement('div');
+      msg.className = 'ai-chunk-toast';
+      msg.textContent = `AI 分析中（共 ${res.chunk_count} 片），完成后自动弹出结果…`;
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 4000);
+    }
   } catch (err: unknown) {
     const e = err as { status?: number };
     if (e?.status === 403) {
@@ -1355,6 +1372,19 @@ function goBack() {
   position: absolute; top: 2px; right: 2px;
   width: 7px; height: 7px; border-radius: 50%;
   background: #ef4444;
+}
+
+/* AI 多片分析 toast 提示（JS 动态插入 body，不作用域限制） */
+:global(.ai-chunk-toast) {
+  position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+  background: rgba(30,30,30,.88); color: #fff;
+  padding: 8px 20px; border-radius: 20px; font-size: 13px;
+  pointer-events: none; z-index: 9999;
+  animation: fadeInUp .2s ease;
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* AI 校对结果面板 */

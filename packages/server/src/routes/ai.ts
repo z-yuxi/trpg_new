@@ -84,13 +84,30 @@ router.post('/check-text', checkAiQuota('check_text'), async (req, res) => {
 
 // ── POST /api/ai/import-module ───────────────────────────────────────────────
 const importModuleSchema = z.object({
-  /** 当前待分析的文本分片，单片限 10000 字 */
-  text_chunk: z.string().min(1).max(10000),
-  /** 前一片已识别实体的精简摘要（仅名称+类型），控制在 1000 字内 */
+  /** 单片模式：当前待分析的文本分片，单片限 10000 字（向后兼容） */
+  text_chunk: z.string().min(1).max(10000).optional(),
+  /** 全文模式：完整文档文本，最大 80000 字，服务端自动分片处理 */
+  full_text: z.string().min(1).max(80000).optional(),
+  /** 前一片已识别实体的精简摘要（仅名称+类型），控制在 1000 字内（单片模式可选） */
   prev_summary: z.string().max(1000).optional(),
   /** 专属术语白名单，防止 AI 改写模组固有名词 */
   term_whitelist: z.array(z.string().max(64)).max(100).optional(),
+}).refine((d) => d.text_chunk || d.full_text, {
+  message: 'text_chunk 或 full_text 必须提供其一',
 });
+
+/** 将长文本切分为带重叠的分片数组（全文模式使用） */
+function splitIntoChunks(text: string, chunkSize = 8000, overlap = 200): string[] {
+  if (text.length <= chunkSize) return [text];
+  const chunks: string[] = [];
+  let pos = 0;
+  while (pos < text.length) {
+    chunks.push(text.slice(pos, pos + chunkSize));
+    if (pos + chunkSize >= text.length) break;
+    pos += chunkSize - overlap;
+  }
+  return chunks;
+}
 
 router.post('/import-module', checkAiQuota('import_module'), async (req, res) => {
   const parsed = importModuleSchema.safeParse(req.body);
@@ -99,32 +116,52 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
     return;
   }
 
-  const { text_chunk, prev_summary, term_whitelist = [] } = parsed.data;
-
-  // MEDIUM-fix: 清洗 prev_summary 中可能的 prompt injection 内容
-  // 移除双换行后的指令注入模式（只允许简单的实体摘要文本）
-  const safePrevSummary = prev_summary
-    ? prev_summary.replace(/\n{2,}/g, '\n').replace(/[`'"\\]/g, '').slice(0, 800)
-    : undefined;
-
-  const prevCtx = safePrevSummary ? `\n\n上一片段已识别实体摘要：${safePrevSummary}` : '';
-  const termsCtx = term_whitelist.length
-    ? `\n\n专属术语（保留原文，不可改写）：${term_whitelist.join('、')}`
-    : '';
-
-  const messages = [
-    {
-      role: 'system' as const,
-      content:
-        `你是 TRPG 模组结构分析助手。从文本片段中提取结构化实体。` +
-        `返回严格 JSON（无 Markdown 包裹）：` +
-        `{"entities":[{"type":"npc"|"scene"|"clue"|"item"|"event","name":"名称","description":"简短描述（50字内）","mentions":["相关文本引用"]}]}` +
-        `。${prevCtx}${termsCtx}`,
-    },
-    { role: 'user' as const, content: text_chunk },
-  ];
+  const { text_chunk, full_text, prev_summary, term_whitelist = [] } = parsed.data;
 
   try {
+    // ── 全文分片模式 ──────────────────────────────────────────────────────
+    if (full_text) {
+      const chunks = splitIntoChunks(full_text);
+      const taskId = await enqueueAiTask({
+        userId: req.user!.id,
+        taskType: 'import_module',
+        endpoint: 'pro',
+        // messages 为空，Worker 使用 chunks 字段自行构建每片消息
+        messages: [],
+        chunks: { texts: chunks, term_whitelist },
+      });
+      res.status(202).json({
+        task_id: taskId,
+        chunk_count: chunks.length,
+        message: `已分为 ${chunks.length} 片开始分析，完成后通过 Socket.IO 推送 ai_task_update 事件`,
+      });
+      return;
+    }
+
+    // ── 单片向后兼容模式 ─────────────────────────────────────────────────
+    const safeChunk = text_chunk!;
+    // MEDIUM-fix: 清洗 prev_summary 中可能的 prompt injection 内容
+    const safePrevSummary = prev_summary
+      ? prev_summary.replace(/\n{2,}/g, '\n').replace(/[`'"\\]/g, '').slice(0, 800)
+      : undefined;
+
+    const prevCtx = safePrevSummary ? `\n\n上一片段已识别实体摘要：${safePrevSummary}` : '';
+    const termsCtx = term_whitelist.length
+      ? `\n\n专属术语（保留原文，不可改写）：${term_whitelist.join('、')}`
+      : '';
+
+    const messages = [
+      {
+        role: 'system' as const,
+        content:
+          `你是 TRPG 模组结构分析助手。从文本片段中提取结构化实体。` +
+          `返回严格 JSON（无 Markdown 包裹）：` +
+          `{"entities":[{"type":"npc"|"scene"|"clue"|"item"|"event","name":"名称","description":"简短描述（50字内）","mentions":["相关文本引用"]}]}` +
+          `。${prevCtx}${termsCtx}`,
+      },
+      { role: 'user' as const, content: safeChunk },
+    ];
+
     const taskId = await enqueueAiTask({
       userId: req.user!.id,
       taskType: 'import_module',
