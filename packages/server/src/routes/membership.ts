@@ -5,12 +5,12 @@
  * POST /api/membership/grant             — 运营手工授予会员（需 admin）
  * GET  /api/membership/events            — 查询当前用户订阅事件历史
  *
- * POST /api/membership/orders            — 创建支付订单（前端发起）
+ * POST /api/membership/orders            — 创建支付订单（前端发起，返回三方预付单参数）
  * GET  /api/membership/orders/:id        — 轮询订单状态
  * POST /api/membership/orders/:id/cancel — 取消待支付订单
- * POST /api/membership/webhook/:channel  — 三方支付回调（需配置 channel_secret 签名验证）
+ * POST /api/membership/webhook/:channel  — 三方支付回调（RSA2/SHA256 真实签名验证）
  */
-import { Router, type IRouter } from 'express';
+import { Router, type IRouter, type Request } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth';
@@ -18,6 +18,17 @@ import { membershipService } from '../services/membership-service';
 import { db } from '../db';
 import { generateId, MEMBERSHIP_BENEFITS } from '@trpg/shared';
 import type { MembershipTier } from '@trpg/shared';
+import {
+  verifyAlipaySignature,
+  verifyWechatPayV3Signature,
+  decryptWechatResource,
+  verifyHmacSignature,
+  type WechatPayCallbackHeaders,
+} from '../services/payment-verifier';
+import {
+  createAlipayWapOrder,
+  createWechatJsapiOrder,
+} from '../services/payment-gateway';
 
 const router: IRouter = Router();
 
@@ -121,14 +132,39 @@ router.post('/orders', authMiddleware, async (req, res) => {
       status: 'pending',
       metadata: JSON.stringify({ label: sku.label, months: sku.months }),
     });
-    // TODO: 对接真实支付渠道（微信 JSAPI / 支付宝 H5）时在此生成预付单并返回 pay_params
+    // 生成三方预付单参数
+    let payParams: Record<string, unknown> | null = null;
+    try {
+      if (parsed.data.channel === 'alipay') {
+        const result = await createAlipayWapOrder({
+          outTradeNo: orderId,
+          totalAmount: (sku.amount_cents / 100).toFixed(2),
+          subject: sku.label,
+          quitUrl: process.env.FRONTEND_BASE_URL ?? 'https://example.com',
+        });
+        if (result) payParams = { channel: 'alipay', pay_url: result.payUrl };
+      } else if (parsed.data.channel === 'wechat') {
+        // WeChat JSAPI 需要 openid，从 request header 获取（前端在创建订单时传入）
+        const openid = (req as Request & { body: { openid?: string } }).body.openid;
+        if (openid) {
+          const result = await createWechatJsapiOrder({
+            outTradeNo: orderId,
+            totalAmountCents: sku.amount_cents,
+            description: sku.label,
+            openid,
+          });
+          if (result) payParams = { channel: 'wechat', jsapi: result };
+        }
+      }
+    } catch {
+      // 支付参数生成失败不影响订单记录，前端可降级展示手动联系客服
+    }
     res.status(201).json({
       order_id: orderId,
       amount_cents: sku.amount_cents,
       label: sku.label,
       status: 'pending',
-      // pay_params 上线真实支付后在此补充
-      pay_params: null,
+      pay_params: payParams,
     });
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Order creation failed' });
@@ -163,28 +199,75 @@ router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/membership/webhook/:channel — 三方支付回调（生产时须验证签名）
-// WARNING: 生产上线前必须替换为真实签名验证逻辑，当前仅作骨架示例。
+// POST /api/membership/webhook/:channel — 三方支付回调（RSA2/SHA256 真实签名验证）
 router.post('/webhook/:channel', async (req, res) => {
-  const channel = req.params.channel;
+  const channel = req.params.channel as 'alipay' | 'wechat';
   if (!['alipay', 'wechat'].includes(channel)) {
     res.status(400).json({ error: 'Unknown channel' });
     return;
   }
 
-  // ── 签名验证占位（生产替换） ──────────────────────────────────────────────
-  const webhookSecret = process.env[`PAYMENT_WEBHOOK_SECRET_${channel.toUpperCase()}`];
-  if (webhookSecret) {
-    const sig = req.headers['x-payment-signature'] as string | undefined;
-    const body = JSON.stringify(req.body);
-    const expected = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
-    if (!sig || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-      res.status(401).json({ error: 'Invalid signature' });
-      return;
+  // ── 签名验证 ──────────────────────────────────────────────────────────────
+  if (channel === 'alipay') {
+    const alipayPublicKey = process.env.ALIPAY_PUBLIC_KEY_PEM;
+    if (alipayPublicKey) {
+      const params = req.body as Record<string, string>;
+      if (!verifyAlipaySignature(params, alipayPublicKey)) {
+        res.status(401).json({ error: 'Invalid Alipay signature' });
+        return;
+      }
+    } else {
+      // 无公钥配置时降级为 HMAC（仅测试环境）
+      const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_ALIPAY;
+      if (hmacSecret && !verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
+        res.status(401).json({ error: 'Invalid signature' });
+        return;
+      }
+    }
+  } else if (channel === 'wechat') {
+    const wechatPublicKey = process.env.WECHAT_PAY_PUBLIC_KEY_PEM;
+    if (wechatPublicKey) {
+      const headers: WechatPayCallbackHeaders = {
+        timestamp: req.headers['wechatpay-timestamp'] as string,
+        nonce:     req.headers['wechatpay-nonce'] as string,
+        signature: req.headers['wechatpay-signature'] as string,
+        serial:    req.headers['wechatpay-serial'] as string,
+      };
+      const rawBody = JSON.stringify(req.body);
+      if (!headers.timestamp || !verifyWechatPayV3Signature(headers, rawBody, wechatPublicKey)) {
+        res.status(401).json({ error: 'Invalid WeChat Pay signature' });
+        return;
+      }
+      // 解密 resource 字段（微信 v3 回调加密）
+      const resource = (req.body as Record<string, unknown>)['resource'] as Record<string, string> | undefined;
+      if (resource?.ciphertext) {
+        const apiV3Key = process.env.WECHAT_PAY_API_V3_KEY;
+        if (apiV3Key) {
+          try {
+            const decrypted = decryptWechatResource({
+              ciphertext: resource.ciphertext,
+              nonce: resource.nonce,
+              associatedData: resource.associated_data ?? '',
+              apiV3Key,
+            });
+            req.body = decrypted;
+          } catch {
+            res.status(400).json({ error: 'Failed to decrypt WeChat resource' });
+            return;
+          }
+        }
+      }
+    } else {
+      // 无证书配置时降级为 HMAC（仅测试环境）
+      const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_WECHAT;
+      if (hmacSecret && !verifyHmacSignature(req.headers['x-payment-signature'] as string, JSON.stringify(req.body), hmacSecret)) {
+        res.status(401).json({ error: 'Invalid signature' });
+        return;
+      }
     }
   }
 
-  // ── 提取三方流水号与订单 ID（各渠道字段不同，此处统一使用 external_order_id 与 out_trade_no） ──
+  // ── 提取三方流水号与订单 ID ──────────────────────────────────────────────
   const body = req.body as Record<string, unknown>;
   const outTradeNo = String(body['out_trade_no'] ?? body['order_id'] ?? '');
   const externalOrderId = String(body['trade_no'] ?? body['transaction_id'] ?? '');
