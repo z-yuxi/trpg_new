@@ -118,6 +118,10 @@ import CharacterCount from '@tiptap/extension-character-count';
 import { InvestigableNodeExtension } from './extensions/InvestigableNodeExtension';
 import { KpInfoExtension } from './extensions/KpInfoExtension';
 import { NpcMentionExtension } from './extensions/NpcMentionExtension';
+import { ConsequenceHintExtension } from './extensions/ConsequenceHintExtension';
+import { PlayerHandoutExtension } from './extensions/PlayerHandoutExtension';
+import { RuleRefExtension } from './extensions/RuleRefExtension';
+import { BranchNodeExtension } from './extensions/BranchNodeExtension';
 import { Extension } from '@tiptap/core';
 import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
 
@@ -142,6 +146,10 @@ const editor = useEditor({
     InvestigableNodeExtension,
     KpInfoExtension,
     NpcMentionExtension,
+    ConsequenceHintExtension,
+    PlayerHandoutExtension,
+    RuleRefExtension,
+    BranchNodeExtension,
     Extension.create({
       name: 'viewMode',
       addProseMirrorPlugins() {
@@ -216,8 +224,11 @@ watch(() => props.modelValue, (val) => {
 // ── 工具栏 ────────────────────────────────────────────────
 // 块类型工具栏按钮
 const blockButtons = [
-  { id: 'investigable_node', icon: '▼', label: '插入调查节点' },
-  { id: 'kp_info',           icon: '☆', label: '插入KP信息' },
+  { id: 'investigable_node', icon: '▼', label: '插入调查节点 (▼)' },
+  { id: 'kp_info',           icon: '☆', label: '插入KP信息 (☆)' },
+  { id: 'branch_node',       icon: '▸', label: '插入条件分支 (▸)' },
+  { id: 'consequence_hint',  icon: '▶', label: '插入后果提示 (▶)' },
+  { id: 'player_handout',    icon: '【】', label: '插入玩家资料 (【】)' },
 ];
 
 const toolbarButtons = computed(() => {
@@ -256,8 +267,12 @@ const allSlashItems: SlashItem[] = [
   { id: 'bullet', icon: '•', label: '无序列表', action: () => editor.value?.chain().focus().toggleBulletList().run() },
   { id: 'ordered', icon: '1.', label: '有序列表', action: () => editor.value?.chain().focus().toggleOrderedList().run() },
   { id: 'divider', icon: '—', label: '分割线', action: () => editor.value?.chain().focus().setHorizontalRule().run() },
-  { id: 'investigable_node', icon: '▼', label: '调查节点', action: () => insertBlock('investigable_node') },
-  { id: 'kp_info',           icon: '☆', label: 'KP 信息',  action: () => insertBlock('kp_info') },
+  { id: 'investigable_node', icon: '▼',  label: '调查节点',  action: () => insertBlock('investigable_node') },
+  { id: 'kp_info',           icon: '☆',  label: 'KP 信息',   action: () => insertBlock('kp_info') },
+  { id: 'branch_node',       icon: '▸',  label: '条件分支',  action: () => insertBlock('branch_node') },
+  { id: 'consequence_hint',  icon: '▶',  label: '后果提示',  action: () => insertBlock('consequence_hint') },
+  { id: 'player_handout',    icon: '【】', label: '玩家资料',  action: () => insertBlock('player_handout') },
+  { id: 'rule_ref',          icon: '[]', label: '规则引用',  action: () => insertRuleRef() },
 ];
 
 const filteredSlashItems = computed(() => {
@@ -270,6 +285,12 @@ function insertBlock(type: string) {
   if (!editor.value) return;
   const id = Math.random().toString(36).slice(2, 10);
   editor.value.chain().focus().insertContent({ type, attrs: { id }, content: [{ type: 'paragraph' }] }).run();
+}
+
+function insertRuleRef() {
+  if (!editor.value) return;
+  const id = Math.random().toString(36).slice(2, 10);
+  editor.value.chain().focus().insertContent({ type: 'rule_ref', attrs: { id, label: '检定', refType: 'check', value: '' } }).run();
 }
 
 // ── 视图模式切换 ──────────────────────────────────────────
@@ -431,12 +452,49 @@ function handleKeyup(e: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener('keyup', handleKeyup);
+  document.addEventListener('keydown', handleGlobalKeydown);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('keyup', handleKeyup);
+  document.removeEventListener('keydown', handleGlobalKeydown);
   editor.value?.destroy();
 });
+
+// ── 快捷键体系（E-1.8.2）────────────────────────────────
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if (!editor.value) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (!ctrl) return;
+
+  // Ctrl+Shift+M → 触发 Mention 选择器（在光标处插入 @）
+  if (e.shiftKey && e.key === 'M') {
+    e.preventDefault();
+    editor.value.chain().focus().insertContent('@').run();
+    return;
+  }
+
+  // Ctrl+. → 在光标位置插入 kp_info 块
+  if (!e.shiftKey && e.key === '.') {
+    e.preventDefault();
+    insertBlock('kp_info');
+    return;
+  }
+
+  // Ctrl+Shift+N → 插入 NPC 资料块（investigable_node 替代）
+  if (e.shiftKey && e.key === 'N') {
+    e.preventDefault();
+    insertBlock('investigable_node');
+    return;
+  }
+
+  // Ctrl+Shift+L → 插入线索/资料块（player_handout）
+  if (e.shiftKey && e.key === 'L') {
+    e.preventDefault();
+    insertBlock('player_handout');
+    return;
+  }
+}
 </script>
 
 <style scoped>
