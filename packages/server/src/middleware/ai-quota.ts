@@ -16,9 +16,9 @@ import type { TaskType } from '../services/ai-service';
 type MembershipType = 'free' | 'pro' | 'creator';
 
 const MONTHLY_QUOTA: Record<MembershipType, Record<TaskType, number>> = {
-  free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
-  pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
-  creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
+  free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0,  import_character: 0  },
+  pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3,  import_character: 3  },
+  creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10, import_character: 10 },
 };
 
 export function checkAiQuota(taskType: TaskType) {

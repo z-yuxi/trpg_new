@@ -190,6 +190,93 @@ export function validateImportModuleOutput(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// import-character 校验
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface ImportCharacterOutput {
+  name: string;
+  attributes: Record<string, number>;
+  skills: Record<string, number>;
+  resources: Record<string, { current: number; max: number }>;
+  equipment: string[];
+  background: string;
+  warnings: string[];
+}
+
+/**
+ * 校验并清洗 import-character 的 AI 输出。
+ * - 数值字段必须为有限数字（0-999），超范围截断
+ * - 字段名必须为合法的 snake_case 英文标识符
+ * - 未知/非法字段不抛出错误，而是记录到 warnings 中
+ */
+export function validateImportCharacterOutput(parsed: unknown): ImportCharacterOutput {
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('AI_OUTPUT_INVALID: import-character 响应不是对象');
+  }
+
+  const raw = parsed as Record<string, unknown>;
+
+  // 字段名白名单正则：仅允许 snake_case 英文标识符
+  const FIELD_NAME_RE = /^[a-z][a-z0-9_]{0,63}$/;
+
+  function safeNum(v: unknown, fallback = 0): number {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(999, Math.round(n)));
+  }
+
+  function safeFields(obj: unknown): Record<string, number> {
+    if (typeof obj !== 'object' || obj === null) return {};
+    const result: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (FIELD_NAME_RE.test(k)) {
+        result[k] = safeNum(v);
+      }
+    }
+    return result;
+  }
+
+  const attributes = safeFields(raw['attributes']);
+  const skills = safeFields(raw['skills']);
+
+  // resources: { field: { current, max } }
+  const resources: Record<string, { current: number; max: number }> = {};
+  if (typeof raw['resources'] === 'object' && raw['resources'] !== null) {
+    for (const [k, v] of Object.entries(raw['resources'] as Record<string, unknown>)) {
+      if (!FIELD_NAME_RE.test(k)) continue;
+      if (typeof v === 'object' && v !== null) {
+        resources[k] = {
+          current: safeNum((v as any)['current']),
+          max: safeNum((v as any)['max']),
+        };
+      }
+    }
+  }
+
+  const equipment = Array.isArray(raw['equipment'])
+    ? (raw['equipment'] as unknown[])
+        .filter((e): e is string => typeof e === 'string')
+        .map((e) => e.slice(0, 100))
+        .slice(0, 50)
+    : [];
+
+  const background = typeof raw['background'] === 'string'
+    ? raw['background'].slice(0, 2000)
+    : '';
+
+  const name = typeof raw['name'] === 'string' ? raw['name'].slice(0, 64) : '';
+
+  const warnings = Array.isArray(raw['warnings'])
+    ? (raw['warnings'] as unknown[])
+        .filter((w): w is string => typeof w === 'string')
+        .map((w) => w.slice(0, 200))
+        .slice(0, 20)
+    : [];
+
+  return { name, attributes, skills, resources, equipment, background, warnings };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // 通用 JSON 提取工具
 // ──────────────────────────────────────────────────────────────────────────────
 

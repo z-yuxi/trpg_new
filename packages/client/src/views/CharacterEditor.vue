@@ -4,6 +4,8 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import TButton from '../components/base/TButton.vue';
 import TInput from '../components/base/TInput.vue';
 import TTag from '../components/base/TTag.vue';
+import AiCharacterImportPanel from '../components/ai/AiCharacterImportPanel.vue';
+import type { ImportCharacterResult } from '../api/ai';
 import { getToken } from '../utils/api';
 import { updateCharacter, createCharacter, getCharacter } from '../api/characters';
 import { listRulesets } from '../api/rulesets';
@@ -72,6 +74,23 @@ const saveError = ref('');
 const savedCharacterCode = ref('');
 const avatarUploading = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
+
+// AI 导入面板
+const aiImportVisible = ref(false);
+const selectedRulesetName = computed(() =>
+  rulesets.value.find(r => r.id === form.value.ruleset_id)?.name ?? undefined,
+);
+
+function handleAiImportConfirm(result: ImportCharacterResult) {
+  // 将 AI 识别结果填入表单
+  if (result.name) form.value.name = result.name;
+  if (Object.keys(result.attributes).length) form.value.attributes = { ...result.attributes };
+  if (Object.keys(result.skills).length) form.value.skills = { ...result.skills };
+  if (result.background) form.value.background = result.background;
+  aiImportVisible.value = false;
+  // 直接跳到预览步骤
+  step.value = 6;
+}
 
 /* ========== 计算属性 ========== */
 const occupations = computed<OccupationDef[]>(() => (schema.value.occupations ?? []));
@@ -344,7 +363,12 @@ onBeforeRouteLeave(() => {
 
     <!-- ========== STEP 1：选择规则包 ========== -->
     <div v-if="step === 1" class="step-panel">
-      <h2 class="step-title">选择规则包</h2>
+      <div class="step1-header">
+        <h2 class="step-title">选择规则包</h2>
+        <button class="ai-import-trigger" title="用 AI 自动识别角色卡文本" @click="aiImportVisible = true">
+          ✨ AI 导入
+        </button>
+      </div>
       <div class="ruleset-grid">
         <div
           v-for="rs in rulesets"
@@ -536,6 +560,20 @@ onBeforeRouteLeave(() => {
         确认保存
       </TButton>
     </div>
+
+    <!-- AI 角色卡导入浮层 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="aiImportVisible" class="ai-import-overlay" @click.self="aiImportVisible = false">
+          <AiCharacterImportPanel
+            :ruleset-id="form.ruleset_id || undefined"
+            :ruleset-name="selectedRulesetName"
+            @close="aiImportVisible = false"
+            @confirm="handleAiImportConfirm"
+          />
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -636,6 +674,26 @@ onBeforeRouteLeave(() => {
 }
 
 /* ===== Step 1: 规则集网格 ===== */
+.step1-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.ai-import-trigger {
+  background: linear-gradient(135deg, #7c6af7, #a78bfa);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity var(--transition-fast);
+}
+.ai-import-trigger:hover { opacity: 0.88; }
+
 .ruleset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

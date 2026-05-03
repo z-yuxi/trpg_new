@@ -4,7 +4,7 @@
 import { api } from '../utils/api';
 
 export type AiTaskStatus = 'queued' | 'success' | 'failed';
-export type AiTaskType = 'check_text' | 'import_module' | 'log_summary' | 'generate_recipe';
+export type AiTaskType = 'check_text' | 'import_module' | 'log_summary' | 'generate_recipe' | 'import_character';
 
 export interface AiTask {
   id: string;
@@ -44,4 +44,21 @@ export function checkText(
   ruleTerms?: string[],
 ): Promise<{ issues: CheckTextIssue[] }> {
   return api.post('/ai/check-text', { text, rule_terms: ruleTerms ?? [] });
+}
+
+export interface ImportCharacterResult {
+  name: string;
+  attributes: Record<string, number>;
+  skills: Record<string, number>;
+  resources: Record<string, { current: number; max: number }>;
+  equipment: string[];
+  background: string;
+  warnings: string[];
+}
+
+export function importCharacterFromText(
+  text: string,
+  rulesetHint?: string,
+): Promise<ImportCharacterResult> {
+  return api.post('/ai/import-character', { text, ruleset_hint: rulesetHint });
 }

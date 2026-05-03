@@ -15,7 +15,7 @@
 import { generateId } from '@trpg/shared';
 import { db } from '../db';
 
-export type TaskType = 'import_module' | 'check_text' | 'log_summary' | 'generate_recipe';
+export type TaskType = 'import_module' | 'check_text' | 'log_summary' | 'generate_recipe' | 'import_character';
 export type AiEndpoint = 'pro' | 'flash';
 
 export interface AiMessage {

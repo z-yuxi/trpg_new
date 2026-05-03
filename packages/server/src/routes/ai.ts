@@ -22,6 +22,7 @@ import {
   extractJsonFromAiOutput,
   validateCheckTextOutput,
   validateImportModuleOutput,
+  validateImportCharacterOutput,
 } from '../services/ai-output-validator';
 
 const router: IRouter = Router();
@@ -142,6 +143,58 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
   }
 });
 
+// ── POST /api/ai/import-character ───────────────────────────────────────────
+const importCharacterSchema = z.object({
+  /** 待解析的角色卡文本（骰子机器人指令、属性列表等），单次限 3000 字 */
+  text: z.string().min(1).max(3000),
+  /** 规则包 ID，可选，提供后 AI 将参考其字段命名惯例 */
+  ruleset_hint: z.string().max(64).optional(),
+});
+
+router.post('/import-character', checkAiQuota('import_character'), async (req, res) => {
+  const parsed = importCharacterSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { text, ruleset_hint } = parsed.data;
+
+  // 输入消毒：XML 标签边界隔离，防止 prompt injection
+  const safeText = text.replace(/</g, '＜').replace(/>/g, '＞').slice(0, 3000);
+  const rulesetCtx = ruleset_hint ? `\n规则包参考：${ruleset_hint.replace(/[<>"']/g, '')}` : '';
+
+  const messages = [
+    {
+      role: 'system' as const,
+      content:
+        `你是 TRPG 角色卡识别助手。从用户提供的文本（可能是骰子机器人指令、属性列表或手写文本）` +
+        `中提取角色卡字段，返回严格 JSON（无 Markdown 包裹）：` +
+        `{"name":"角色名或空字符串",` +
+        `"attributes":{"字段名（英文 snake_case）":数值},` +
+        `"skills":{"技能名（英文 snake_case）":数值},` +
+        `"resources":{"资源名":{"current":当前值,"max":最大值}},` +
+        `"equipment":["道具1"],` +
+        `"background":"背景故事或空字符串",` +
+        `"warnings":["无法识别的字段或问题说明"]}` +
+        `。属性/技能名必须使用英文 snake_case（如 strength、spot_hidden）。` +
+        `无法识别的内容放入 warnings，不可捏造数值。${rulesetCtx}`,
+    },
+    { role: 'user' as const, content: `<character_text>\n${safeText}\n</character_text>` },
+  ];
+
+  try {
+    const raw = await callAI('flash', messages, 'import_character', req.user!.id);
+    const jsonObj = extractJsonFromAiOutput(raw);
+    const result = validateImportCharacterOutput(jsonObj);
+    res.json(result);
+  } catch (err: unknown) {
+    console.error('[ai:importCharacter]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, 'AI 服务暂时不可用');
+    res.status(502).json({ error: 'AI_UNAVAILABLE', message });
+  }
+});
+
 // ── GET /api/ai/quota ────────────────────────────────────────────────────────
 router.get('/quota', async (req, res) => {
   const user = req.user!;
@@ -163,9 +216,9 @@ router.get('/quota', async (req, res) => {
 
   // 返回当前会员等级对应的月度配额上限
   const MONTHLY_QUOTA: Record<string, Record<string, number>> = {
-    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
-    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
-    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
+    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0,  import_character: 0  },
+    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3,  import_character: 3  },
+    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10, import_character: 10 },
   };
   const tier = (user.subscription_type as string | undefined) ?? 'free';
   const limits = MONTHLY_QUOTA[tier] ?? MONTHLY_QUOTA['free'];
@@ -208,9 +261,9 @@ router.post('/tasks/:id/retry', async (req, res) => {
   // HIGH-fix: 重试前重新检查配额，防止通过旧失败任务绕过月度限制
   const taskType = task.task_type as TaskType;
   const MONTHLY_QUOTA: Record<string, Record<string, number>> = {
-    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0  },
-    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3  },
-    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10 },
+    free:    { import_module: 0,  check_text: 0,   log_summary: 0,  generate_recipe: 0,  import_character: 0  },
+    pro:     { import_module: 3,  check_text: 20,  log_summary: 5,  generate_recipe: 3,  import_character: 3  },
+    creator: { import_module: 10, check_text: 100, log_summary: 15, generate_recipe: 10, import_character: 10 },
   };
   const tier = (user.subscription_type as string | undefined) ?? 'free';
   const quota = (MONTHLY_QUOTA[tier] ?? MONTHLY_QUOTA['free'])[taskType] ?? 0;
