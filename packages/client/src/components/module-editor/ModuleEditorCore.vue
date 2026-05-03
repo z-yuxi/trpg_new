@@ -46,6 +46,15 @@
       >
         ✨
       </button>
+      <!-- 术语白名单按钮 -->
+      <button
+        class="toolbar-btn"
+        :class="{ 'active': termPanelVisible }"
+        :title="'术语白名单' + (moduleTerms.length ? ` (${moduleTerms.length})` : '')"
+        @click="termPanelVisible = !termPanelVisible"
+      >
+        📝
+      </button>
       <span class="toolbar-sep" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
@@ -72,6 +81,18 @@
             @locate="handleLocateProofread"
             @acceptAll="handleAcceptAllProofread"
             @close="closeAiProofreadPanel"
+          />
+        </div>
+      </Transition>
+
+      <!-- 右侧术语白名单面板 -->
+      <Transition name="slide-left">
+        <div v-if="termPanelVisible && props.moduleId" class="proofread-panel-wrapper">
+          <TermWhitelistPanel
+            :module-id="props.moduleId"
+            :initial-terms="moduleTerms"
+            @saved="handleTermsSaved"
+            @close="termPanelVisible = false"
           />
         </div>
       </Transition>
@@ -168,10 +189,11 @@ import { PunctuationPairExtension } from './extensions/PunctuationPairExtension'
 import { Extension } from '@tiptap/core';
 import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/ViewModePlugin';
 import { checkText, type CheckTextIssue } from '../../api/ai';
-import { rollbackModuleToSnapshot, getModuleSnapshots, type ModuleSnapshot } from '../../api/modules';
+import { rollbackModuleToSnapshot, getModuleSnapshots, getModuleTerms, saveModuleTerms, type ModuleSnapshot } from '../../api/modules';
 import AiProofreadPanel from '../ai/AiProofreadPanel.vue';
 import { createProofreadDecorationPlugin, proofreadDecorationKey } from '../ai/ProofreadDecorationPlugin';
 import SnapshotTimeline from './SnapshotTimeline.vue';
+import TermWhitelistPanel from './TermWhitelistPanel.vue';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -297,7 +319,10 @@ watch(() => props.modelValue, (val) => {
 
 // 切换模组时重新加载快照
 watch(() => props.moduleId, (newId) => {
-  if (newId) loadSnapshots();
+  if (newId) {
+    loadSnapshots();
+    loadTerms();
+  }
 });
 
 // ── 工具栏 ────────────────────────────────────────────────
@@ -463,6 +488,24 @@ const snapshots = ref<ModuleSnapshot[]>([]);
 const snapshotLoading = ref(false);
 const snapshotRolling = ref<string | null>(null);
 
+// ── 术语白名单（Term Whitelist）───────────────
+const moduleTerms = ref<string[]>([]);
+const termPanelVisible = ref(false);
+
+async function loadTerms() {
+  if (!props.moduleId) return;
+  try {
+    const res = await getModuleTerms(props.moduleId);
+    moduleTerms.value = res.terms.map((t) => t.term);
+  } catch {
+    moduleTerms.value = [];
+  }
+}
+
+function handleTermsSaved(terms: string[]) {
+  moduleTerms.value = terms;
+}
+
 async function loadSnapshots() {
   if (!props.moduleId) return;
   snapshotLoading.value = true;
@@ -484,7 +527,8 @@ async function handleCheckText() {
   
   try {
     const content = JSON.stringify(editor.value.getJSON());
-    const result = await checkText(content);
+    // 自动带入本模组术语白名单
+    const result = await checkText(content, moduleTerms.value.length ? moduleTerms.value : undefined);
     aiProofreadIssues.value = result.issues;
     aiProofreadVisible.value = true;
 
@@ -699,6 +743,8 @@ onMounted(() => {
   scheduleToolbarFade();
   // 初始加载快照
   loadSnapshots();
+  // 初始加载术语白名单
+  loadTerms();
 });
 
 onBeforeUnmount(() => {

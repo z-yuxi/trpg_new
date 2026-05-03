@@ -112,6 +112,21 @@ export function rollbackModuleToSnapshot(id: string, snapshotId: string): Promis
   return api.post(`/modules/${id}/rollback/${snapshotId}`, {}, key());
 }
 
+// ── 术语白名单 ────────────────────────────────────────────
+
+export interface ModuleTerm {
+  id?: string;
+  term: string;
+}
+
+export function getModuleTerms(id: string): Promise<{ terms: ModuleTerm[] }> {
+  return api.get(`/modules/${id}/terms`);
+}
+
+export function saveModuleTerms(id: string, terms: string[]): Promise<{ terms: ModuleTerm[] }> {
+  return api.put(`/modules/${id}/terms`, { terms }, key());
+}
+
 // ── 实体库（Entity Library）────────────────────────────────
 export type EntityType = 'npc' | 'scene' | 'clue';
 
