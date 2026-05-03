@@ -18,6 +18,10 @@ const campaignId = route.params.id as string;
 
 const currentStep = ref(1);
 const perspective = ref<Perspective>('my');
+
+// ─ 会员门槛 ────────────────────────────────────────────────────────────────
+const needsUpgrade = ref(false);
+const requiredTier = ref<'pro' | 'creator' | null>(null);
 const sortStrategy = ref<SortStrategy>('strict');
 const exportFormat = ref<ExportFormat>('md');
 const includeOoc = ref(true);
@@ -130,13 +134,20 @@ async function generatePreview() {
   }
 
   previewLoading.value = true;
+  needsUpgrade.value = false;
   try {
     const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(true)}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
+    if (res.status === 403) {
+      const error = await res.json().catch(() => ({})) as { required_tier?: string };
+      requiredTier.value = (error.required_tier as 'pro' | 'creator') ?? 'pro';
+      needsUpgrade.value = true;
+      return;
+    }
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
-      throw new Error(error.error ?? '预览生成失败');
+      throw new Error((error as any).error ?? '预览生成失败');
     }
 
     const data = await res.json() as {
@@ -163,13 +174,20 @@ async function downloadExport() {
   }
 
   downloadLoading.value = true;
+  needsUpgrade.value = false;
   try {
     const res = await fetch(`/api/logs/${campaignId}/export?${buildQuery(false)}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
+    if (res.status === 403) {
+      const error = await res.json().catch(() => ({})) as { required_tier?: string };
+      requiredTier.value = (error.required_tier as 'pro' | 'creator') ?? 'pro';
+      needsUpgrade.value = true;
+      return;
+    }
     if (!res.ok) {
       const error = await res.json().catch(() => ({}));
-      throw new Error(error.error ?? '导出失败');
+      throw new Error((error as any).error ?? '导出失败');
     }
 
     const blob = await res.blob();
@@ -227,6 +245,15 @@ onMounted(() => {
     </div>
 
     <div class="export-card">
+      <!-- 付费升级提示 -->
+      <div v-if="needsUpgrade" class="upgrade-banner">
+        <div class="upgrade-icon">🔒</div>
+        <div class="upgrade-text">
+          <div class="upgrade-title">此功能需要 {{ requiredTier === 'creator' ? 'Creator' : 'Pro' }} 会员</div>
+          <div class="upgrade-desc">日志导出是 Pro 及以上权益，升级会员后可导出完整跑团记录。</div>
+        </div>
+        <button class="upgrade-btn" @click="router.push('/settings/membership')">升级会员</button>
+      </div>
       <section class="section" :class="{ muted: currentStep !== 1 }">
         <div class="section-head">
           <span class="section-step">Step 1</span>
@@ -358,6 +385,23 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.upgrade-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: linear-gradient(135deg, #fff8e6 0%, #fff3d6 100%);
+  border: 1px solid #f5d378;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+}
+.upgrade-icon { font-size: 28px; flex-shrink: 0; }
+.upgrade-text { flex: 1; }
+.upgrade-title { font-size: var(--text-base); font-weight: 600; color: #7a4a00; margin-bottom: 2px; }
+.upgrade-desc { font-size: var(--text-sm); color: #9a6f00; }
+.upgrade-btn { flex-shrink: 0; padding: var(--space-2) var(--space-5); background: #f0a000; color: #fff; border: none; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.upgrade-btn:hover { background: #d48a00; }
+
 .log-export-page {
   max-width: 960px;
   margin: 0 auto;

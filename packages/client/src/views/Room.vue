@@ -18,6 +18,7 @@ import { createScene, joinScene, listObPermissions, grantObPermission as apiGran
 import { getCharacter } from '../api/characters';
 import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
 import StarsAndWishesFeedbackModal from '../components/campaign/StarsAndWishesFeedbackModal.vue';
+import AmbientPlayer from '../components/room/AmbientPlayer.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -62,6 +63,14 @@ const skillSyncDismissed = ref(false);
 
 const unreadCounts = computed(() => messageStore.unreadCounts);
 const currentScene = computed(() => scenes.value.find((scene) => scene.id === currentSceneId.value));
+
+/** 当前场景的氏围关键词（用于驱动 AmbientPlayer） */
+const currentAtmosphereKeywords = computed<string[]>(() => {
+  const kws = currentScene.value?.atmosphere_keywords;
+  if (!kws) return [];
+  if (Array.isArray(kws)) return kws;
+  try { return JSON.parse(kws); } catch { return []; }
+});
 
 const activeSpatialCharacters = computed(() => {
   if (currentScene.value?.type !== 'spatial') return [];
@@ -583,6 +592,10 @@ onUnmounted(() => {
       @open-approve="showGMConsole = true"
     >
       <template #gm-console>
+        <!-- 氛围音效播放器（嵌于 GM 控制台上方，所有用户可见） -->
+        <div class="ambient-player-wrap">
+          <AmbientPlayer :keywords="currentAtmosphereKeywords" />
+        </div>
         <transition name="gm-slide">
           <GMConsole
             v-if="isGm && (showGMConsole || mobileView === 'gm')"
@@ -772,6 +785,11 @@ onUnmounted(() => {
 
 <style scoped>
 .character-detail p { margin: 6px 0; color: var(--color-text-secondary); }
+.ambient-player-wrap {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px 0;
+}
 .gm-slide-enter-active,
 .gm-slide-leave-active { transition: max-height 0.25s ease, opacity 0.2s ease; overflow: hidden; }
 .gm-slide-enter-from,

@@ -28,8 +28,17 @@
           <textarea class="form-ta" rows="2" :value="attrs.atmosphere"
             placeholder="简要描述场景氛围…"
             @input="ua({ atmosphere: tv($event) })" />
-        </div>
-        <div class="form-row form-row--gm">
+        </div>        <div class="form-row">
+          <label class="form-lbl">氏围关键词
+            <span class="form-hint">最多 5 个，逗号分隔</span>
+          </label>
+          <input
+            class="form-inp"
+            :value="Array.isArray(attrs.atmosphere_keywords) ? attrs.atmosphere_keywords.join(',') : ''"
+            placeholder="雨夜,洞穴,紧张…"
+            @change="ua({ atmosphere_keywords: ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 5) })"
+          />
+        </div>        <div class="form-row form-row--gm">
           <label class="form-lbl">GM 备注 <span class="gm-badge">GM</span></label>
           <textarea class="form-ta form-ta--gm" rows="2" :value="attrs.gm_notes"
             placeholder="玩家不可见的备注…"
@@ -92,6 +101,7 @@ const sceneTypeLabel = computed(() => {
 .form-row--gm { background:var(--surface-page); border-radius:4px; padding:6px; }
 .form-lbl { font-size:11px; color:var(--text-body); font-weight:500;
   display:flex; align-items:center; gap:4px; }
+.form-hint { font-size:10px; color:var(--text-muted); font-weight:400; }
 .gm-badge { font-size:10px; padding:0 4px; border-radius:8px;
   background:var(--color-warning-bg); color:var(--color-warning-text); }
 .form-inp,.form-sel,.form-ta { width:100%; padding:5px 8px; border:1px solid var(--border-default);

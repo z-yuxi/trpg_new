@@ -83,6 +83,8 @@ const createSceneSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(['lobby', 'room', 'outdoor', 'dungeon', 'special']).optional(),
   description: z.string().max(2000).optional(),
+  /** 氛围关键词，最多 5 个，每个最多 20 字 */
+  atmosphere_keywords: z.array(z.string().max(20)).max(5).optional(),
 });
 
 const createNpcSchema = z.object({
@@ -349,10 +351,11 @@ router.post('/:id/scenes', async (req, res) => {
       name: parsed.data.name,
       type: parsed.data.type ?? 'room',
       description: parsed.data.description ?? '',
+      atmosphere_keywords: JSON.stringify(parsed.data.atmosphere_keywords ?? []),
       created_by: req.user!.id,
     });
     const scene = await db('scenes').where({ id }).first();
-    res.status(201).json(scene);
+    res.status(201).json({ ...scene, atmosphere_keywords: parsed.data.atmosphere_keywords ?? [] });
   } catch (err: any) {
     res.status(500).json({ error: 'Create failed' });
   }
@@ -370,9 +373,14 @@ router.put('/:id/scenes/:sceneId', async (req, res) => {
     if (req.body.type !== undefined) updates.type = req.body.type;
     if (req.body.history_visibility !== undefined) updates.history_visibility = req.body.history_visibility;
     if (req.body.visible_history_count !== undefined) updates.visible_history_count = Number(req.body.visible_history_count);
+    if (req.body.atmosphere_keywords !== undefined) {
+      const kws = Array.isArray(req.body.atmosphere_keywords) ? req.body.atmosphere_keywords : [];
+      updates.atmosphere_keywords = JSON.stringify(kws.slice(0, 5));
+    }
     await db('scenes').where({ id: req.params.sceneId, campaign_id: req.params.id }).update(updates);
     const scene = await db('scenes').where({ id: req.params.sceneId }).first();
-    res.json(scene);
+    const keywords = (() => { try { return JSON.parse(scene.atmosphere_keywords ?? '[]'); } catch { return []; } })();
+    res.json({ ...scene, atmosphere_keywords: keywords });
   } catch (err: unknown) {
     serverErr(res, err);
   }

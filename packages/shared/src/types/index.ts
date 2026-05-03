@@ -96,6 +96,8 @@ export interface Scene {
   visible_history_count: number;
   /** 访问策略（默认 open） */
   access_policy: SceneAccessPolicy;
+  /** 氛围关键词（E3），如 ["雨夜","潮湿"]，GM 设置，用于触发白噪音和背景色调 */
+  atmosphere_keywords?: string[];
   created_at: Date;
 }
 
