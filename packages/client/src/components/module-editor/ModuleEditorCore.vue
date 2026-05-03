@@ -161,6 +161,7 @@ import { createViewModePlugin, setViewMode, type ViewMode } from './extensions/V
 import { checkText, type CheckTextIssue } from '../../api/ai';
 import { rollbackModuleToSnapshot } from '../../api/modules';
 import AiProofreadPanel from '../ai/AiProofreadPanel.vue';
+import { createProofreadDecorationPlugin, proofreadDecorationKey } from '../ai/ProofreadDecorationPlugin';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -192,6 +193,12 @@ const editor = useEditor({
       name: 'viewMode',
       addProseMirrorPlugins() {
         return [createViewModePlugin('edit')];
+      },
+    }),
+    Extension.create({
+      name: 'proofreadDecoration',
+      addProseMirrorPlugins() {
+        return [createProofreadDecorationPlugin()];
       },
     }),
   ],
@@ -447,6 +454,16 @@ async function handleCheckText() {
     const result = await checkText(content);
     aiProofreadIssues.value = result.issues;
     aiProofreadVisible.value = true;
+
+    // 更新装饰插件，显示高亮
+    if (editor.value?.view) {
+      const tr = editor.value.view.state.tr;
+      tr.setMeta('updateProofread', {
+        issues: result.issues,
+        acceptedIndexes: aiProofreadAccepted.value,
+      });
+      editor.value.view.dispatch(tr);
+    }
   } catch (err: any) {
     console.error('AI 校对失败:', err?.message ?? 'Unknown error');
     aiProofreadVisible.value = false;
@@ -455,7 +472,7 @@ async function handleCheckText() {
   }
 }
 
-function handleAcceptProofread(issue: CheckTextIssue, _index: number) {
+function handleAcceptProofread(issue: CheckTextIssue, index: number) {
   if (!editor.value) return;
   // 在编辑器内容中查找并替换 original → suggestion
   const current = JSON.stringify(editor.value.getJSON());
@@ -464,14 +481,38 @@ function handleAcceptProofread(issue: CheckTextIssue, _index: number) {
   try {
     const parsed = JSON.parse(updated);
     editor.value.commands.setContent(parsed);
+    
+    // 标记为已接受
+    aiProofreadAccepted.value.add(index);
+    
+    // 更新装饰
+    if (editor.value?.view) {
+      const tr = editor.value.view.state.tr;
+      tr.setMeta('updateProofread', {
+        issues: aiProofreadIssues.value,
+        acceptedIndexes: aiProofreadAccepted.value,
+      });
+      editor.value.view.dispatch(tr);
+    }
   } catch {
     // 如果 JSON 解析失败，忽略此修改
   }
 }
 
 function handleRejectProofread(issue: CheckTextIssue, index: number) {
+  if (!editor.value) return;
   // 标记为已忽略
   aiProofreadAccepted.value.add(index);
+  
+  // 更新装饰（隐藏已忽略的问题）
+  if (editor.value?.view) {
+    const tr = editor.value.view.state.tr;
+    tr.setMeta('updateProofread', {
+      issues: aiProofreadIssues.value,
+      acceptedIndexes: aiProofreadAccepted.value,
+    });
+    editor.value.view.dispatch(tr);
+  }
 }
 
 function handleLocateProofread(issue: CheckTextIssue) {
@@ -523,6 +564,18 @@ async function handleRollbackSnapshot(snapshotId: string) {
 
 function closeAiProofreadPanel() {
   aiProofreadVisible.value = false;
+  aiProofreadIssues.value = [];
+  aiProofreadAccepted.value.clear();
+  
+  // 清除所有高亮装饰
+  if (editor.value?.view) {
+    const tr = editor.value.view.state.tr;
+    tr.setMeta('updateProofread', {
+      issues: [],
+      acceptedIndexes: new Set<number>(),
+    });
+    editor.value.view.dispatch(tr);
+  }
 }
 
 // 监听键盘输入以触发 "/" 菜单
@@ -872,5 +925,28 @@ function handleGlobalKeydown(e: KeyboardEvent) {
 .slide-left-enter-from, .slide-left-leave-to { 
   transform: translateX(100%);
   opacity: 0;
+}
+
+/* AI 校对高亮装饰 */
+:deep(.proofread-issue) {
+  border-bottom: 2px solid;
+  cursor: pointer;
+  border-radius: 2px;
+}
+:deep(.proofread-issue--typo) {
+  border-bottom-color: #e53e3e;
+  background: rgba(229, 62, 62, 0.08);
+}
+:deep(.proofread-issue--punctuation) {
+  border-bottom-color: #ed8936;
+  background: rgba(237, 137, 54, 0.08);
+}
+:deep(.proofread-issue--term) {
+  border-bottom-color: #3182ce;
+  background: rgba(49, 130, 206, 0.08);
+}
+:deep(.proofread-issue--style) {
+  border-bottom-color: #805ad5;
+  background: rgba(128, 90, 213, 0.08);
 }
 </style>
