@@ -9,6 +9,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import DOMPurify from 'dompurify';
 import SvgIcon from '../SvgIcon.vue';
 import { useAuthStore } from '../../stores/auth-store';
 import { api } from '../../utils/api';
@@ -450,11 +451,16 @@ const protectionFlags = computed(() => {
  */
 const visibleContent = computed<string | null>(() => {
   if (!asset.value?.content) return null;
-  if (canViewFull.value) return asset.value.content;
-  const ratio = asset.value.reader_settings?.preview_policy?.preview_ratio;
-  if (!ratio || ratio <= 0) return null;
-  const len = Math.floor(asset.value.content.length * Math.min(1, ratio));
-  return asset.value.content.slice(0, len);
+  const raw = canViewFull.value
+    ? asset.value.content
+    : (() => {
+        const ratio = asset.value!.reader_settings?.preview_policy?.preview_ratio;
+        if (!ratio || ratio <= 0) return null;
+        const len = Math.floor(asset.value!.content!.length * Math.min(1, ratio));
+        return asset.value!.content!.slice(0, len);
+      })();
+  if (!raw) return null;
+  return DOMPurify.sanitize(raw);
 });
 
 /** 游客试读了多少比例（用于 Paywall 提示） */

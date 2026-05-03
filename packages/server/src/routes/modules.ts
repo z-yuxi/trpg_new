@@ -320,12 +320,18 @@ router.get('/:id/public-notice', async (req, res) => {
 });
 
 // 举报模组
+const reportSchema = z.object({
+  report_type: z.enum(['spam', 'copyright', 'inappropriate', 'misinformation', 'other']),
+  description: z.string().min(10).max(1000),
+});
+
 router.post('/:id/report', authMiddleware, async (req, res) => {
   try {
-    const { report_type, description } = req.body as { report_type: string; description: string };
-    if (!report_type || !description) {
-      return res.status(400).json({ error: 'report_type and description are required' });
+    const parsed = reportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
     }
+    const { report_type, description } = parsed.data;
     const { generateId } = await import('@trpg/shared');
     await db('module_reports').insert({
       id: generateId(),
@@ -384,6 +390,116 @@ router.put('/:id/terms', authMiddleware, async (req, res) => {
   }
 
   res.json({ terms: terms.map((t) => ({ term: t })) });
+});
+
+// ── GET /api/modules/:id/entities — 查询模组实体列表（供 @ Mention 搜索）────
+/** 递归从 TipTap JSON 节点树中提取具名实体 */
+function extractEntitiesFromDoc(
+  node: Record<string, unknown>,
+  result: Array<{ id: string; name: string; type: string; description: string }>,
+): void {
+  const type = node['type'] as string | undefined;
+  const attrs = (node['attrs'] ?? {}) as Record<string, unknown>;
+  const children = (node['content'] ?? []) as Array<Record<string, unknown>>;
+
+  // 提取内联文本辅助函数
+  const extractText = (nodes: Array<Record<string, unknown>>): string =>
+    nodes
+      .filter((n) => (n['type'] as string) === 'text')
+      .map((n) => n['text'] as string)
+      .join('');
+
+  if (type === 'npc_mention' && attrs['name']) {
+    result.push({
+      id: (attrs['id'] as string) ?? '',
+      name: attrs['name'] as string,
+      type: 'npc',
+      description: (attrs['role'] as string) ?? '',
+    });
+    return; // 原子节点，无子节点
+  }
+
+  if (type === 'investigable_node') {
+    const name = attrs['label'] ? (attrs['label'] as string) : extractText(children);
+    if (name) {
+      result.push({
+        id: (attrs['id'] as string) ?? '',
+        name,
+        type: 'investigable',
+        description: '',
+      });
+    }
+  }
+
+  if (type === 'kp_info') {
+    const name = extractText(children).slice(0, 60);
+    if (name) {
+      result.push({
+        id: (attrs['id'] as string) ?? '',
+        name,
+        type: 'kp_info',
+        description: '',
+      });
+    }
+  }
+
+  if (type === 'heading' && (attrs['level'] as number) <= 3) {
+    const name = extractText(children).trim();
+    if (name) {
+      result.push({
+        id: '',
+        name,
+        type: 'heading',
+        description: '',
+      });
+    }
+  }
+
+  for (const child of children) {
+    extractEntitiesFromDoc(child, result);
+  }
+}
+
+router.get('/:id/entities', authMiddleware, async (req, res) => {
+  const moduleId = req.params['id'];
+  const mod = await db('modules')
+    .where({ id: moduleId })
+    .select('id', 'author_id', 'content')
+    .first<{ id: string; author_id: string; content: string | null }>();
+  if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
+  // 仅模组作者可访问（编辑器 @ Mention 仅在编辑态使用）
+  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const keyword = typeof req.query['keyword'] === 'string' ? req.query['keyword'].trim() : '';
+  const typeFilter = typeof req.query['type'] === 'string' ? req.query['type'].trim() : '';
+
+  let entities: Array<{ id: string; name: string; type: string; description: string }> = [];
+
+  if (mod.content) {
+    try {
+      const doc = JSON.parse(mod.content) as Record<string, unknown>;
+      extractEntitiesFromDoc(doc, entities);
+    } catch { /* 内容解析失败，返回空列表 */ }
+  }
+
+  if (typeFilter) {
+    entities = entities.filter((e) => e.type === typeFilter);
+  }
+  if (keyword) {
+    const lc = keyword.toLowerCase();
+    entities = entities.filter((e) => e.name.toLowerCase().includes(lc));
+  }
+
+  // 去重（按 name + type）并限制返回条数
+  const seen = new Set<string>();
+  const deduped = entities.filter((e) => {
+    const key = `${e.type}::${e.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 30);
+
+  res.json({ data: deduped });
 });
 
 // ── POST /api/modules/:id/entities/apply — 将 AI 分析实体写入模组内容 ─────────

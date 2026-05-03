@@ -304,13 +304,13 @@ const filteredSlashItems = computed(() => {
 
 function insertBlock(type: string) {
   if (!editor.value) return;
-  const id = Math.random().toString(36).slice(2, 10);
+  const id = crypto.randomUUID();
   editor.value.chain().focus().insertContent({ type, attrs: { id }, content: [{ type: 'paragraph' }] }).run();
 }
 
 function insertRuleRef() {
   if (!editor.value) return;
-  const id = Math.random().toString(36).slice(2, 10);
+  const id = crypto.randomUUID();
   editor.value.chain().focus().insertContent({ type: 'rule_ref', attrs: { id, label: '检定', refType: 'check', value: '' } }).run();
 }
 

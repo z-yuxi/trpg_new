@@ -16,9 +16,6 @@ const PAIRS: Record<string, string> = {
   '『': '』',
 };
 
-// 反向映射（右半 → 左半），用于跳过已有的右半
-const RIGHT_CHARS = new Set(Object.values(PAIRS));
-
 export const PunctuationPairExtension = Extension.create({
   name: 'punctuationPair',
 
