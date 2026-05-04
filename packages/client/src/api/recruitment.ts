@@ -87,13 +87,18 @@ export function getRecruitment(id: string): Promise<RecruitmentPost> {
 export function createRecruitment(payload: {
   title: string;
   ruleset_id: string;
+  type?: string;
   module_id?: string | null;
-  max_players: number;
+  module_name?: string | null;
+  max_players?: number;
+  player_count_max?: number;
   schedule_type?: string;
+  schedule_text?: string | null;
   description?: string;
   tags?: string[];
   allow_ob?: boolean;
   fields?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }): Promise<RecruitmentPost> {
   return api.post('/recruitment', payload, key());
 }

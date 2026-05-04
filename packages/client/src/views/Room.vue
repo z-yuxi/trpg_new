@@ -153,7 +153,7 @@ async function loadObPermissions() {
   obPermissionLoading.value = true;
   try {
     const data = await listObPermissions(campaignId, obPermissionSceneId.value);
-    obPermissions.value = data ?? [];
+    obPermissions.value = (data ?? []) as unknown as typeof obPermissions.value;
   } catch {
     obPermissions.value = [];
     ElMessage.error('加载 OB 权限失败');

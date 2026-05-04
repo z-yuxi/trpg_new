@@ -116,7 +116,7 @@ export function getModuleTerms(id: string): Promise<{ terms: ModuleTerm[] }> {
 }
 
 export function saveModuleTerms(id: string, terms: string[]): Promise<{ terms: ModuleTerm[] }> {
-  return api.put(`/modules/${id}/terms`, { terms }, key());
+  return api.put(`/modules/${id}/terms`, { terms });
 }
 
 // ── 全文搜索 ──────────────────────────────────────────────

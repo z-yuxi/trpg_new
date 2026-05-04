@@ -55,7 +55,7 @@ export function getRuleset(id: string): Promise<Ruleset> {
   return api.get(`/rulesets/${id}`);
 }
 
-export function createRuleset(payload: { name: string; base_ruleset?: string | null }): Promise<Ruleset> {
+export function createRuleset(payload: { name: string; version?: string; base_ruleset?: string | null }): Promise<Ruleset> {
   return api.post('/rulesets', payload, key());
 }
 

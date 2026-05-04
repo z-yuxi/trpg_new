@@ -43,11 +43,16 @@ export interface NotificationSettings {
 export interface PrivacySettings {
   /** 个人主页可见性：public/friends/private */
   profile_visibility?: 'public' | 'friends' | 'private';
+  /** 旧字段兼容 */
+  profile_public?: boolean;
+  /** 在线状态可见性 */
+  online_visible?: boolean;
+  /** 跑团历史可见性 */
+  campaign_history_public?: boolean;
   /** 私信权限：all/following/none */
   dm_visibility?: 'all' | 'following' | 'none';
   allow_stats?: boolean;
   allow_ai_train?: boolean;
-  /** 旧字段兼容 */
   show_campaigns?: boolean;
   show_characters?: boolean;
   allow_dm_from?: 'all' | 'following' | 'none';
@@ -132,7 +137,7 @@ export function getUserCreatedModules(uid: string): Promise<unknown[]> {
 
 // ─── 关注 ───────────────────────────────────────────────────────────────────
 
-export function followUser(uid: string): Promise<void> {
+export function followUser(uid: string): Promise<{ follower_count: number }> {
   return api.post(`/users/${uid}/follow`, {}, key());
 }
 

@@ -58,7 +58,7 @@ onMounted(async () => {
       listMyModules(),
       listRulesets({ author_id: authStore.userId, limit: 50 }),
     ]);
-    if (modRes.status === 'fulfilled') myModules.value = modRes.value ?? [];
+    if (modRes.status === 'fulfilled') myModules.value = (modRes.value ?? []) as unknown as typeof myModules.value;
     if (rsRes.status === 'fulfilled') {
       const d = rsRes.value;
       myRulesets.value = d.data ?? [];

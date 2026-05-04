@@ -7,7 +7,7 @@ import TButton from '../components/base/TButton.vue';
 import TTag from '../components/base/TTag.vue';
 import TSkeleton from '../components/base/TSkeleton.vue';
 import EmptyState from '../components/base/EmptyState.vue';
-import { listMyCampaigns, createCampaign, joinCampaignByCode } from '../api/campaigns';
+import { listMyCampaigns, createCampaign as apiCreateCampaign, joinCampaignByCode } from '../api/campaigns';
 import { listRulesets } from '../api/rulesets';
 import { listModules } from '../api/modules';
 import { showApiError } from '../utils/feedback';
@@ -117,7 +117,7 @@ async function createCampaign() {
   if (!createForm.value.name || !createForm.value.ruleset_id) return;
   createLoading.value = true;
   try {
-    await createCampaign(createForm.value);
+    await apiCreateCampaign(createForm.value);
     showCreateDialog.value = false;
     createForm.value = { name: '', ruleset_id: '', module_id: '' };
     await loadCampaigns();

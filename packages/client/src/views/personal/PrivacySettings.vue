@@ -16,7 +16,7 @@ async function save() {
   saving.value = true;
   try {
     await updatePrivacy({
-      profile_public: profilePublic.value,
+      profile_visibility: profilePublic.value ? 'public' : 'private',
       online_visible: onlineVisible.value,
       campaign_history_public: campaignHistoryPublic.value,
     });

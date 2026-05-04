@@ -8,10 +8,10 @@
  */
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import ViewerShell from '../../components/viewer/ViewerShell.vue';
-import SvgIcon from '../../components/SvgIcon.vue';
-import { api } from '../../utils/api';
-import { useAuthStore } from '../../stores/auth-store';
+import ViewerShell from '../components/viewer/ViewerShell.vue';
+import SvgIcon from '../components/SvgIcon.vue';
+import { api } from '../utils/api';
+import { useAuthStore } from '../stores/auth-store';
 
 const route = useRoute();
 const router = useRouter();

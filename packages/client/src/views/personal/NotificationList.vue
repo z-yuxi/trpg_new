@@ -48,7 +48,7 @@ async function fetchNotifications() {
   loading.value = true;
   try {
     const body = await listNotifications({ page: 1, limit: 50, ...(activeCategory.value !== 'all' ? { category: activeCategory.value } : {}) });
-    notifications.value = body.data;
+    notifications.value = body.data as unknown as UserNotification[];
     total.value = body.total;
   } catch {
     ElMessage.error('通知加载失败');
