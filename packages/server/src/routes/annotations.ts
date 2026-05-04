@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { safeErrorMessage } from '../utils/error-response';
 
 const router = Router();
 
@@ -50,8 +51,8 @@ router.get('/', async (req, res) => {
       .where({ user_id: req.user!.id, asset_type, asset_id })
       .orderBy('range_start', 'asc');
     res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -84,8 +85,8 @@ router.post('/', async (req, res) => {
     });
     const row = await db('annotations').where({ id }).first();
     res.status(201).json(row);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Insert failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Insert failed') });
   }
 });
 
@@ -111,8 +112,8 @@ router.patch('/:id', async (req, res) => {
     await db('annotations').where({ id: req.params.id }).update(updates);
     const row = await db('annotations').where({ id: req.params.id }).first();
     res.json(row);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -130,8 +131,8 @@ router.delete('/:id', async (req, res) => {
       return;
     }
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
   }
 });
 

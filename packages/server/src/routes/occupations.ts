@@ -13,6 +13,7 @@ import { authMiddleware } from '../middleware/auth';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import type { OccupationTemplate } from '@trpg/shared';
+import { safeErrorMessage } from '../utils/error-response';
 
 const router: IRouter = Router();
 
@@ -30,8 +31,8 @@ router.get('/', async (req, res): Promise<void> => {
       .where({ ruleset_id })
       .orderBy('created_at', 'asc');
     res.json(rows.map(deserialize));
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -41,8 +42,8 @@ router.get('/:id', async (req, res): Promise<void> => {
     const row = await db('occupation_templates').where({ id: req.params['id'] }).first();
     if (!row) { res.status(404).json({ error: 'Not found' }); return; }
     res.json(deserialize(row));
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -80,8 +81,8 @@ router.post('/', authMiddleware, async (req, res): Promise<void> => {
     });
     const row = await db('occupation_templates').where({ id }).first();
     res.status(201).json(deserialize(row));
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
   }
 });
 
@@ -111,8 +112,8 @@ router.put('/:id', authMiddleware, async (req, res): Promise<void> => {
     await db('occupation_templates').where({ id: req.params['id'] }).update(updates);
     const updated = await db('occupation_templates').where({ id: req.params['id'] }).first();
     res.json(deserialize(updated));
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -128,8 +129,8 @@ router.delete('/:id', authMiddleware, async (req, res): Promise<void> => {
     }
     await db('occupation_templates').where({ id: req.params['id'] }).delete();
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
   }
 });
 

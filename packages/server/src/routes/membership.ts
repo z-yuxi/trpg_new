@@ -18,6 +18,7 @@ import { membershipService } from '../services/membership-service';
 import { db } from '../db';
 import { generateId, MEMBERSHIP_BENEFITS } from '@trpg/shared';
 import type { MembershipTier } from '@trpg/shared';
+import { safeErrorMessage } from '../utils/error-response';
 import {
   verifyAlipaySignature,
   verifyWechatPayV3Signature,
@@ -42,8 +43,8 @@ router.get('/benefits', authMiddleware, async (req, res) => {
       benefits,
       expires_at: req.user!.subscription_expires_at ?? null,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to get membership info' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to get membership info') });
   }
 });
 
@@ -55,8 +56,8 @@ router.get('/events', authMiddleware, async (req, res) => {
       .orderBy('created_at', 'desc')
       .limit(50);
     res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to get events' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to get events') });
   }
 });
 
@@ -90,8 +91,8 @@ router.post('/grant', authMiddleware, async (req, res) => {
       operatorId: user.id,
     });
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Grant failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Grant failed') });
   }
 });
 
@@ -166,8 +167,8 @@ router.post('/orders', authMiddleware, async (req, res) => {
       status: 'pending',
       pay_params: payParams,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Order creation failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Order creation failed') });
   }
 });
 
@@ -182,8 +183,8 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
       paid_at: order.paid_at ?? null,
       amount_cents: order.amount_cents,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -194,8 +195,8 @@ router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
     if (!order) { res.status(404).json({ error: 'Order not found or cannot be cancelled' }); return; }
     await db('payment_orders').where({ id: req.params.id }).update({ status: 'failed' });
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Cancel failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Cancel failed') });
   }
 });
 

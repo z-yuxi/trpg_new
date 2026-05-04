@@ -8,27 +8,12 @@
  * 所有路由要求：已登录 + user_type 包含 'admin'
  */
 import { Router } from 'express';
-import type { Request, Response, NextFunction } from 'express';
-import { authMiddleware } from '../middleware/auth';
+import type { Request, Response } from 'express';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
 
 const router = Router();
-
-// ── Admin 权限守卫 ────────────────────────────────────────────────────────────
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-  const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
-  if (!isAdmin) {
-    res.status(403).json({ error: 'Admin permission required' });
-    return;
-  }
-  next();
-}
 
 /**
  * GET /admin/ai/stats

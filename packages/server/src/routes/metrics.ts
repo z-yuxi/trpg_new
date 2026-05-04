@@ -10,76 +10,66 @@
  * POST /api/metrics/recruitment/cache/invalidate  手动失效缓存
  */
 import { Router, type IRouter } from 'express';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { recruitmentMetricsService } from '../services/recruitment-metrics-service';
 import { metrics } from '../utils/business-metrics';
 import { alertManager } from '../utils/alert-manager';
+import { safeErrorMessage } from '../utils/error-response';
 
 const router: IRouter = Router();
 
-// 所有指标路由需要管理员权限
-function adminMiddleware(req: any, res: any, next: any) {
-  const user = req.user;
-  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
-  if (!isAdmin) {
-    res.status(403).json({ error: 'Admin only' });
-    return;
-  }
-  next();
-}
-
 // ── 漏斗快照 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/funnel', authMiddleware, adminMiddleware, async (req, res) => {
+router.get('/recruitment/funnel', authMiddleware, requireAdmin, async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days ?? 7)));
   try {
     const snapshot = await recruitmentMetricsService.getFunnelSnapshot(days);
     res.json(snapshot);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
 // ── 每日日报 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/daily', authMiddleware, adminMiddleware, async (req, res) => {
+router.get('/recruitment/daily', authMiddleware, requireAdmin, async (req, res) => {
   const days = Math.min(90, Math.max(1, Number(req.query.days ?? 30)));
   try {
     const reports = await recruitmentMetricsService.getDailyReports(days);
     res.json({ reports, total: reports.length });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
 // ── 异常告警 ───────────────────────────────────────────────────────────────────
-router.get('/recruitment/alerts', authMiddleware, adminMiddleware, async (req, res) => {
+router.get('/recruitment/alerts', authMiddleware, requireAdmin, async (req, res) => {
   const days = Math.min(30, Math.max(1, Number(req.query.days ?? 7)));
   try {
     const alerts = await recruitmentMetricsService.detectAlerts(days);
     res.json({ alerts, count: alerts.length });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
 // ── 手动失效缓存 ───────────────────────────────────────────────────────────────
-router.post('/recruitment/cache/invalidate', authMiddleware, adminMiddleware, async (_req, res) => {
+router.post('/recruitment/cache/invalidate', authMiddleware, requireAdmin, async (_req, res) => {
   try {
     await recruitmentMetricsService.invalidateCache();
     res.json({ ok: true, message: '缓存已失效' });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Invalidate failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Invalidate failed') });
   }
 });
 
 // ── 进程级业务指标快照 ─────────────────────────────────────────────────────────
-router.get('/business', authMiddleware, adminMiddleware, (_req, res) => {
+router.get('/business', authMiddleware, requireAdmin, (_req, res) => {
   res.json(metrics.snapshot());
 });
 
 // ── 实时告警状态（P0/P1 规则评估结果） ────────────────────────────────────────
 // 返回每条规则的当前状态：ok | firing | cooldown
 // 用于 Grafana / 企业微信机器人 / 发布门禁轮询
-router.get('/alerts', authMiddleware, adminMiddleware, (_req, res) => {
+router.get('/alerts', authMiddleware, requireAdmin, (_req, res) => {
   const snapshot = metrics.snapshot();
   const rules = alertManager.evaluateSync(snapshot);
   const firing = rules.filter((r) => r.status === 'firing');

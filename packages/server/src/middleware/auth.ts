@@ -57,6 +57,24 @@ export function requireCreator(req: Request, res: Response, next: NextFunction):
   next();
 }
 
+/**
+ * Admin guard — must be used AFTER authMiddleware.
+ * Allows access only when user.user_type includes 'admin'.
+ */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
+  if (!isAdmin) {
+    res.status(403).json({ error: 'Admin permission required' });
+    return;
+  }
+  next();
+}
+
 /** Optional auth - sets req.user if token is present, but continues even without */
 export async function optionalAuthMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];

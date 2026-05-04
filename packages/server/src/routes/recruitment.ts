@@ -7,6 +7,7 @@ import { recruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
 import { postCommentService } from '../services/post-comment-service';
 import { ErrorCode } from '../utils/app-error';
+import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 
 // ── 限流策略 ───────────────────────────────────────────────────────────────────
@@ -77,8 +78,8 @@ router.post('/', authMiddleware, async (req, res) => {
       poster_id: req.user!.id,
     });
     res.status(201).json(post);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
   }
 });
 
@@ -112,8 +113,8 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
     });
 
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -125,8 +126,8 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
       return;
     }
     res.json(detail);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -352,8 +353,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
     }
     const updated = await recruitmentService.update(req.params.id, parsed.data);
     res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -366,8 +367,8 @@ router.get('/:id/floors', optionalAuthMiddleware, async (req, res) => {
     const pageSize = Math.min(50, Math.max(1, Number(req.query.pageSize ?? 20)));
     const result = await postCommentService.getFloorsWithComments(req.params.id, page, pageSize, req.user?.id);
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -421,8 +422,8 @@ router.get('/:id/floors/:floorId/comments', optionalAuthMiddleware, async (req, 
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize ?? 20)));
     const result = await postCommentService.getFloorComments(req.params.floorId, page, pageSize, req.user?.id);
     res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 

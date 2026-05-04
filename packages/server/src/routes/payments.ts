@@ -15,11 +15,12 @@
  */
 import { Router, type IRouter, type Request } from 'express';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import { paymentService, PaymentError } from '../services/payment-service';
 import { metrics } from '../utils/business-metrics';
+import { safeErrorMessage } from '../utils/error-response';
 import {
   verifyAlipaySignature,
   verifyWechatPayV3Signature,
@@ -107,8 +108,8 @@ router.post('/orders', authMiddleware, paymentCreateLimiter, async (req, res) =>
       created_at: new Date().toISOString(),
     });
     metrics.inc('order_created');
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Order creation failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Order creation failed') });
   }
 });
 
@@ -137,8 +138,8 @@ router.get('/orders', authMiddleware, async (req, res) => {
       };
     });
     res.json({ data: result, total: result.length });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -163,8 +164,8 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
       paid_at: row.paid_at ?? null,
       created_at: row.created_at,
     });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -177,8 +178,8 @@ router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
     if (!row) { res.status(404).json({ error: 'Order not found or cannot be cancelled' }); return; }
     await db('payment_orders').where({ id: req.params.id }).update({ status: 'failed' });
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Cancel failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Cancel failed') });
   }
 });
 
@@ -343,17 +344,13 @@ router.get('/access/:type/:id', authMiddleware, async (req, res) => {
     );
     res.json({ has_access: hasAccess });
   } catch (err: unknown) {
-    res.status(500).json({ error: err instanceof Error ? err.message : 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
 // POST /api/payments/admin/manual-grant — 运营补单（需 admin 权限）
-router.post('/admin/manual-grant', authMiddleware, async (req, res) => {
+router.post('/admin/manual-grant', authMiddleware, requireAdmin, async (req, res) => {
   const user = req.user!;
-  if (!Array.isArray(user.user_type) || !user.user_type.includes('admin')) {
-    res.status(403).json({ error: 'Admin only' });
-    return;
-  }
   const { order_id, note } = req.body as { order_id?: string; note?: string };
   if (!order_id) { res.status(400).json({ error: 'Missing order_id' }); return; }
 
@@ -375,13 +372,8 @@ router.post('/admin/manual-grant', authMiddleware, async (req, res) => {
 //   order_id      - 要退款的订单 ID
 //   reason        - 退款原因（必填，写入审计日志）
 //   revoke_access - 是否同步撤销内容访问权（默认 true）
-router.post('/admin/refund', authMiddleware, async (req, res) => {
+router.post('/admin/refund', authMiddleware, requireAdmin, async (req, res) => {
   const user = req.user!;
-  if (!Array.isArray(user.user_type) || !user.user_type.includes('admin')) {
-    res.status(403).json({ error: 'Admin only' });
-    return;
-  }
-
   const { order_id, reason, revoke_access = true } = req.body as {
     order_id?: string;
     reason?: string;

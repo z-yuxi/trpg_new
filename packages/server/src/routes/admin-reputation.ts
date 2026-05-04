@@ -11,30 +11,14 @@
  * 例外：POST /admin/reviews/:reviewId/appeal 允许普通已登录用户提交申诉
  */
 import { Router } from 'express';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
 import { reputationAuditService } from '../services/reputation-audit-service';
 
 const router = Router();
-
-// ─── Admin 权限守卫（user_type 包含 'admin'） ─────────────────────────────────
-
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-  const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
-  if (!isAdmin) {
-    res.status(403).json({ error: 'Admin permission required' });
-    return;
-  }
-  next();
-}
 
 // ─── GET /admin/reputation/audit-log ────────────────────────────────────────
 // 查询信誉分变动日志（支持多维度筛选 + 分页）

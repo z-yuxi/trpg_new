@@ -11,6 +11,7 @@ import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { experimentService } from '../services/experiment-service';
+import { safeErrorMessage } from '../utils/error-response';
 
 const router: IRouter = Router();
 
@@ -23,8 +24,8 @@ router.get('/assignments', optionalAuthMiddleware, async (req, res) => {
   try {
     const assignments = await experimentService.getAllAssignments(req.user.id);
     res.json(assignments);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to get assignments' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to get assignments') });
   }
 });
 
@@ -62,8 +63,8 @@ router.get('/:name/stats', authMiddleware, async (req, res) => {
     const stats = await experimentService.getStats(req.params.name!);
     if (!stats) { res.status(404).json({ error: 'Experiment not found' }); return; }
     res.json(stats);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to get stats' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to get stats') });
   }
 });
 
@@ -100,8 +101,8 @@ router.post('/', authMiddleware, async (req, res) => {
       createdBy: user.id,
     });
     res.status(201).json(exp);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to create experiment' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to create experiment') });
   }
 });
 
@@ -123,8 +124,8 @@ router.put('/:name/status', authMiddleware, async (req, res) => {
   try {
     await experimentService.updateStatus(req.params.name!, parsed.data.status);
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Failed to update status' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to update status') });
   }
 });
 

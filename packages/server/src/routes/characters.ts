@@ -6,6 +6,7 @@ import { createCharacterPdfBuffer } from '../services/character-pdf-service';
 import { exportCSON, importCSON } from '@trpg/shared';
 import { db } from '../db';
 import { io } from '../app';
+import { safeErrorMessage } from '../utils/error-response';
 
 const router: IRouter = Router();
 
@@ -26,8 +27,8 @@ router.post('/import', async (req, res) => {
       skills: parsed.skills,
     });
     res.status(201).json(sheet);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Import failed' });
+  } catch (err: unknown) {
+    res.status(400).json({ error: safeErrorMessage(err, 'Import failed') });
   }
 });
 
@@ -36,8 +37,8 @@ router.post('/', async (req, res) => {
   try {
     const sheet = await characterSheetService.create({ ...req.body, user_id: req.user!.id });
     res.status(201).json(sheet);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
   }
 });
 
@@ -46,8 +47,8 @@ router.get('/', async (req, res) => {
   try {
     const sheets = await characterSheetService.findByUserId(req.user!.id);
     res.json(sheets);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -58,8 +59,8 @@ router.get('/:id', async (req, res) => {
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
     if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
     res.json(sheet);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -76,8 +77,8 @@ router.put('/:id', async (req, res) => {
     }
     const updated = await characterSheetService.update(req.params.id, safeBody);
     res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -89,8 +90,8 @@ router.delete('/:id', async (req, res) => {
     if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
     await characterSheetService.delete(req.params.id);
     res.status(204).send();
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
   }
 });
 
@@ -102,8 +103,8 @@ router.post('/:id/export', async (req, res) => {
     if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
     const cson_text = exportCSON(sheet, req.user!.nickname ?? 'player');
     res.json({ cson_text });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Export failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Export failed') });
   }
 });
 
@@ -120,8 +121,8 @@ router.post('/:id/export/pdf', payGate('character_card_pdf'), async (req, res) =
       `attachment; filename*=UTF-8''${encodeURIComponent(sheet.name || 'character')}.pdf`
     );
     res.send(buf);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'PDF export failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'PDF export failed') });
   }
 });
 
@@ -140,8 +141,8 @@ router.get('/:id/instance', async (req, res) => {
     const instance = await characterInstanceService.getInstance(req.params.id, campaign_id as string);
     if (!instance) { res.status(404).json({ error: 'Instance not found' }); return; }
     res.json(instance);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -185,8 +186,8 @@ router.put('/:id/instance/:campaignId', async (req, res) => {
     });
 
     res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -202,8 +203,8 @@ router.post('/:id/grow', async (req, res) => {
     if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
     await characterInstanceService.growSkill(req.params.id, campaign_id as string, skill_name as string, Number(new_value));
     res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Grow failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Grow failed') });
   }
 });
 

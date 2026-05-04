@@ -8,6 +8,7 @@ import { moduleService } from '../services/module-service';
 import { createModulePdfBuffer, importModuleFile } from '../services/module-transfer-service';
 import { db } from '../db';
 import { notificationService } from '../services/notification-service';
+import { safeErrorMessage } from '../utils/error-response';
 import type { CreateModuleRequest, UpdateModuleRequest, AutoSaveModuleRequest, CommunityUploadRequest } from '@trpg/shared';
 
 const router: IRouter = Router();
@@ -58,7 +59,7 @@ router.get('/', async (req, res) => {
     });
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -67,7 +68,7 @@ router.get('/mine', authMiddleware, async (req, res) => {
     const data = await moduleService.listMine(req.user!.id);
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -119,7 +120,7 @@ router.get('/announcements', async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -149,7 +150,7 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
     }
     res.json({ ...data, is_owned });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -199,7 +200,7 @@ router.post('/:id/import/confirm', authMiddleware, async (req, res) => {
     }
     res.json(module);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Import confirm failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Import confirm failed') });
   }
 });
 
@@ -224,7 +225,7 @@ router.post('/:id/export/pdf', authMiddleware, payGate('module_pdf'), async (req
     res.setHeader('Content-Disposition', `attachment; filename="module.pdf"; filename*=UTF-8''${encodedName}`);
     res.send(pdfBuffer);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Export failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Export failed') });
   }
 });
 
@@ -238,7 +239,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res) => {
     const module = await moduleService.create(req.user!.id, body);
     res.status(201).json(module);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Create failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
   }
 });
 
@@ -250,7 +251,7 @@ router.put('/:id', authMiddleware, requireCreator, async (req, res) => {
     if (!result) return res.status(404).json({ error: 'Not found or no permission' });
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -263,7 +264,7 @@ router.put('/:id/auto-save', authMiddleware, requireCreator, async (req, res) =>
     if (!ok) return res.status(404).json({ error: 'Not found or no permission' });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Auto-save failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Auto-save failed') });
   }
 });
 
@@ -274,7 +275,7 @@ router.delete('/:id', authMiddleware, requireCreator, async (req, res) => {
     if (!ok) return res.status(404).json({ error: 'Not found, no permission, or not in draft status' });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Delete failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
   }
 });
 
@@ -285,7 +286,7 @@ router.post('/:id/submit', authMiddleware, requireCreator, async (req, res) => {
     if (!module) return res.status(404).json({ error: 'Not found or not in draft status' });
     res.json(module);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Submit failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Submit failed') });
   }
 });
 
@@ -296,7 +297,7 @@ router.post('/:id/withdraw', authMiddleware, requireCreator, async (req, res) =>
     if (!module) return res.status(404).json({ error: 'Not found or invalid state' });
     res.json(module);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Withdraw failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Withdraw failed') });
   }
 });
 
@@ -315,7 +316,7 @@ router.get('/:id/public-notice', async (req, res) => {
       remaining_ms: endAt ? Math.max(0, endAt.getTime() - Date.now()) : 0,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -344,7 +345,7 @@ router.post('/:id/report', authMiddleware, async (req, res) => {
     });
     res.status(201).json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Report failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Report failed') });
   }
 });
 
@@ -608,7 +609,7 @@ router.get('/:id/snapshots', authMiddleware, async (req, res) => {
     const snapshots = await moduleService.getSnapshots(moduleId);
     res.json({ data: snapshots });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
 
@@ -623,7 +624,7 @@ router.post('/:id/rollback/:snapshotId', authMiddleware, async (req, res) => {
     const module = await moduleService.getById(id!);
     res.json({ data: module });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Rollback failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Rollback failed') });
   }
 });
 
@@ -889,7 +890,7 @@ router.post('/community/upload/confirm', authMiddleware, async (req, res) => {
       needs_review: effective_community_status === 'pending_review',
     });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Upload failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Upload failed') });
   }
 });
 
@@ -943,7 +944,7 @@ router.post('/:id/claim', authMiddleware, requireCreator, async (req, res) => {
 
     res.json({ success: true, claim_deadline_at: deadlineAt });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Claim failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Claim failed') });
   }
 });
 
@@ -1016,7 +1017,7 @@ router.put('/:id/claim/decision', authMiddleware, requireCreator, async (req, re
 
     res.json({ success: true, decision });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Decision failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Decision failed') });
   }
 });
 
@@ -1038,7 +1039,7 @@ router.put('/:id/derivative-policy', authMiddleware, requireCreator, async (req,
     }
     res.json({ success: true, derivative_policy: parsed.data.derivative_policy });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Update failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
 
@@ -1099,7 +1100,7 @@ router.post('/:id/claim-letter', authMiddleware, async (req, res) => {
 
     res.status(201).json({ id: letterId, ai_report: aiReport });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Submit failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Submit failed') });
   }
 });
 
@@ -1154,7 +1155,7 @@ router.put('/:id/claim-letter/:letterId/reply', authMiddleware, requireCreator, 
 
     res.json({ success: true, decision });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Reply failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Reply failed') });
   }
 });
 
@@ -1169,6 +1170,6 @@ router.get('/:id/contributors', async (req, res) => {
       .orderBy('mc.created_at', 'asc');
     res.json(rows);
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? 'Query failed' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });

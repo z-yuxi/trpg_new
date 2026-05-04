@@ -22,7 +22,7 @@ router.get('/me/stats', authMiddleware, async (req, res) => {
 
 // GET /api/users/me
 router.get('/me', authMiddleware, (req, res) => {
-  res.json({ user: req.user });
+  res.json({ user: userService.toSafeUser(req.user!) });
 });
 
 // GET /api/users/me/settings — 一次性返回所有设置字段（供 Settings.vue 回填）
