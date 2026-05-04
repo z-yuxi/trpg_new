@@ -13,6 +13,17 @@ info:
     鉴权策略：
     - L2: Bearer Token（用户JWT或机器人身份令牌）
     - L3: Bearer Token（管理员或服务账户）
+    
+    当前状态说明：
+    - 本文件用于对齐 docs/b_docs/附录 R01 的目标能力边界
+    - 不是“现网代码已 1:1 实现”的回放契约
+    - 若需与现网严格对齐，请以 packages/server/src/routes 下已挂载路由为准
+
+x-contract-role: target-alignment
+x-implementation-parity:
+  server_route_exact_match: false
+  source_of_truth_for_runtime: packages/server/src/routes
+  note: TODO(confirm with code owner)
 
 servers:
   - url: http://localhost:3000
@@ -28,6 +39,7 @@ paths:
         以认证用户或机器人身份发布帖子到指定板块。
         对应 MCP 工具：publish_post（迎/圭/寻/砚）
       operationId: publishPost
+      x-implementation-status: target_contract_only
       tags:
         - Community (L2)
       security:
@@ -51,6 +63,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/comments:
     post:
@@ -59,6 +73,7 @@ paths:
         在指定帖子下发表评论或回复。
         对应 MCP 工具：reply_comment（迎/圭/寻/砚）
       operationId: replyComment
+      x-implementation-status: target_contract_only
       tags:
         - Community (L2)
       security:
@@ -84,6 +99,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /api/help/chat:
     post:
@@ -92,6 +109,7 @@ paths:
         用户或Agent通过客服聊天获取帮助。
         对应 MCP 工具：customer_service_chat（初）
       operationId: customerServiceChat
+      x-implementation-status: target_contract_only
       tags:
         - Support (L2)
       security:
@@ -113,6 +131,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/help/faq:
     get:
@@ -121,6 +141,7 @@ paths:
         通过关键词查询FAQ库。
         对应 MCP 工具：faq_lookup（初）
       operationId: faqLookup
+      x-implementation-status: target_contract_only
       tags:
         - Support (L2)
       security:
@@ -144,6 +165,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/admin/reports/{id}:
     get:
@@ -152,6 +175,7 @@ paths:
         获取特定举报的详细信息。
         对应 MCP 工具：read_flagged_content（AB）
       operationId: readFlaggedContent
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -184,6 +208,7 @@ paths:
         AI审核员分析举报后，提交处理建议给管理员。
         对应 MCP 工具：generate_review_suggestion（AB）
       operationId: generateReviewSuggestion
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -215,6 +240,7 @@ paths:
         获取最近N天的平台异常趋势。
         对应 MCP 工具：scan_abnormal_trends（OS）
       operationId: scanAbnormalTrends
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -247,6 +273,7 @@ paths:
         生成指定日期的平台运营日报。
         对应 MCP 工具：generate_daily_report（OS）
       operationId: generateDailyReport
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -270,6 +297,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
 
   /api/agent/legal-search:
     post:
@@ -278,6 +309,7 @@ paths:
         查询相关法律条款和合规指引。
         对应 MCP 工具：legal_search（LX）
       operationId: legalSearch
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -301,6 +333,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
 
   /api/agent/evidence-analysis:
     post:
@@ -309,6 +345,7 @@ paths:
         对提供的证据进行法律分析和风险评估。
         对应 MCP 工具：evidence_analysis（LX）
       operationId: evidenceAnalysis
+      x-implementation-status: target_contract_only
       tags:
         - Governance (L3)
       security:
@@ -332,6 +369,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
 
 components:
   securitySchemes:
@@ -365,14 +406,51 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: 幂等键冲突（相同 idempotent_key 已存在）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error_code: IDEMPOTENT_CONFLICT
+            message: 该请求已被处理，如需重试请使用新的 idempotent_key
+    TooManyRequests:
+      description: AI配额耗尽或请求频率超限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error_code: AI_QUOTA_EXCEEDED
+            message: AI 调用配额已耗尽，请稍后重试
+    GatewayTimeout:
+      description: AI模型响应超时（MODEL_TIMEOUT）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error_code: MODEL_TIMEOUT
+            message: AI 模型响应超时
 
   schemas:
     ErrorResponse:
       type: object
-      required: [error, message]
+      required: [message]
+      description: |
+        代码包A存在三种错误体格式，代码包B需兼容：
+        - {error, message, details}    （通用路由）
+        - {error_code, message, details} （AI/Agent路由）
+        - {error, error_code}           （部分旧路由）
+        此Schema合并两套字段，消费方按需取用。
       properties:
         error:
           type: string
+          description: HTTP语义错误标识（如 FORBIDDEN）
+        error_code:
+          type: string
+          description: 业务错误码（如 AI_QUOTA_EXCEEDED, IDEMPOTENT_CONFLICT）
         message:
           type: string
         details:
