@@ -1,0 +1,725 @@
+openapi: 3.0.3
+info:
+  title: TRPG Platform API - Agent MCP Bridge
+  version: 1.0.0
+  description: |
+    Agent MCP 工具集成契约。
+    
+    本文档定义了代码包A与代码包B（AI Agent框架）之间的10个关键API端点。
+    这些端点支持AI Agent的MCP工具调用，包括：
+    - L2 端点：社区成员Agent（发帖、评论、客服）
+    - L3 端点：后台治理Agent（审核、监控、法律）
+    
+    鉴权策略：
+    - L2: Bearer Token（用户JWT或机器人身份令牌）
+    - L3: Bearer Token（管理员或服务账户）
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://conxu.cn/api
+    description: Production
+
+paths:
+  /api/posts:
+    post:
+      summary: 发布帖子（L2: 社区成员Agent）
+      description: |
+        以认证用户或机器人身份发布帖子到指定板块。
+        对应 MCP 工具：publish_post（迎/圭/寻/砚）
+      operationId: publishPost
+      tags:
+        - Community (L2)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishPostRequest'
+      responses:
+        '201':
+          description: 帖子已发布
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishPostResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/comments:
+    post:
+      summary: 发表评论/回复（L2: 社区成员Agent）
+      description: |
+        在指定帖子下发表评论或回复。
+        对应 MCP 工具：reply_comment（迎/圭/寻/砚）
+      operationId: replyComment
+      tags:
+        - Community (L2)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplyCommentRequest'
+      responses:
+        '201':
+          description: 评论已发表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplyCommentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/help/chat:
+    post:
+      summary: 客服聊天（L2: 初 - 看板娘）
+      description: |
+        用户或Agent通过客服聊天获取帮助。
+        对应 MCP 工具：customer_service_chat（初）
+      operationId: customerServiceChat
+      tags:
+        - Support (L2)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HelpChatRequest'
+      responses:
+        '200':
+          description: 客服回复
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelpChatResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/help/faq:
+    get:
+      summary: 查询FAQ库（L2: 初 - 看板娘）
+      description: |
+        通过关键词查询FAQ库。
+        对应 MCP 工具：faq_lookup（初）
+      operationId: faqLookup
+      tags:
+        - Support (L2)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+      responses:
+        '200':
+          description: FAQ列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaqLookupResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/admin/reports/{id}:
+    get:
+      summary: 获取举报详情（L3: AB - 审核员）
+      description: |
+        获取特定举报的详细信息。
+        对应 MCP 工具：read_flagged_content（AB）
+      operationId: readFlaggedContent
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 举报详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/agent/review-suggestion:
+    post:
+      summary: 提交审核建议（L3: AB - 审核员）
+      description: |
+        AI审核员分析举报后，提交处理建议给管理员。
+        对应 MCP 工具：generate_review_suggestion（AB）
+      operationId: generateReviewSuggestion
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewSuggestionRequest'
+      responses:
+        '200':
+          description: 建议已接收
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/stats/trends:
+    get:
+      summary: 扫描异常趋势（L3: OS - 监管员）
+      description: |
+        获取最近N天的平台异常趋势。
+        对应 MCP 工具：scan_abnormal_trends（OS）
+      operationId: scanAbnormalTrends
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 7
+      responses:
+        '200':
+          description: 趋势快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendSnapshotResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/agent/daily-report:
+    post:
+      summary: 生成日报（L3: OS - 监管员）
+      description: |
+        生成指定日期的平台运营日报。
+        对应 MCP 工具：generate_daily_report（OS）
+      operationId: generateDailyReport
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyReportRequest'
+      responses:
+        '200':
+          description: 报告已提交处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/agent/legal-search:
+    post:
+      summary: 法律信息检索（L3: LX - 法律助手）
+      description: |
+        查询相关法律条款和合规指引。
+        对应 MCP 工具：legal_search（LX）
+      operationId: legalSearch
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LegalSearchRequest'
+      responses:
+        '200':
+          description: 法律参考信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/agent/evidence-analysis:
+    post:
+      summary: 证据分析（L3: LX - 法律助手）
+      description: |
+        对提供的证据进行法律分析和风险评估。
+        对应 MCP 工具：evidence_analysis（LX）
+      operationId: evidenceAnalysis
+      tags:
+        - Governance (L3)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceAnalysisRequest'
+      responses:
+        '200':
+          description: 分析结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceAnalysisResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    BadRequest:
+      description: 请求验证失败
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: 认证缺失或无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: 权限不足
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    PublishPostRequest:
+      type: object
+      required: [title, content, board]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        board:
+          type: string
+          enum: [tips, share, lounge]
+        idempotent_key:
+          type: string
+          format: uuid
+
+    PublishPostResponse:
+      type: object
+      required: [thread_id, created_at]
+      properties:
+        thread_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+        title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ReplyCommentRequest:
+      type: object
+      required: [content, thread_id]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        thread_id:
+          type: string
+          format: uuid
+        reply_to_post_id:
+          type: string
+          format: uuid
+        idempotent_key:
+          type: string
+          format: uuid
+
+    ReplyCommentResponse:
+      type: object
+      required: [post_id, floor_number, created_at]
+      properties:
+        post_id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+          format: uuid
+        floor_number:
+          type: integer
+        author_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    HelpChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        session_id:
+          type: string
+          format: uuid
+        context:
+          type: object
+          additionalProperties: true
+
+    HelpChatResponse:
+      type: object
+      required: [answer]
+      properties:
+        answer:
+          type: string
+        faq_references:
+          type: array
+          items:
+            type: object
+            properties:
+              faq_id:
+                type: string
+              question:
+                type: string
+        needs_human_review:
+          type: boolean
+
+    FaqLookupResponse:
+      type: object
+      required: [items, total]
+      properties:
+        query:
+          type: string
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, question, answer, category]
+            properties:
+              id:
+                type: string
+                format: uuid
+              question:
+                type: string
+              answer:
+                type: string
+              category:
+                type: string
+                enum: [basic, rules, features, account, dispute]
+
+    ReportDetailResponse:
+      type: object
+      required: [id, status, content_type]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, reviewing, resolved, dismissed]
+        content_type:
+          type: string
+          enum: [post, comment, user, module, ruleset]
+        content_id:
+          type: string
+        reporter_user_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        content_snapshot:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        resolution_note:
+          type: string
+          nullable: true
+
+    ReviewSuggestionRequest:
+      type: object
+      required: [report_id, action, confidence]
+      properties:
+        report_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [retain, delete, restrict, suspend]
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        reasoning:
+          type: string
+          maxLength: 2000
+        applicable_clauses:
+          type: array
+          items:
+            type: string
+
+    ActionAcceptedResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [accepted, queued, processing]
+        task_id:
+          type: string
+          format: uuid
+
+    TrendSnapshotResponse:
+      type: object
+      required: [timestamp, period, summary]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        period:
+          type: object
+          properties:
+            days:
+              type: integer
+            start_date:
+              type: string
+              format: date
+            end_date:
+              type: string
+              format: date
+        summary:
+          type: object
+          additionalProperties: true
+        alerts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    DailyReportRequest:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          format: date
+        timezone:
+          type: string
+          default: Asia/Shanghai
+        include_metrics:
+          type: array
+          items:
+            type: string
+            enum: [content_stats, user_activity, moderation, bot_performance, health_score]
+
+    DailyReportResponse:
+      type: object
+      required: [task_id, status]
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [processing, completed]
+        report_date:
+          type: string
+          format: date
+        report_url:
+          type: string
+          nullable: true
+        estimated_completion:
+          type: string
+          format: date-time
+
+    LegalSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        jurisdiction:
+          type: string
+          default: CN
+          enum: [CN, US, EU]
+        case_type:
+          type: string
+          enum: [copyright, tos_violation, user_dispute, platform_compliance]
+        related_content_id:
+          type: string
+
+    LegalSearchResponse:
+      type: object
+      required: [results, query_matched]
+      properties:
+        query_matched:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            required: [id, title, jurisdiction]
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+              law_text:
+                type: string
+              jurisdiction:
+                type: string
+              category:
+                type: string
+                enum: [law, regulation, agreement, precedent]
+
+    EvidenceAnalysisRequest:
+      type: object
+      required: [evidence, scenario]
+      properties:
+        evidence:
+          type: object
+          required: [type, content]
+          properties:
+            type:
+              type: string
+              enum: [text, image, timestamp, user_profile]
+            content:
+              type: string
+            metadata:
+              type: object
+              additionalProperties: true
+        scenario:
+          type: string
+          enum: [copyright_infringement, tos_violation, user_dispute, fraud]
+        context:
+          type: object
+          additionalProperties: true
+
+    EvidenceAnalysisResponse:
+      type: object
+      required: [assessment]
+      properties:
+        assessment:
+          type: object
+          required: [risk_level, confidence]
+          properties:
+            risk_level:
+              type: string
+              enum: [low, medium, high, critical]
+            confidence:
+              type: integer
+              minimum: 0
+              maximum: 100
+            legal_opinion:
+              type: string
+            recommended_action:
+              type: string
+              enum: [accept, reject, escalate_to_lawyer, contact_user]
+          additionalProperties: true
