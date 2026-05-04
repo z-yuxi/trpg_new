@@ -265,7 +265,7 @@ onMounted(loadProducts);
           </TButton>
           <TButton v-if="availableActions(item).canSubmit" size="sm" type="primary" @click="submitForReview(item)">提交审核</TButton>
           <TButton v-if="availableActions(item).canWithdraw" size="sm" type="danger" @click="doWithdraw(item)">撤回</TButton>
-          <TButton v-if="availableActions(item).canAppeal" size="sm" type="warning" @click="doAppeal(item)">申诉</TButton>
+          <TButton v-if="availableActions(item).canAppeal" size="sm" type="secondary" @click="doAppeal(item)">申诉</TButton>
         </div>
       </article>
     </div>

@@ -23,3 +23,17 @@ export const DICE_MAX_EVAL_DEPTH = 50;
  * 超出则返回失败，防止恶意用户构造超大图进行 DoS。
  */
 export const GRAPH_MAX_NODES = 200;
+
+// ─── 执行时间与资源上限（附录 D01 §2）─────────────────────────────────────────
+
+/** 单次 Recipe/Graph 执行的最大允许时间（毫秒），超出则强制中止 */
+export const EXEC_TIMEOUT_MS = 500;
+
+/** 沙箱允许的最大内存用量（MB），超出则视为资源滥用 */
+export const MEMORY_LIMIT_MB = 64;
+
+/** 递归调用最大深度，防止无限递归导致调用栈溢出 */
+export const MAX_RECURSION_DEPTH = 16;
+
+/** 循环指令最大迭代次数，防止死循环占用执行线程 */
+export const MAX_LOOP_ITERATIONS = 1000;

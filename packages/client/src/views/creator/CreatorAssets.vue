@@ -31,7 +31,7 @@ const filteredAssets = computed(() => {
 async function loadAssets() {
   loading.value = true;
   try {
-    assets.value = await listCreatorAssets() as Asset[];
+    assets.value = await listCreatorAssets() as unknown as Asset[];
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '加载素材失败');
   } finally {

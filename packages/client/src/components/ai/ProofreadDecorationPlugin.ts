@@ -47,7 +47,7 @@ export function createProofreadDecorationPlugin() {
         const doc = state.doc;
 
         // 遍历所有问题，找到对应的文本位置并添加装饰
-        issues.forEach((issue, index) => {
+        issues.forEach((issue: CheckTextIssue, index: number) => {
           // 跳过已接受的问题
           if (acceptedIndexes.has(index)) {
             return;

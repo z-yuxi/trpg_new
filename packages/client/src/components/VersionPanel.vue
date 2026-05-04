@@ -36,7 +36,7 @@ async function fetchVersions() {
   if (!props.rulesetId || props.rulesetId === 'new') return;
   loading.value = true;
   try {
-    const data = await listRulesetVersions(props.rulesetId) as { data: VersionItem[] };
+    const data = await listRulesetVersions(props.rulesetId) as unknown as { data: VersionItem[] };
     versions.value = data.data ?? [];
   } finally {
     loading.value = false;

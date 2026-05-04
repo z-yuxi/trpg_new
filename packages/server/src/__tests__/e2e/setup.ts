@@ -325,7 +325,7 @@ export async function registerAndLoginAsCreator(phone: string, password = 'Test1
   await request.post('/api/auth/register').send({ phone, password, nickname });
   // 注册成功后，直接通过手机号找到用户并升级为创作者
     // 注意：迁移后 users 表存储 phone_hmac（盲索引），通过 HMAC 匹配
-    const { phoneHmac } = await import('../../utils/encryption');
+    const { phoneHmac } = await import('../../utils/encryption.js');
     const hmac = phoneHmac(phone);
     const userRow = (rows['users'] ?? []).find((u) => u.phone_hmac === hmac);
   if (userRow) {

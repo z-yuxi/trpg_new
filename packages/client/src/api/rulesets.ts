@@ -19,6 +19,8 @@ export interface Ruleset {
   recipe_source?: unknown;
   compiled?: unknown;
   created_at?: string;
+  character_card_schema?: unknown;
+  recruitment_fields?: unknown;
 }
 
 export interface RulesetVersion {
@@ -85,10 +87,10 @@ export function rollbackRulesetVersion(rulesetId: string, versionId: string): Pr
   return api.post(`/rulesets/${rulesetId}/versions/${versionId}/rollback`, {}, key());
 }
 
-export function executeRecipe(payload: {
-  recipe_id: string;
-  character_id: string;
-  runtime_modifiers?: Record<string, unknown>;
-}): Promise<unknown> {
-  return api.post('/engine/execute', payload, key());
+export function executeRecipe(
+  rulesetId: string,
+  command: string,
+  context: Record<string, unknown>
+): Promise<unknown> {
+  return api.post('/engine/execute', { ruleset_id: rulesetId, command, context }, key());
 }

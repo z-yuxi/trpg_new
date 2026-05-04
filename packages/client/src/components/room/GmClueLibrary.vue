@@ -6,7 +6,7 @@ import ClueStyleEditor from './ClueStyleEditor.vue';
 import TButton from '../base/TButton.vue';
 import TTag from '../base/TTag.vue';
 import SvgIcon from '../SvgIcon.vue';
-import { listClues, createClue, deleteClue } from '../../api/campaigns';
+import { listClues, createClue, deleteClue as apiDeleteClue } from '../../api/campaigns';
 
 type ClueTheme = 'river' | 'blur' | 'fragment' | 'wave' | 'ancient' | 'blood' | 'ash' | 'cyber';
 
@@ -37,7 +37,7 @@ const expandedClueId = ref<string | null>(null);
 async function loadClues() {
   loading.value = true;
   try {
-    clues.value = await listClues(props.campaignId) as CampaignClue[];
+    clues.value = await listClues(props.campaignId) as unknown as CampaignClue[];
   } catch (e: unknown) {
     ElMessage.error((e as Error)?.message ?? '加载线索失败');
   } finally {
@@ -70,7 +70,7 @@ async function deleteClue(clue: CampaignClue) {
     cancelButtonText: '取消',
   });
   try {
-    await deleteClue(props.campaignId, clue.id);
+    await apiDeleteClue(props.campaignId, clue.id);
     clues.value = clues.value.filter(c => c.id !== clue.id);
     ElMessage.success('线索已删除');
   } catch (e: unknown) {

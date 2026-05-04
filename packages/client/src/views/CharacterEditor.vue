@@ -195,7 +195,7 @@ onMounted(async () => {
 
   if (isEditing && characterId) {
     try {
-      const data = await getCharacter(characterId) as Record<string, unknown>;
+      const data = await getCharacter(characterId) as unknown as Record<string, unknown>;
       form.value.name = (data.name as string) ?? '';
       form.value.ruleset_id = (data.ruleset_id as string) ?? '';
       form.value.occupation_id = (data.occupation_id as string) ?? '';

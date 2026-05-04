@@ -671,7 +671,7 @@ function handleLocateProofread(issue: CheckTextIssue) {
   const text = state.doc.textContent;
   const pos = text.indexOf(issue.original);
   if (pos >= 0) {
-    editor.value.chain().focus().setSelection(pos, pos + issue.original.length).run();
+    editor.value.chain().focus().setTextSelection({ from: pos, to: pos + issue.original.length }).run();
     // 滚动到该位置
     view.dispatch(view.state.tr.setMeta('scroll', 'center'));
   }

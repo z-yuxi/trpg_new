@@ -40,7 +40,7 @@ function formatStoryTime(t: { day: number; hour: number; minute: number }) {
 async function loadPendingMoves() {
   loadingMoves.value = true;
   try {
-    pendingMoves.value = await listPendingMoves(props.campaignId) as ScheduledMove[];
+    pendingMoves.value = await listPendingMoves(props.campaignId) as unknown as ScheduledMove[];
     emit('pending-count', pendingMoves.value.length);
   } catch {
     // ignore

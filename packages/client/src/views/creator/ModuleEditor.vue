@@ -889,7 +889,7 @@ async function handlePublish() {
   // Batch 4: 提交发布审核（draft -> public_notice）
   if (!moduleId.value) return;
   try {
-    const res = await apiSubmitModule(moduleId.value) as { status: string; public_notice_end_at?: string | Date | null };
+    const res = await apiSubmitModule(moduleId.value) as unknown as { status: string; public_notice_end_at?: string | Date | null };
     if (module.value) {
       module.value.status = res.status as any;
       module.value.public_notice_end_at = res.public_notice_end_at as any;
@@ -903,7 +903,7 @@ async function handlePublish() {
 async function handleWithdraw() {
   if (!moduleId.value) return;
   try {
-    const res = await apiWithdrawModule(moduleId.value) as { status: string };
+    const res = await apiWithdrawModule(moduleId.value) as unknown as { status: string };
     if (module.value) module.value.status = res.status as any;
   } catch (err) {
     console.error('撤回失败', err);
@@ -972,7 +972,7 @@ const saveIndicatorText = computed(() => SAVE_TEXT[saveState.value]);
 // ── 加载 ─────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const data = await getModule(moduleId.value) as Module;
+    const data = await getModule(moduleId.value) as unknown as Module;
     module.value = data;
     moduleTitle.value = data.name;
     editorContent.value = data.content ?? null;

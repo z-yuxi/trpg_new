@@ -140,7 +140,7 @@ async function submitPost() {
       module_name: postForm.value.module_name.trim() || null,
       player_count_max: postForm.value.player_count_max,
       schedule_text: postForm.value.schedule_text.trim() || null,
-      description: postForm.value.description.trim() || null,
+      description: postForm.value.description.trim() || undefined,
       tags: postForm.value.tags,
       metadata: Object.fromEntries(
         Object.entries(postForm.value.metadata).filter(([, value]) => hasRecruitmentValue(value))

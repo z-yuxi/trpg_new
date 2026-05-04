@@ -262,7 +262,7 @@ const formData = ref<Record<string, unknown>>({});
 async function fetchRuleset() {
   if (isNew) return;
   try {
-    const rs = await getRuleset(rulesetId) as Record<string, unknown>;
+    const rs = await getRuleset(rulesetId) as unknown as Record<string, unknown>;
     formName.value = (rs.name as string);
     formVersion.value = (rs.version as string);
     formStatus.value = (rs.status as string) as typeof formStatus.value;

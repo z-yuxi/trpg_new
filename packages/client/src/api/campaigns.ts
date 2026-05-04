@@ -175,7 +175,7 @@ export function listClues(campaignId: string): Promise<Clue[]> {
   return api.get(`/campaigns/${campaignId}/clues`);
 }
 
-export function createClue(campaignId: string, payload: { title: string; content: string; theme?: string }): Promise<Clue> {
+export function createClue(campaignId: string, payload: { title: string; content: string; theme?: string; is_revealed?: boolean; revealed_to?: string[] | null }): Promise<Clue> {
   return api.post(`/campaigns/${campaignId}/clues`, payload, key());
 }
 

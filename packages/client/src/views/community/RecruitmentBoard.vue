@@ -151,7 +151,7 @@ async function loadPosts() {
     if (keyword.value.trim()) query.set('keyword', keyword.value.trim());
     if (props.mine) query.set('mine', props.mine);
 
-    const result = await listRecruitments(Object.fromEntries(query.entries())) as { data: RecruitmentPostVM[]; total: number };
+    const result = await listRecruitments(Object.fromEntries(query.entries())) as unknown as { data: RecruitmentPostVM[]; total: number };
     posts.value = result.data ?? [];
     total.value = result.total ?? 0;
   } catch (err: unknown) {

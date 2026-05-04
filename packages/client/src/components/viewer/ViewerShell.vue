@@ -704,6 +704,8 @@ function resetAppearance() {
 }
 
 // ─── 后退 ─────────────────────────────────────────────────────────────────────
+const canNativeShare = typeof navigator !== 'undefined' && 'share' in navigator;
+
 function goBack() {
   if (window.history.length > 1) {
     router.back();
@@ -986,7 +988,7 @@ function goBack() {
           <div class="share-modal__actions">
             <button class="share-modal__btn" @click="downloadPoster" :disabled="!sharePosterUrl">保存海报</button>
             <button class="share-modal__btn share-modal__btn--outline" @click="copyShareLink">复制链接</button>
-            <button v-if="'share' in navigator" class="share-modal__btn share-modal__btn--primary" @click="nativeShare">分享</button>
+            <button v-if="canNativeShare" class="share-modal__btn share-modal__btn--primary" @click="nativeShare">分享</button>
           </div>
         </div>
       </div>

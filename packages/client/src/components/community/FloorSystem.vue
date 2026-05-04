@@ -92,7 +92,7 @@ async function loadFloors(reset = false) {
   else loadingMore.value = true;
 
   try {
-    const data = await listFloors(props.postId, { page: page.value, pageSize }) as { floors: FloorReply[]; total: number };
+    const data = await listFloors(props.postId) as unknown as { floors: FloorReply[]; total: number };
     floors.value = isFirst ? (data?.floors ?? []) : [...floors.value, ...(data?.floors ?? [])];
     total.value = data?.total ?? 0;
   } catch (err: any) {

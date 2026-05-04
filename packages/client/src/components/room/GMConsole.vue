@@ -317,7 +317,7 @@ const trajectoryLoading = ref(false);
 async function loadTrajectoryHistory() {
   trajectoryLoading.value = true;
   try {
-    trajectoryData.value = await getTrajectoryMatrix(props.campaignId) as TrajectoryMatrixResponse;
+    trajectoryData.value = await getTrajectoryMatrix(props.campaignId) as unknown as TrajectoryMatrixResponse;
   } catch { /* ignore */ }
   finally { trajectoryLoading.value = false; }
 }

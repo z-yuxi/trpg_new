@@ -49,8 +49,8 @@ router.get('/', requireAuth, async (req, res) => {
 
 // PATCH /api/reports/:id (管理员) - 更新举报状态
 router.patch('/:id', requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
+  const user = req.user!;
+  const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) return res.status(403).json({ error: '无权限' });
 
   const { id } = req.params;

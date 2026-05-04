@@ -161,9 +161,9 @@ async function submitApply() {
     const isWaiting = detail.value?.status === 'full';
     await applyToRecruitment(postId.value, {
       character_id: applyCharacterId.value || null,
-      message: applyMessage.value.trim(),
+      note: applyMessage.value.trim(),
       ob: false,
-    }, isWaiting);
+    });
     ElMessage.success(isWaiting ? '已加入候补名单' : '申请已提交');
     showApplyDialog.value = false;
     applyMessage.value = '';
@@ -206,7 +206,7 @@ function openRejectDialog(applicationId: string) {
 /** GM：提交拒绝 */
 async function submitReject() {
   try {
-    await reviewApplication(postId.value, rejectTargetId.value, 'reject', rejectReason.value.trim() || null);
+    await reviewApplication(postId.value, rejectTargetId.value, 'reject', rejectReason.value.trim() || undefined);
     ElMessage.success('已拒绝');
     showRejectDialog.value = false;
     await loadDetail();
