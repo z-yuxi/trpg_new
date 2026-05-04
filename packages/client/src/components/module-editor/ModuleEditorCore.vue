@@ -65,11 +65,31 @@
         🔍
       </button>
       <span class="toolbar-sep" />
+      <!-- 大纲面板切换按钮 -->
+      <button
+        class="toolbar-btn"
+        :class="{ 'active': outlineVisible }"
+        title="大纲面板 (Ctrl+Shift+O)"
+        @click="outlineVisible = !outlineVisible"
+      >
+        ☰
+      </button>
+      <span class="toolbar-sep" />
       <span class="word-count">{{ wordCount }} 字</span>
     </div>
 
     <!-- 编辑区域 + AI 校对面板容器 -->
     <div class="editor-container">
+      <!-- 左侧大纲面板 -->
+      <Transition name="slide-right">
+        <div v-if="outlineVisible" class="outline-panel-wrapper">
+          <OutlinePanel
+            :doc-json="outlineDocJson"
+            :active-id="outlineActiveId"
+            @scroll-to="handleOutlineScrollTo"
+          />
+        </div>
+      </Transition>
       <!-- 左侧编辑区 -->
       <div class="editor-scroll">
         <editor-content :editor="editor" class="editor-body" />
@@ -215,6 +235,7 @@ import { createProofreadDecorationPlugin, proofreadDecorationKey } from '../ai/P
 import SnapshotTimeline from './SnapshotTimeline.vue';
 import TermWhitelistPanel from './TermWhitelistPanel.vue';
 import ModuleSearch from './ModuleSearch.vue';
+import OutlinePanel from './OutlinePanel.vue';
 
 // ── Props / Emits ──────────────────────────
 const props = defineProps<{
@@ -256,8 +277,10 @@ const editor = useEditor({
     }),
   ],
   onUpdate({ editor }) {
-    emit('update:modelValue', JSON.stringify(editor.getJSON()));
+    const json = editor.getJSON();
+    emit('update:modelValue', JSON.stringify(json));
     emit('wordCount', editor.storage['characterCount'].characters());
+    outlineDocJson.value = json;
   },
   editorProps: {
     handleKeyDown(_view: unknown, event: KeyboardEvent): boolean {
@@ -496,6 +519,19 @@ function applyMentionItem(item: EntityItem) {
     })
     .run();
   closeMentionMenu();
+}
+
+// ── 大纲面板（Outline Panel）─────────────────
+const outlineVisible = ref(false);
+const outlineDocJson = ref<unknown>(null);
+const outlineActiveId = ref('');
+
+function handleOutlineScrollTo(id: string) {
+  // 通过 DOM 中的 data-id 属性定位到对应节点元素
+  const el = document.querySelector(`[data-id="${id}"]`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 // ── AI 校对（Proofread）─────────────────────
@@ -781,6 +817,10 @@ onMounted(() => {
   loadSnapshots();
   // 初始加载术语白名单
   loadTerms();
+  // 初始化大纲数据
+  if (editor.value) {
+    outlineDocJson.value = editor.value.getJSON();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -807,6 +847,13 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   if (e.shiftKey && e.key === 'P') {
     e.preventDefault();
     handleCheckText();
+    return;
+  }
+
+  // Ctrl+Shift+O → 大纲面板
+  if (e.shiftKey && e.key === 'O') {
+    e.preventDefault();
+    outlineVisible.value = !outlineVisible.value;
     return;
   }
 
@@ -919,6 +966,22 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   display: flex;
   flex-direction: column;
 }
+
+.outline-panel-wrapper {
+  width: 220px;
+  min-width: 180px;
+  max-width: 280px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 大纲面板入场动画 */
+.slide-right-enter-active,
+.slide-right-leave-active { transition: width 0.2s ease, opacity 0.2s ease; overflow: hidden; }
+.slide-right-enter-from,
+.slide-right-leave-to { width: 0 !important; opacity: 0; }
 
 .editor-body {
   max-width: 800px;
