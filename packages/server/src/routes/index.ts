@@ -27,6 +27,7 @@ import annotationsRoutes from './annotations';
 import paymentsRoutes from './payments';
 import trendingRoutes from './trending';
 import feedbackRoutes from './feedback';
+import agentMcpBridgeRoutes from './agent-mcp-bridge';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -67,6 +68,7 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 // reviewRoutes 必须在 campaignRoutes 之前注册，避免被 campaignRoutes 的 authMiddleware 拦截
 router.use('/', reviewRoutes);
+router.use('/', agentMcpBridgeRoutes);
 router.use('/campaigns', campaignRoutes);
 router.use('/admin', adminReputationRoutes);
 router.use('/admin', adminAiRoutes);
