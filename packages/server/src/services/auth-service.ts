@@ -16,9 +16,18 @@ if (!JWT_REFRESH_SECRET) {
 }
 const _JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET;
 
-const JWT_EXPIRES_IN = '15m';
-const JWT_REFRESH_EXPIRES_IN = '7d';
-const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60; // 7 天，秒
+const JWT_EXPIRES_IN = '1h';
+const JWT_REFRESH_EXPIRES_IN = '30d';
+const REFRESH_TOKEN_MAX_TTL = 30 * 24 * 60 * 60; // 30 天，秒
+const REFRESH_TOKEN_IDLE_TTL = 7 * 24 * 60 * 60; // 7 天，秒（不活跃阈值）
+
+function refreshAllowKey(userId: string, jti: string): string {
+  return `refresh:${userId}:${jti}`;
+}
+
+function refreshIdleKey(userId: string, jti: string): string {
+  return `refresh_idle:${userId}:${jti}`;
+}
 
 export interface TokenPayload {
   userId: string;
@@ -41,13 +50,16 @@ export class AuthService {
     const access_token = jwt.sign(accessPayload, _JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
     const refresh_token = jwt.sign(refreshPayload, _JWT_REFRESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRES_IN });
 
-    // 将 refresh token jti 写入 Redis 白名单
-    void redis.set(`refresh:${user.id}:${jti}`, '1', 'EX', REFRESH_TOKEN_TTL);
+    // 双键策略：
+    // 1) 白名单键（30天）控制 refresh token 的最长生命周期
+    // 2) 空闲键（7天）控制连续不活跃时失效
+    void redis.set(refreshAllowKey(user.id, jti), '1', 'EX', REFRESH_TOKEN_MAX_TTL);
+    void redis.set(refreshIdleKey(user.id, jti), '1', 'EX', REFRESH_TOKEN_IDLE_TTL);
 
     return {
       access_token,
       refresh_token,
-      expires_in: 15 * 60,
+      expires_in: 60 * 60,
     };
   }
 
@@ -88,14 +100,17 @@ export class AuthService {
       throw new Error('Invalid refresh token: missing jti');
     }
 
-    // 验证 Redis 白名单中存在该 token
-    const exists = await redis.get(`refresh:${payload.userId}:${payload.jti}`);
-    if (!exists) {
-      throw new Error('Refresh token has been revoked or expired');
+    // 需同时满足：
+    // - allow 键存在：未被吊销，且未超过 30 天最大生命周期
+    // - idle 键存在：7 天内有活跃（通过 refresh 行为维持）
+    const allowExists = await redis.get(refreshAllowKey(payload.userId, payload.jti));
+    const idleExists = await redis.get(refreshIdleKey(payload.userId, payload.jti));
+    if (!allowExists || !idleExists) {
+      throw new Error('Refresh token has been revoked, expired, or idle timeout exceeded');
     }
 
     // 撤销旧 token（一次性使用）
-    await redis.del(`refresh:${payload.userId}:${payload.jti}`);
+    await redis.del(refreshAllowKey(payload.userId, payload.jti), refreshIdleKey(payload.userId, payload.jti));
 
     const user = await userService.findById(payload.userId);
     if (!user) {
@@ -106,15 +121,17 @@ export class AuthService {
 
   /** 撤销用户的所有 refresh token（改密码/注销时使用） */
   async revokeAllTokens(userId: string): Promise<void> {
-    const pattern = `refresh:${userId}:*`;
-    let cursor = '0';
-    do {
-      const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-      cursor = next;
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-    } while (cursor !== '0');
+    const patterns = [`refresh:${userId}:*`, `refresh_idle:${userId}:*`];
+    for (const pattern of patterns) {
+      let cursor = '0';
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = next;
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } while (cursor !== '0');
+    }
   }
 }
 

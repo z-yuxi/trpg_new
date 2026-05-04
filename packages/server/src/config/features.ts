@@ -23,6 +23,8 @@ export const FEATURES = {
   // ── 可见性策略 ─────────────────────────────────────────────────
   /** 使用新版消息可见性策略（否则回退 legacy） */
   NEW_VISIBILITY_POLICY: process.env['VISIBILITY_POLICY'] === 'new',
+  /** 当前可见性策略名称（供 MessageVisibilityPolicyService 直接读取） */
+  VISIBILITY_POLICY: (process.env['VISIBILITY_POLICY'] ?? 'legacy') as 'legacy' | 'new',
 
   // ── AI 功能 ────────────────────────────────────────────────────
   /** AI Agent 自动发帖（false = 仅草稿，不发布） */

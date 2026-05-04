@@ -10,6 +10,9 @@ process.env.DB_HOST = '127.0.0.1';
 process.env.DB_USER = 'trpg';
 process.env.DB_PASSWORD = 'trpg_password';
 process.env.DB_NAME = 'trpg_platform';
+// 测试用加密密钥（仅用于测试环境，32字节固定值）
+process.env.ENCRYPTION_KEY = '0000000000000000000000000000000000000000000000000000000000000001';
+process.env.PHONE_HMAC_KEY  = '0000000000000000000000000000000000000000000000000000000000000002';
 
 // Mock express-rate-limit — disable all rate limiting in tests
 vi.mock('express-rate-limit', () => ({
@@ -321,7 +324,10 @@ export async function registerAndLoginAsCreator(phone: string, password = 'Test1
   const nickname = 'c' + phone.slice(-4);
   await request.post('/api/auth/register').send({ phone, password, nickname });
   // 注册成功后，直接通过手机号找到用户并升级为创作者
-  const userRow = (rows['users'] ?? []).find((u) => u.phone === phone);
+    // 注意：迁移后 users 表存储 phone_hmac（盲索引），通过 HMAC 匹配
+    const { phoneHmac } = await import('../../utils/encryption');
+    const hmac = phoneHmac(phone);
+    const userRow = (rows['users'] ?? []).find((u) => u.phone_hmac === hmac);
   if (userRow) {
     userRow.subscription_type = 'creator';
     userRow.user_type = JSON.stringify(['player', 'creator']);

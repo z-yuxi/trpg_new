@@ -10,6 +10,9 @@ export default defineConfig({
       DB_USER: 'trpg',
       DB_PASSWORD: 'trpg_password',
       DB_NAME: 'trpg_platform',
+      // 测试用加密密钥（仅用于测试环境，32字节固定值）
+      ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000001',
+      PHONE_HMAC_KEY:  '0000000000000000000000000000000000000000000000000000000000000002',
     },
   },
 });

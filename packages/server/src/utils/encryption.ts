@@ -1,20 +1,24 @@
 /**
- * 对称加密工具（AES-256-GCM）
+ * 对称加密工具（AES-256-GCM）+ HMAC 盲索引
  *
  * 用于加密存储敏感字段：手机号、身份证号等 PII 数据。
  *
  * 环境变量：
- *   ENCRYPTION_KEY  - 64 位十六进制字符串（32 字节），通过 KMS/Docker Secret 注入
- *                     生成示例：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ *   ENCRYPTION_KEY   - 64 位十六进制字符串（32 字节），用于 AES-256-GCM 加密
+ *                      生成：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+ *   PHONE_HMAC_KEY   - 64 位十六进制字符串（32 字节），用于手机号 HMAC 盲索引
+ *                      必须与 ENCRYPTION_KEY 独立，不可复用
  *
  * 存储格式（JSON 字符串存入 DB）：
- *   { "ct": "<hex>", "iv": "<hex>", "tag": "<hex>" }
+ *   phone_encrypted: { "ct": "<hex>", "iv": "<hex>", "tag": "<hex>" }
+ *   phone_hmac:      HMAC-SHA256 hex（唯一索引用，不可逆）
  *
  * 用法：
- *   const enc = encrypt(phone);          // 加密
+ *   const enc = encrypt(phone);               // 加密
  *   const raw = decrypt(enc.ct, enc.iv, enc.tag); // 解密
- *   const stored = encryptToJson(phone);  // 加密并序列化为 JSON 字符串
- *   const plain  = decryptFromJson(stored); // 反序列化并解密
+ *   const stored = encryptToJson(phone);       // 加密并序列化
+ *   const plain  = decryptFromJson(stored);    // 反序列化并解密
+ *   const hmac   = phoneHmac(phone);           // 生成手机号盲索引（用于 WHERE 查询）
  */
 
 import crypto from 'crypto';
@@ -94,4 +98,25 @@ export function decryptFromJson(stored: string): string {
   }
   const { ct, iv, tag } = parsed as EncryptedPayload;
   return decrypt(ct, iv, tag);
+}
+
+/**
+ * 手机号 HMAC 盲索引
+ *
+ * 使用 HMAC-SHA256 生成手机号的确定性哈希，用于数据库唯一索引和查询。
+ * 不可逆，不等价于明文，仅用于 "WHERE phone_hmac = ?" 类查询。
+ *
+ * 必须使用独立的 PHONE_HMAC_KEY（与 ENCRYPTION_KEY 分离，防止交叉攻击）。
+ *
+ * @throws 若 PHONE_HMAC_KEY 未配置或格式非法
+ */
+export function phoneHmac(plainPhone: string): string {
+  const hex = process.env['PHONE_HMAC_KEY'];
+  if (!hex || hex.length !== 64) {
+    throw new Error('[encryption] PHONE_HMAC_KEY must be a 64-char hex string (32 bytes)');
+  }
+  return crypto
+    .createHmac('sha256', Buffer.from(hex, 'hex'))
+    .update(plainPhone, 'utf8')
+    .digest('hex');
 }

@@ -16,14 +16,15 @@
 import { db } from '../../db';
 import { getSceneActiveObPermissionMap } from '../scene-ob-permission-service';
 import { safeJsonParse } from '../../utils/safe-json';
+import { FEATURES } from '../../config/features';
 
 /** 项目未引入 pino，定义最小接口以支持未来提升为真正的结构化日志库 */
 export interface WarnLogger {
   warn(obj: Record<string, unknown>, msg: string): void;
 }
 
-// ─── 灰度开关 ──────────────────────────────────────────────────────────────
-export const VISIBILITY_POLICY = (process.env['VISIBILITY_POLICY'] ?? 'legacy') as 'legacy' | 'new';
+// ─── 灰度开关（统一从 config/features.ts 读取，单一来源） ───────────────────
+export const VISIBILITY_POLICY = FEATURES.VISIBILITY_POLICY;
 
 // 抽样率：1% 请求触发新旧对比（防日志爆炸）
 const DIVERGENCE_SAMPLE_RATE = 0.01;

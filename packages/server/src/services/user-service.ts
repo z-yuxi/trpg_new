@@ -3,6 +3,7 @@ import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
 import type { User } from '@trpg/shared';
 import { AppError } from '../utils/app-error';
+import { encryptToJson, decryptFromJson, phoneHmac } from '../utils/encryption';
 
 const BCRYPT_ROUNDS = 12;
 const UID_START = 1000000;
@@ -15,8 +16,9 @@ export class UserService {
   }): Promise<User> {
     const { phone, password, nickname } = params;
 
-    // Check if phone already exists
-    const existing = await db('users').where({ phone }).first();
+    // 唯一性检查：通过 HMAC 盲索引查询，不暴露明文
+    const hmac = phoneHmac(phone);
+    const existing = await db('users').where({ phone_hmac: hmac }).first();
     if (existing) {
       throw new AppError(409, '该手机号已注册');
     }
@@ -31,7 +33,8 @@ export class UserService {
     await db('users').insert({
       id,
       uid,
-      phone,
+      phone_encrypted: encryptToJson(phone),
+      phone_hmac: hmac,
       password_hash,
       nickname,
       avatar_url: '',
@@ -51,7 +54,8 @@ export class UserService {
   }
 
   async findByPhone(phone: string): Promise<User | null> {
-    const row = await db('users').where({ phone }).first();
+    const hmac = phoneHmac(phone);
+    const row = await db('users').where({ phone_hmac: hmac }).first();
     if (!row) return null;
     return this.rowToUser(row);
   }
@@ -225,10 +229,21 @@ export class UserService {
   }
 
   private rowToUser(row: Record<string, unknown>): User {
+    // 解密手机号：支持 phone_encrypted（新格式）和旧 phone 字段（回退兼容，迁移期）
+    let phone = '';
+    if (typeof row['phone_encrypted'] === 'string' && row['phone_encrypted']) {
+      try {
+        phone = decryptFromJson(row['phone_encrypted']);
+      } catch {
+        phone = '';
+      }
+    } else if (typeof row['phone'] === 'string') {
+      phone = row['phone'];
+    }
     return {
       id: row['id'] as string,
       uid: row['uid'] as number,
-      phone: row['phone'] as string,
+      phone,
       password_hash: row['password_hash'] as string,
       nickname: row['nickname'] as string,
       avatar_url: row['avatar_url'] as string,

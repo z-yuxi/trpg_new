@@ -28,6 +28,14 @@ if (encKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(encKey)) {
   process.exit(1);
 }
 
+// PHONE_HMAC_KEY 格式校验（独立于 ENCRYPTION_KEY，不可复用）
+const phoneHmacKey = process.env['PHONE_HMAC_KEY'];
+if (phoneHmacKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(phoneHmacKey)) {
+  console.error('[FATAL] PHONE_HMAC_KEY must be a 64-char hex string (32 bytes). ' +
+    'Generate: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
 // 校验可选配置枚举值，非法值立即退出（避免运行时静默降级）
 const visibilityPolicy = process.env['VISIBILITY_POLICY'];
 if (visibilityPolicy !== undefined && !['legacy', 'new'].includes(visibilityPolicy)) {

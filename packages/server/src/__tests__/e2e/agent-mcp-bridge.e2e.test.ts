@@ -8,7 +8,9 @@ const phone = () => '139' + String(Date.now()).slice(-6) + String(++seq).padStar
 async function registerAndLoginAsAdmin() {
   const p = phone();
   const token = await registerAndLogin(p, pw);
-  const user = rows.users.find((u) => u.phone === p);
+  const { phoneHmac } = await import('../../utils/encryption');
+  const hmac = phoneHmac(p);
+  const user = rows.users.find((u: any) => u.phone_hmac === hmac);
   if (user) {
     user.user_type = JSON.stringify(['player', 'admin']);
   }
