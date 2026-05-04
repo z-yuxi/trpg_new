@@ -75,6 +75,11 @@ const savedCharacterCode = ref('');
 const avatarUploading = ref(false);
 const avatarInput = ref<HTMLInputElement | null>(null);
 
+// 角色卡文件上传
+const characterFileInput = ref<HTMLInputElement | null>(null);
+const fileUploadError = ref('');
+const preloadedCharacterText = ref('');
+
 // AI 导入面板
 const aiImportVisible = ref(false);
 const selectedRulesetName = computed(() =>
@@ -267,6 +272,52 @@ async function onAvatarChange(event: Event) {
   }
 }
 
+/* ========== 角色卡文件上传 ========== */
+function openCharacterFilePicker() {
+  characterFileInput.value?.click();
+}
+
+async function onCharacterFileChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  fileUploadError.value = '';
+
+  // 限制文件大小（1MB）
+  if (file.size > 1 * 1024 * 1024) {
+    fileUploadError.value = '角色卡文件大小不能超过 1MB';
+    target.value = '';
+    return;
+  }
+
+  // 允许的文件类型：.txt, .json, .cson
+  const allowedTypes = ['text/plain', 'application/json'];
+  const allowedExtensions = ['.txt', '.json', '.cson'];
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+  
+  if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(ext)) {
+    fileUploadError.value = '仅支持 .txt, .json, .cson 文件';
+    target.value = '';
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    // 限制字符数（与 AiCharacterImportPanel 一致）
+    if (text.length > 3000) {
+      fileUploadError.value = '角色卡内容不能超过 3000 字符';
+      target.value = '';
+      return;
+    }
+    preloadedCharacterText.value = text;
+    aiImportVisible.value = true;
+  } catch (error: any) {
+    fileUploadError.value = error?.message || '文件读取失败';
+  } finally {
+    target.value = '';
+  }
+}
 /* ========== 步骤导航 ========== */
 function nextStep() {
   if (step.value === 1) {
@@ -365,10 +416,23 @@ onBeforeRouteLeave(() => {
     <div v-if="step === 1" class="step-panel">
       <div class="step1-header">
         <h2 class="step-title">选择规则包</h2>
-        <button class="ai-import-trigger" title="用 AI 自动识别角色卡文本" @click="aiImportVisible = true">
-          ✨ AI 导入
-        </button>
+        <div class="step1-actions">
+          <button class="ai-import-trigger" title="用 AI 自动识别角色卡文本" @click="aiImportVisible = true">
+            ✨ AI 导入
+          </button>
+          <button class="file-upload-trigger" title="上传角色卡文件" @click="openCharacterFilePicker">
+            📤 导入文件
+          </button>
+        </div>
       </div>
+      <p v-if="fileUploadError" class="error-hint">{{ fileUploadError }}</p>
+      <input
+        ref="characterFileInput"
+        type="file"
+        accept=".txt,.json,.cson"
+        style="display: none"
+        @change="onCharacterFileChange"
+      />
       <div class="ruleset-grid">
         <div
           v-for="rs in rulesets"
@@ -568,7 +632,8 @@ onBeforeRouteLeave(() => {
           <AiCharacterImportPanel
             :ruleset-id="form.ruleset_id || undefined"
             :ruleset-name="selectedRulesetName"
-            @close="aiImportVisible = false"
+            :initial-text="preloadedCharacterText"
+            @close="aiImportVisible = false; preloadedCharacterText = ''"
             @confirm="handleAiImportConfirm"
           />
         </div>
@@ -679,8 +744,15 @@ onBeforeRouteLeave(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  flex-wrap: wrap;
 }
-.ai-import-trigger {
+.step1-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ai-import-trigger,
+.file-upload-trigger {
   background: linear-gradient(135deg, #7c6af7, #a78bfa);
   color: #fff;
   border: none;
@@ -692,7 +764,8 @@ onBeforeRouteLeave(() => {
   white-space: nowrap;
   transition: opacity var(--transition-fast);
 }
-.ai-import-trigger:hover { opacity: 0.88; }
+.ai-import-trigger:hover,
+.file-upload-trigger:hover { opacity: 0.88; }
 
 .ruleset-grid {
   display: grid;
@@ -715,6 +788,7 @@ onBeforeRouteLeave(() => {
 .ruleset-name { font-weight: var(--font-semibold); color: var(--text-primary); }
 
 .hint-text { font-size: var(--text-sm); color: var(--text-muted); font-style: italic; }
+.error-hint { font-size: var(--text-sm); color: #dc2626; margin: var(--space-2) 0; }
 
 /* ===== Step 2: 职业 ===== */
 .occupation-grid {

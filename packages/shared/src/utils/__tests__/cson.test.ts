@@ -166,4 +166,50 @@ describe('CSON - validateCSON', () => {
     const result = validateCSON(JSON.stringify(doc));
     expect(result.valid).toBe(false);
   });
+
+  // ========== K.10/K.11 规范合规性测试 ==========
+  /**
+   * K.10: 角色卡开放交换格式规范（CSON）
+   * K.11: 版本兼容性与向后兼容
+   * 以下测试显式验证 CSON 实现对规范的遵守
+   */
+  it('[K.10/K.11 规范] exportCSON 必须导出 schema_version=1.0', () => {
+    const cson = exportCSON(mockSheet, EXPORTER);
+    const doc = JSON.parse(cson);
+    expect(doc.schema_version).toBe('1.0');
+  });
+
+  it('[K.10 规范] 所有必需字段应存在：meta, character, character.name, character.ruleset_ref, character.attributes, character.skills, character.equipment', () => {
+    const cson = exportCSON(mockSheet, EXPORTER);
+    const doc = JSON.parse(cson);
+    expect(doc.meta).toBeDefined();
+    expect(doc.character).toBeDefined();
+    expect(doc.character.name).toBeDefined();
+    expect(doc.character.ruleset_ref).toBeDefined();
+    expect(doc.character.attributes).toBeDefined();
+    expect(doc.character.skills).toBeDefined();
+    expect(doc.character.equipment).toBeDefined();
+  });
+
+  it('[K.11 规范] validateCSON 应拒绝 schema_version!=1.0 的文档', () => {
+    const doc = JSON.parse(exportCSON(mockSheet, EXPORTER));
+    doc.schema_version = '2.0';
+    const result = validateCSON(JSON.stringify(doc));
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('schema_version must be "1.0"');
+  });
+
+  it('[K.10/K.11 规范] Round-trip 一致性测试：导出→导入→导出应产生等价结构', () => {
+    const cson1 = exportCSON(mockSheet, EXPORTER);
+    const parsed = importCSON(cson1);
+    const cson2 = exportCSON({ ...parsed, derived_max: parsed.derived_max }, EXPORTER);
+    const doc1 = JSON.parse(cson1).character;
+    const doc2 = JSON.parse(cson2).character;
+    // 检查核心字段一致性
+    expect(doc2.name).toBe(doc1.name);
+    expect(doc2.ruleset_ref).toBe(doc1.ruleset_ref);
+    expect(doc2.attributes).toEqual(doc1.attributes);
+    expect(doc2.skills).toEqual(doc1.skills);
+    expect(doc2.equipment).toEqual(doc1.equipment);
+  });
 });

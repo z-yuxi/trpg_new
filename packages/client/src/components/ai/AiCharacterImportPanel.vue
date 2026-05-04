@@ -8,17 +8,19 @@
  * - 分组预览（基础信息 / 属性 / 技能 / 资源 / 装备），逐字段可修正
  * - 用户确认后 emit confirm(result)，由父组件负责创建角色卡
  */
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { importCharacterFromText, type ImportCharacterResult } from '../../api/ai';
 
 interface Props {
   rulesetId?: string;   // 可选，用于规则包字段提示
   rulesetName?: string; // 可选，传给 AI 作提示
+  initialText?: string; // 可选，从文件上传预填充
 }
 
 const props = withDefaults(defineProps<Props>(), {
   rulesetId: undefined,
   rulesetName: undefined,
+  initialText: undefined,
 });
 
 const emit = defineEmits<{
@@ -50,6 +52,13 @@ function loadIntoEdit(r: ImportCharacterResult) {
   editResources.value = JSON.parse(JSON.stringify(r.resources));
   editEquipment.value = [...r.equipment];
 }
+
+// ── 初始化 ───────────────────────────────────────────────────────────────────
+onMounted(() => {
+  if (props.initialText) {
+    inputText.value = props.initialText;
+  }
+});
 
 // ── AI 识别 ───────────────────────────────────────────────────────────────────
 async function handleAnalyze() {
