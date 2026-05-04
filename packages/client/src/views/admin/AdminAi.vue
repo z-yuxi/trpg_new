@@ -7,6 +7,10 @@ interface TokenRow  { task_type: string; total_input: number | string; total_out
 interface TopUser   { uid_prefix: string; task_type: string; count: number; }
 interface SummaryRow { status: string; count: number | string; }
 
+// ── 训练数据治理相关类型 ───────────────────────────────
+interface ConsentStat { opted_in: boolean; count: number; }
+interface EligibleRecord { task_type: string; count: number | string; }
+
 const loading = ref(false);
 const error   = ref('');
 
@@ -14,6 +18,13 @@ const daily       = ref<DailyRow[]>([]);
 const tokenTotals = ref<TokenRow[]>([]);
 const topUsers    = ref<TopUser[]>([]);
 const summary     = ref<SummaryRow[]>([]);
+
+// ── 训练数据治理状态 ───────────────────────────────────
+const activeTab = ref<'stats' | 'training'>('stats');
+const trainingLoading = ref(false);
+const trainingError   = ref('');
+const consentStats    = ref<ConsentStat[]>([]);
+const eligibleRecords = ref<EligibleRecord[]>([]);
 
 async function load() {
   loading.value = true;
@@ -36,6 +47,30 @@ async function load() {
   }
 }
 
+async function loadTraining() {
+  trainingLoading.value = true;
+  trainingError.value = '';
+  try {
+    const res = await api.get<{
+      consent_stats: ConsentStat[];
+      eligible_records: EligibleRecord[];
+    }>('/admin/ai/training');
+    consentStats.value    = res.consent_stats ?? [];
+    eligibleRecords.value = res.eligible_records ?? [];
+  } catch (e: unknown) {
+    trainingError.value = e instanceof Error ? e.message : '加载失败';
+  } finally {
+    trainingLoading.value = false;
+  }
+}
+
+function switchTab(tab: 'stats' | 'training') {
+  activeTab.value = tab;
+  if (tab === 'training' && consentStats.value.length === 0 && !trainingLoading.value) {
+    loadTraining();
+  }
+}
+
 onMounted(load);
 
 // ── 汇总卡片数值 ────────────────────────────────────────
@@ -48,10 +83,11 @@ const successRate   = computed(() => totalCalls.value > 0
 
 // ── 每日数据：折叠到 task_type 维度 ─────────────────────
 const TASK_LABELS: Record<string, string> = {
-  check_text:      'AI 校对',
-  import_module:   '结构分析',
-  log_summary:     '日志摘要',
-  generate_recipe: '规则生成',
+  check_text:       'AI 校对',
+  import_module:    '结构分析',
+  log_summary:      '日志摘要',
+  generate_recipe:  '规则生成',
+  import_character: '角色卡导入',
 };
 
 function taskLabel(type: string) {
@@ -78,6 +114,11 @@ const totalInputTokens  = computed(() =>
   tokenTotals.value.reduce((s, r) => s + Number(r.total_input), 0));
 const totalOutputTokens = computed(() =>
   tokenTotals.value.reduce((s, r) => s + Number(r.total_output), 0));
+
+// ── 训练数据治理：Opt-in 数量 ─────────────────────────
+const optInCount  = computed(() => Number(consentStats.value.find((r) => r.opted_in)?.count ?? 0));
+const optOutCount = computed(() => Number(consentStats.value.find((r) => !r.opted_in)?.count ?? 0));
+const totalEligible = computed(() => eligibleRecords.value.reduce((s, r) => s + Number(r.count), 0));
 </script>
 
 <template>
@@ -85,14 +126,22 @@ const totalOutputTokens = computed(() =>
     <header class="page-header">
       <h1 class="page-title">AI 监控台</h1>
       <p class="page-subtitle">近 30 天 AI 功能使用统计（只读视图，所有操作均需人工审批）</p>
-      <button class="btn btn--secondary btn--sm" :disabled="loading" @click="load">
-        {{ loading ? '加载中...' : '刷新' }}
+      <button class="btn btn--secondary btn--sm" :disabled="loading || trainingLoading" @click="activeTab === 'stats' ? load() : loadTraining()">
+        {{ (loading || trainingLoading) ? '加载中...' : '刷新' }}
       </button>
     </header>
 
-    <div v-if="error" class="error-banner">{{ error }}</div>
+    <!-- Tab 切换 -->
+    <div class="ai-tabs">
+      <button class="ai-tab" :class="{ 'ai-tab--active': activeTab === 'stats' }" @click="switchTab('stats')">使用统计</button>
+      <button class="ai-tab" :class="{ 'ai-tab--active': activeTab === 'training' }" @click="switchTab('training')">训练数据治理</button>
+    </div>
 
-    <!-- 汇总卡片 -->
+    <div v-if="error && activeTab === 'stats'" class="error-banner">{{ error }}</div>
+    <div v-if="trainingError && activeTab === 'training'" class="error-banner">{{ trainingError }}</div>
+
+    <!-- ── 使用统计 Tab ─────────────────────────────────────────── -->
+    <template v-if="activeTab === 'stats'">
     <div class="stat-cards">
       <div class="stat-card">
         <div class="stat-value">{{ totalCalls }}</div>
@@ -195,6 +244,57 @@ const totalOutputTokens = computed(() =>
         注意：AI 模块监控为只读建议视图。任何基于 AI 数据的处置操作（如限流、封号）须由管理员在「信誉审计」或「内容审核」模块手动执行，不可由 AI 直接触发。
       </p>
     </section>
+    </template><!-- /stats tab -->
+
+    <!-- ── 训练数据治理 Tab ─────────────────────────────────────── -->
+    <template v-if="activeTab === 'training'">
+      <div v-if="trainingLoading" class="empty">加载中...</div>
+      <template v-else>
+        <!-- Opt-in 汇总卡片 -->
+        <div class="stat-cards" style="margin-bottom:16px">
+          <div class="stat-card stat-card--success">
+            <div class="stat-value">{{ optInCount }}</div>
+            <div class="stat-label">已授权用户（Opt-in）</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ optOutCount }}</div>
+            <div class="stat-label">未授权用户（Opt-out / 默认）</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ totalEligible }}</div>
+            <div class="stat-label">近 30 天可训练任务数</div>
+          </div>
+        </div>
+
+        <!-- 可训练任务分布 -->
+        <section class="panel panel--full">
+          <h2 class="panel-title">
+            可训练任务分布（近 30 天，仅 Opt-in 用户的成功任务）
+            <span class="panel-title-note">汇总统计，原始文本不在此展示</span>
+          </h2>
+          <div v-if="eligibleRecords.length === 0" class="empty">暂无可训练数据（无 Opt-in 用户或近期无任务）</div>
+          <table v-else class="data-table">
+            <thead>
+              <tr>
+                <th>任务类型</th>
+                <th class="text-right">记录数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in eligibleRecords" :key="row.task_type">
+                <td>{{ taskLabel(row.task_type) }}</td>
+                <td class="text-right">{{ Number(row.count).toLocaleString() }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="notice" style="margin-top:12px">
+            数据治理规范：① 仅 allow_ai_train=true 用户的成功任务记录可进入训练候选池；
+            ② 原始文本导出须数据治理团队人工审批，不可通过此界面直接执行；
+            ③ 用户可随时在「隐私设置」中撤销授权，撤销后的历史数据在下次导出时自动排除。
+          </p>
+        </section>
+      </template>
+    </template><!-- /training tab -->
   </div>
 </template>
 
@@ -202,6 +302,20 @@ const totalOutputTokens = computed(() =>
 .admin-ai-page {
   padding: 24px;
   max-width: 1100px;
+}
+.ai-tabs {
+  display: flex; gap: 0; border-bottom: 2px solid var(--color-border, #eee);
+  margin-bottom: 20px;
+}
+.ai-tab {
+  padding: 8px 20px; border: none; background: none; cursor: pointer;
+  font-size: 14px; font-weight: 500; color: var(--color-text-muted, #888);
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.ai-tab--active {
+  color: var(--color-primary, #4f46e5);
+  border-bottom-color: var(--color-primary, #4f46e5);
 }
 .page-header {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;

@@ -72,6 +72,7 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   import_module: '结构分析',
   log_summary: '日志摘要',
   generate_recipe: '规则生成',
+  import_character: '角色卡导入',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {

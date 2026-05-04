@@ -108,4 +108,53 @@ router.get('/ai/stats', authMiddleware, requireAdmin, async (req: Request, res: 
   }
 });
 
+/**
+ * GET /admin/ai/training
+ *
+ * 返回 AI 训练数据治理统计与可导出的合规数据摘要：
+ * - consent_stats: 用户同意/不同意/默认（未设置）数量
+ * - eligible_records: 近 30 天 allow_ai_train=true 用户的成功任务数（按 task_type 分组）
+ * - data 边界说明：仅返回汇总数字和 task_type 分布，不返回原始文本内容
+ *
+ * 注意：实际训练数据的导出须由数据治理团队人工审批，此接口仅为统计视图。
+ */
+router.get('/ai/training', authMiddleware, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    since.setHours(0, 0, 0, 0);
+
+    const [consentStats, eligibleRecords] = await Promise.all([
+      // ── 用户同意状态分布 ──────────────────────────────────────────────────
+      db('users')
+        .groupBy('allow_ai_train')
+        .select('allow_ai_train')
+        .count('id as count'),
+
+      // ── 近 30 天可训练任务数（已同意用户 × 成功任务） ──────────────────────
+      db('ai_usage_log as log')
+        .join('users', 'users.id', 'log.user_id')
+        .where('users.allow_ai_train', true)
+        .where('log.status', 'success')
+        .where('log.created_at', '>=', since)
+        .groupBy('log.task_type')
+        .select('log.task_type')
+        .count('log.id as count'),
+    ]);
+
+    res.json({
+      consent_stats: consentStats.map((r: any) => ({
+        opted_in: r.allow_ai_train === true || r.allow_ai_train === 1,
+        count: Number(r.count),
+      })),
+      eligible_records: eligibleRecords,
+      notice: '此接口仅返回汇总统计，实际训练数据导出需人工审批，不可自动执行',
+    });
+  } catch (err: unknown) {
+    console.error('[admin:ai:training]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, '训练数据统계查询失败');
+    res.status(500).json({ error: 'QUERY_FAILED', message });
+  }
+});
+
 export default router;
