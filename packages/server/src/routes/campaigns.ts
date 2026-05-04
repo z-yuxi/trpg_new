@@ -577,6 +577,27 @@ router.post('/:id/scenes/:sceneId/ob-permissions/revoke', async (req, res) => {
   }
 });
 
+// GET /api/campaigns/:id/my-ob-permission-scenes
+// 获取当前用户在该战役中有 OB 旁听权限的场景 ID 列表
+router.get('/:id/my-ob-permission-scenes', async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'UNAUTHORIZED' });
+      return;
+    }
+
+    const campaignId = req.params.id;
+    const obPermissionMap = await getSceneActiveObPermissionMap(campaignId, userId);
+    const sceneIds = Array.from(obPermissionMap.keys());
+    res.json(sceneIds);
+  } catch (err: unknown) {
+    const status = typeof (err as Record<string, unknown>)?.status === 'number' ? (err as Record<string, unknown>).status as number : 500;
+    console.error('[campaigns:myObPermissionScenes]', err instanceof Error ? err.message : err);
+    res.status(status).json({ error: safeErrorMessage(err, '加载旁听权限失败') });
+  }
+});
+
 async function listSceneConnections(campaignId: string) {
   return db('scene_connections as sc')
     .leftJoin('scenes as fs', 'fs.id', 'sc.from_scene_id')

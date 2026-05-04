@@ -201,6 +201,14 @@ export function revokeObPermission(campaignId: string, sceneId: string, userId: 
   return api.post(`/campaigns/${campaignId}/scenes/${sceneId}/ob-permissions/revoke`, { user_id: userId }, key());
 }
 
+/**
+ * 获取当前用户在该战役中有 OB 旁听权限的场景 ID 列表
+ * @spec 附录 C：跑团房间交互设计 - OB 观战系统
+ */
+export function getMyObPermissionScenes(campaignId: string): Promise<string[]> {
+  return api.get(`/campaigns/${campaignId}/my-ob-permission-scenes`);
+}
+
 // ─── 轨迹矩阵 ───────────────────────────────────────────────────────────────
 
 export function getTrajectoryMatrix(campaignId: string): Promise<TrajectoryMatrix> {

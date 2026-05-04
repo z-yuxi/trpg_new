@@ -14,7 +14,7 @@ import { useAuthStore } from '../stores/auth-store';
 import { useMessageStore } from '../stores/message-store';
 import { socketClient } from '../socket/socket-client';
 import { api } from '../utils/api';
-import { createScene, joinScene, listObPermissions, grantObPermission as apiGrantObPermission, revokeObPermission as apiRevokeObPermission, listCampaignMembers } from '../api/campaigns';
+import { createScene, joinScene, listObPermissions, grantObPermission as apiGrantObPermission, revokeObPermission as apiRevokeObPermission, listCampaignMembers, getMyObPermissionScenes } from '../api/campaigns';
 import { getCharacter } from '../api/characters';
 import { PLATFORM_PRESET_COMMAND_NAMES, type StoryTime } from '@trpg/shared';
 import StarsAndWishesFeedbackModal from '../components/campaign/StarsAndWishesFeedbackModal.vue';
@@ -78,6 +78,9 @@ const activeSpatialCharacters = computed(() => {
 });
 
 const myVirtualSceneIds = ref<string[]>([]);
+
+// OB 观战权限场景
+const myObPermissionSceneIds = ref<string[]>([]);
 
 // 私密场新建
 const showCreateVirtualSceneDialog = ref(false);
@@ -196,6 +199,19 @@ async function fetchMyVirtualScenes() {
     myVirtualSceneIds.value = ids ?? [];
   } catch {
     myVirtualSceneIds.value = [];
+  }
+}
+
+/**
+ * 加载当前用户在该战役中的 OB 旁听权限场景
+ * @spec 附录 C：跑团房间交互设计 - OB 观战系统
+ */
+async function fetchMyObPermissionScenes() {
+  try {
+    const ids = await getMyObPermissionScenes(campaignId);
+    myObPermissionSceneIds.value = ids ?? [];
+  } catch {
+    myObPermissionSceneIds.value = [];
   }
 }
 
@@ -455,6 +471,8 @@ onMounted(async () => {
 
     await loadRoomCharacters();
     if (!isGm.value) await fetchMyVirtualScenes();
+    // 所有用户都可能有 OB 旁听权限
+    await fetchMyObPermissionScenes();
 
     // GM: 初始加载待审批移动申请数量（badge 徽章）
     if (isGm.value) {
@@ -623,6 +641,7 @@ onUnmounted(() => {
           :unread-counts="unreadCounts"
           :is-gm="isGm"
           :my-virtual-scene-ids="myVirtualSceneIds"
+          :my-ob-permission-scene-ids="myObPermissionSceneIds"
           :global-time="globalTime"
           :position-history="positionHistory"
           @scene-select="switchScene"

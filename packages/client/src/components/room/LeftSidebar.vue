@@ -12,6 +12,7 @@ const props = defineProps<{
   unreadCounts?: Record<string, number>;
   isGm?: boolean;
   myVirtualSceneIds?: string[];
+  myObPermissionSceneIds?: string[];
   globalTime?: StoryTime;
   positionHistory?: { sceneId: string; storyTime?: StoryTime; messageId?: string }[];
 }>();
@@ -62,10 +63,15 @@ const recentPath = computed(() => {
   }));
 });
 const virtualScenes = computed(() => {
-  // GM 可见全部私密场；玩家只能看到自己参与的
+  // GM 可见全部私密场；玩家只能看到自己参与的或有 OB 权限的
   if (props.isGm) return props.scenes.filter((scene) => scene.type === 'virtual');
-  const allowed = new Set(props.myVirtualSceneIds ?? []);
-  return props.scenes.filter((scene) => scene.type === 'virtual' && (allowed.has(scene.id) || scene.id === props.currentSceneId));
+  const myScenes = new Set(props.myVirtualSceneIds ?? []);
+  const obScenes = new Set(props.myObPermissionSceneIds ?? []);
+  return props.scenes.filter(
+    (scene) =>
+      scene.type === 'virtual' &&
+      (myScenes.has(scene.id) || obScenes.has(scene.id) || scene.id === props.currentSceneId)
+  );
 });
 const lobbyScenes = computed(() => props.scenes.filter((scene) => scene.type === 'lobby'));
 
@@ -80,6 +86,18 @@ function formatDuration(minutes: number) {
 
 function sceneUnread(sceneId: string) {
   return props.unreadCounts?.[sceneId] ?? 0;
+}
+
+/**
+ * 检查该场景是否是用户有 OB 旁听权限但未参与的场景
+ */
+function isObOnlyScene(sceneId: string): boolean {
+  if (!props.isGm) {
+    const myScenes = new Set(props.myVirtualSceneIds ?? []);
+    const obScenes = new Set(props.myObPermissionSceneIds ?? []);
+    return obScenes.has(sceneId) && !myScenes.has(sceneId);
+  }
+  return false;
 }
 
 function openCharacterMenu(event: MouseEvent, characterId: string) {
@@ -182,11 +200,12 @@ function handleForceMove() {
             v-for="scene in virtualScenes"
             :key="scene.id"
             class="scene-item"
-            :class="{ active: scene.id === currentSceneId }"
+            :class="{ active: scene.id === currentSceneId, 'ob-only': isObOnlyScene(scene.id) }"
             @click="emit('scene-select', scene.id)"
           >
             <SvgIcon name="icon-lock" :size="14" />
             <span class="scene-name">{{ scene.name }}</span>
+            <span v-if="isObOnlyScene(scene.id)" class="scene-tag ob-tag" title="旁听（只读）">OB</span>
             <span v-if="sceneUnread(scene.id) > 0" class="badge">{{ sceneUnread(scene.id) }}</span>
             <button
               v-if="isGm"
@@ -320,8 +339,21 @@ function handleForceMove() {
 }
 .scene-item:hover { background: var(--color-page-bg); }
 .scene-item.active { background: rgba(59, 130, 246, 0.1); color: var(--color-accent); }
+.scene-item.ob-only { opacity: 0.8; }
 .scene-dot { font-size: 8px; color: currentColor; }
 .scene-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scene-tag {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: var(--font-semibold);
+  border-radius: var(--radius-sm);
+  margin: 0 4px;
+}
+.scene-tag.ob-tag {
+  background: rgba(100, 116, 139, 0.2);
+  color: #64748b;
+}
 .inline-icon-btn {
   flex-shrink: 0;
   border: none;
