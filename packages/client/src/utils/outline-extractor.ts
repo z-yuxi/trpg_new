@@ -137,6 +137,22 @@ function walkNodes(nodes: unknown[], items: ModuleOutlineItem[], depth: number) 
         label: `【】${label}`,
         depth,
       });
+    } else if (node.type === 'npc_mention') {
+      const label: string = node.attrs?.label || node.attrs?.id || '未知 NPC';
+      items.push({
+        id: node.attrs?.id || `npcm-${items.length}`,
+        type: 'npc_mention',
+        label: `◆ ${label}`,
+        depth,
+      });
+    } else if (node.type === 'rule_ref') {
+      const label: string = node.attrs?.label || node.attrs?.ruleId || '规则引用';
+      items.push({
+        id: node.attrs?.id || `rule-${items.length}`,
+        type: 'rule_ref',
+        label: `[] ${label}`,
+        depth,
+      });
     } else if (LEGACY_BLOCK_TYPES.has(node.type)) {
       // 兼容旧格式文档
       const blockType = node.type.replace('_block', '') as ModuleOutlineItem['type'];

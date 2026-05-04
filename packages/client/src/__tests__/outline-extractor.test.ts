@@ -83,4 +83,24 @@ describe('outline-extractor', () => {
     const items = extractOutline(doc);
     expect(items[0]).toMatchObject({ type: 'dialog', label: '审讯对话' });
   });
+
+  it('npc_mention 节点提取到大纲，label 带 ◆ 前缀', () => {
+    const doc = makeDoc({ type: 'npc_mention', attrs: { id: 'npc_001', label: '城见美苗', type: 'npc' } });
+    const items = extractOutline(doc);
+    expect(items[0]).toMatchObject({ type: 'npc_mention', label: '◆ 城见美苗', id: 'npc_001' });
+  });
+
+  it('rule_ref 节点提取到大纲，label 带 [] 前缀', () => {
+    const doc = makeDoc({ type: 'rule_ref', attrs: { id: 'rule_san', label: 'SAN 0/1' } });
+    const items = extractOutline(doc);
+    expect(items[0]).toMatchObject({ type: 'rule_ref', label: '[] SAN 0/1', id: 'rule_san' });
+  });
+
+  it('npc_mention 无 id 时生成 fallback id', () => {
+    const doc = makeDoc({ type: 'npc_mention', attrs: { label: '无名NPC' } });
+    const items = extractOutline(doc);
+    expect(items[0]!.id).toBeTruthy();
+    expect(items[0]).toMatchObject({ type: 'npc_mention', label: '◆ 无名NPC' });
+  });
 });
+
