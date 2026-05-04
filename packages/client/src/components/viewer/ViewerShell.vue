@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 /**
  * ViewerShell —— 叙阅器沉浸式阅览壳层
  * 适用范围：模组（module）、规则包（ruleset）等所有可阅览作品类型
@@ -668,7 +668,7 @@ function onMarkClick(e: MouseEvent) {
   nextTick(() => {
     document.querySelector(`.annotation-item[data-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
-}────────────
+}
 onMounted(async () => {
   await loadAsset();
   await loadReadingProgress();

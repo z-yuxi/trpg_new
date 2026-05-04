@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElDialog, ElMessage, ElSelect, ElOption, ElInput } from 'element-plus';
@@ -577,7 +577,8 @@ onMounted(async () => {
     }
   });
 
-  // \u56e2\u7ed3\u675f\u65f6\u5f39\u51fa\u53cd\u9988\u5f39\u7a97\n  socketClient.onCampaignEnded((data) => {
+  // \u56e2\u7ed3\u675f\u65f6\u5f39\u51fa\u53cd\u9988\u5f39\u7a97
+  socketClient.onCampaignEnded((data) => {
     feedbackCampaignName.value = data.campaign_name;
     showFeedbackModal.value = true;
   });
