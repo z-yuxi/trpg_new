@@ -28,6 +28,7 @@ import paymentsRoutes from './payments';
 import trendingRoutes from './trending';
 import feedbackRoutes from './feedback';
 import agentMcpBridgeRoutes from './agent-mcp-bridge';
+import engineRoutes from './engine';
 import { db } from '../db';
 import { redis } from '../db/redis';
 
@@ -95,5 +96,6 @@ router.use('/payments', paymentsRoutes);
 router.use('/trending', trendingRoutes);
 // feedbackRoutes 使用完整路径 /campaigns/:campaignId/feedback*
 router.use('/', feedbackRoutes);
+router.use('/v1/engine', engineRoutes);
 
 export default router;
