@@ -1,5 +1,6 @@
 import type { NodeExecutionLog, EngineErrorCode } from '@trpg/shared';
 import type { AtomRegistry } from './registry';
+import { GRAPH_MAX_NODES } from './sandbox-limits';
 
 /** 输入来源：静态值 或 引用其他节点的输出 */
 export type InputSource =
@@ -39,6 +40,16 @@ export class GraphExecutor {
 
     if (!graph.nodes || graph.nodes.length === 0) {
       return { success: false, output: null, error: 'Graph has no nodes', error_code: 'STEP_RESULT_UNAVAILABLE', logs };
+    }
+
+    if (graph.nodes.length > GRAPH_MAX_NODES) {
+      return {
+        success: false,
+        output: null,
+        error: `Graph exceeds maximum node count (${GRAPH_MAX_NODES})`,
+        error_code: 'DSL_EVAL_ERROR',
+        logs,
+      };
     }
 
     // Topological sort

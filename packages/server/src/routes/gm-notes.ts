@@ -13,7 +13,7 @@ async function verifyGm(campaignId: string, userId: string): Promise<boolean> {
 
 // GET /api/campaigns/:id/gm-notes
 router.get('/:id/gm-notes', requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id;
+  const userId = req.user!.id;
   const { id: campaignId } = req.params;
 
   if (!(await verifyGm(campaignId, userId))) {
@@ -29,7 +29,7 @@ router.get('/:id/gm-notes', requireAuth, async (req, res) => {
 
 // POST /api/campaigns/:id/gm-notes
 router.post('/:id/gm-notes', requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id;
+  const userId = req.user!.id;
   const { id: campaignId } = req.params;
   const { content } = req.body;
 
@@ -54,7 +54,7 @@ router.post('/:id/gm-notes', requireAuth, async (req, res) => {
 
 // DELETE /api/campaigns/:id/gm-notes/:noteId
 router.delete('/:id/gm-notes/:noteId', requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id;
+  const userId = req.user!.id;
   const { id: campaignId, noteId } = req.params;
 
   if (!(await verifyGm(campaignId, userId))) {

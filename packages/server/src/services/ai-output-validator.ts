@@ -48,27 +48,28 @@ export function validateCheckTextOutput(
   parsed: unknown,
   ruleTerms: string[] = [],
 ): CheckTextOutput {
+  const parsedObj = parsed as Record<string, unknown>;
   if (
     typeof parsed !== 'object' ||
     parsed === null ||
     !('issues' in parsed) ||
-    !Array.isArray((parsed as any).issues)
+    !Array.isArray(parsedObj['issues'])
   ) {
     throw new Error('AI_OUTPUT_INVALID: check-text 响应缺少 issues 数组');
   }
 
-  const raw = (parsed as any).issues as unknown[];
+  const raw = parsedObj['issues'] as unknown[];
   const validTypes = new Set(['typo', 'punctuation', 'term', 'style']);
 
   const issues: CheckTextIssue[] = [];
   for (const item of raw) {
+    if (typeof item !== 'object' || item === null) { continue; }
+    const row = item as Record<string, unknown>;
     if (
-      typeof item !== 'object' ||
-      item === null ||
-      typeof (item as any).original !== 'string' ||
-      typeof (item as any).suggestion !== 'string' ||
-      typeof (item as any).reason !== 'string' ||
-      !validTypes.has((item as any).type)
+      typeof row['original'] !== 'string' ||
+      typeof row['suggestion'] !== 'string' ||
+      typeof row['reason'] !== 'string' ||
+      !validTypes.has(row['type'] as string)
     ) {
       // 跳过结构不完整的条目
       continue;
@@ -136,37 +137,38 @@ export function validateImportModuleOutput(
   parsed: unknown,
   termWhitelist: string[] = [],
 ): ImportModuleOutput {
+  const parsedObj = parsed as Record<string, unknown>;
   if (
     typeof parsed !== 'object' ||
     parsed === null ||
     !('entities' in parsed) ||
-    !Array.isArray((parsed as any).entities)
+    !Array.isArray(parsedObj['entities'])
   ) {
     throw new Error('AI_OUTPUT_INVALID: import-module 响应缺少 entities 数组');
   }
 
-  const raw = (parsed as any).entities as unknown[];
+  const raw = parsedObj['entities'] as unknown[];
   const validEntityTypes = new Set<string>(['npc', 'scene', 'clue', 'item', 'event']);
 
   const entities: ModuleEntity[] = [];
   for (const item of raw) {
+    if (typeof item !== 'object' || item === null) { continue; }
+    const row = item as Record<string, unknown>;
     if (
-      typeof item !== 'object' ||
-      item === null ||
-      typeof (item as any).name !== 'string' ||
-      !(item as any).name.trim() ||
-      typeof (item as any).description !== 'string' ||
-      !validEntityTypes.has((item as any).type)
+      typeof row['name'] !== 'string' ||
+      !(row['name'] as string).trim() ||
+      typeof row['description'] !== 'string' ||
+      !validEntityTypes.has(row['type'] as string)
     ) {
       continue;
     }
 
     const entity: ModuleEntity = {
-      type: (item as any).type as EntityType,
-      name: (item as any).name.trim(),
-      description: (item as any).description.slice(0, 200), // 截断过长描述
-      mentions: Array.isArray((item as any).mentions)
-        ? ((item as any).mentions as unknown[])
+      type: row['type'] as EntityType,
+      name: (row['name'] as string).trim(),
+      description: (row['description'] as string).slice(0, 200), // 截断过长描述
+      mentions: Array.isArray(row['mentions'])
+        ? (row['mentions'] as unknown[])
             .filter((m): m is string => typeof m === 'string')
             .slice(0, 10)
         : [],
@@ -245,9 +247,10 @@ export function validateImportCharacterOutput(parsed: unknown): ImportCharacterO
     for (const [k, v] of Object.entries(raw['resources'] as Record<string, unknown>)) {
       if (!FIELD_NAME_RE.test(k)) continue;
       if (typeof v === 'object' && v !== null) {
+        const vObj = v as Record<string, unknown>;
         resources[k] = {
-          current: safeNum((v as any)['current']),
-          max: safeNum((v as any)['max']),
+          current: safeNum(vObj['current']),
+          max: safeNum(vObj['max']),
         };
       }
     }

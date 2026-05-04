@@ -20,9 +20,16 @@ export function setupUserHandler(userNsp: UserNamespace): void {
     await redis.set(RedisKeys.userSocket(userId), socket.id, 'EX', 86400);
 
     socket.on('disconnect', async () => {
-      const current = await redis.get(RedisKeys.userSocket(userId));
-      if (current === socket.id) {
-        await redis.del(RedisKeys.userSocket(userId));
+      try {
+        const current = await redis.get(RedisKeys.userSocket(userId));
+        if (current === socket.id) {
+          await redis.del(RedisKeys.userSocket(userId));
+        }
+        // 清理所有事件监听，防止内存泄漏
+        socket.removeAllListeners();
+      } catch (err) {
+        const safeMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[user:disconnect] error:', { userId, code: 'USER_DISCONNECT_CLEANUP_FAILED', severity: 'low', msg: safeMsg });
       }
     });
   });

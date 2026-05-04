@@ -66,7 +66,9 @@ export function registerChatHandlers(
           await handleReconnection(socket, campaign_id, character_id, last_event_id);
         }
       } catch (err) {
-        console.error('[join_room] handler error:', err);
+        const safeMsg = err instanceof Error ? err.message : 'Unknown error';
+        socket.emit('error_message', { message: '加入房间失败，请检查权限' });
+        console.error('[join_room] handler error:', { userId, code: 'JOIN_ROOM_FAILED', severity: 'medium', msg: safeMsg });
       }
     });
 
@@ -80,7 +82,8 @@ export function registerChatHandlers(
           await redis.del(RedisKeys.userSocket(userId));
         }
       } catch (err) {
-        console.error('[leave_room] handler error:', err);
+        const safeMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[leave_room] handler error:', { userId, code: 'LEAVE_ROOM_FAILED', severity: 'low', msg: safeMsg });
       }
     });
 
@@ -301,7 +304,7 @@ export function registerChatHandlers(
         if (campaign?.gm_user_id) {
           const gmSocketId = await redis.get(RedisKeys.userSocket(campaign.gm_user_id));
           if (gmSocketId) {
-            (roomNsp.to(gmSocketId) as any).emit('move_requested', {
+            roomNsp.to(gmSocketId).emit('move_requested', {
               move_id: moveId,
               character_id: characterId,
               to_scene_id: target_scene_id,
@@ -505,8 +508,11 @@ export function registerChatHandlers(
           await redis.srem(RedisKeys.campaignOnline(campaignId), userId);
           await redis.del(RedisKeys.userSocket(userId));
         }
+        // 清理所有事件监听，防止内存泄漏
+        socket.removeAllListeners();
       } catch (err) {
-        console.error('[disconnect] handler error:', err);
+        const safeMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[disconnect] handler error:', { userId, code: 'DISCONNECT_CLEANUP_FAILED', severity: 'low', msg: safeMsg });
       }
     });
   });

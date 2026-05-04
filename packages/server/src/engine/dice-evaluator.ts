@@ -1,5 +1,11 @@
 import { tokenize } from './dice-lexer';
 import { parse, type DiceASTNode, type DiceModifier } from './dice-parser';
+import {
+  DICE_MAX_COUNT,
+  DICE_MAX_SIDES,
+  DICE_MAX_EXPLOSION_EXTRA,
+  DICE_MAX_EVAL_DEPTH,
+} from './sandbox-limits';
 
 export interface SingleRoll {
   sides: number;
@@ -40,8 +46,8 @@ function applyModifiers(results: number[], sides: number, modifiers: DiceModifie
           exploded.push(newRoll);
         }
         i++;
-        // Safety: limit explosion to 100 additional dice
-        if (exploded.length > results.length + 100) break;
+        // Safety: limit explosion to DICE_MAX_EXPLOSION_EXTRA additional dice
+        if (exploded.length > results.length + DICE_MAX_EXPLOSION_EXTRA) break;
       }
       kept = exploded;
     }
@@ -51,7 +57,7 @@ function applyModifiers(results: number[], sides: number, modifiers: DiceModifie
 }
 
 function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll[], depth = 0): number {
-  if (depth > 50) throw new Error('Expression too deeply nested');
+  if (depth > DICE_MAX_EVAL_DEPTH) throw new Error('Expression too deeply nested');
   switch (node.type) {
     case 'number':
       return node.value;
@@ -60,8 +66,8 @@ function evaluateNode(node: DiceASTNode, rng: () => number, allRolls: SingleRoll
       const { count, sides, modifiers } = node;
       if (sides <= 0) throw new Error(`Invalid die sides: ${sides}`);
       if (count <= 0) throw new Error(`Invalid dice count: ${count}`);
-      if (count > 100) throw new Error(`Dice count too large: ${count} (max 100)`);
-      if (sides > 10000) throw new Error(`Die sides too large: ${sides} (max 10000)`);
+      if (count > DICE_MAX_COUNT) throw new Error(`Dice count too large: ${count} (max ${DICE_MAX_COUNT})`);
+      if (sides > DICE_MAX_SIDES) throw new Error(`Die sides too large: ${sides} (max ${DICE_MAX_SIDES})`);
 
       const results: number[] = [];
       for (let i = 0; i < count; i++) {

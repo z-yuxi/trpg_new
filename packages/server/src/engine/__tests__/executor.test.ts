@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GraphExecutor, type GraphDef } from '../executor';
 import { globalRegistry, AtomRegistry } from '../registry';
+import { GRAPH_MAX_NODES } from '../sandbox-limits';
 
 describe('GraphExecutor', () => {
   it('应执行简单链式图: dice_roll → threshold_compare → result_collector', () => {
@@ -130,5 +131,91 @@ describe('GraphExecutor', () => {
     const result = executor.execute(graph);
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/unknown atom type/i);
+  });
+});
+
+// ─── MAX_GRAPH_NODES 边界测试 ──────────────────────────────────────────────
+
+describe('GraphExecutor — GRAPH_MAX_NODES 边界', () => {
+  /**
+   * 助手：生成 n 个孤立的 result_collector 节点的合法图。
+   * 每个节点均为 static 输入，互不依赖，只有最后一个节点为 output。
+   */
+  function makeNNodeGraph(n: number): GraphDef {
+    const nodes: GraphDef['nodes'] = Array.from({ length: n }, (_, i) => ({
+      node_id: `node-${i}`,
+      atom_type: 'result_collector',
+      inputs: {
+        entries: { type: 'static' as const, value: { index: i } },
+      },
+    }));
+    return { nodes, output_node_id: `node-${n - 1}` };
+  }
+
+  it(`节点数 = ${GRAPH_MAX_NODES} 时执行成功（恰好在限制内）`, () => {
+    const executor = new GraphExecutor(globalRegistry);
+    const graph = makeNNodeGraph(GRAPH_MAX_NODES);
+    const result = executor.execute(graph);
+    expect(result.success).toBe(true);
+  });
+
+  it(`节点数 = ${GRAPH_MAX_NODES + 1} 时返回失败，error_code=DSL_EVAL_ERROR`, () => {
+    const executor = new GraphExecutor(globalRegistry);
+    const graph = makeNNodeGraph(GRAPH_MAX_NODES + 1);
+    const result = executor.execute(graph);
+    expect(result.success).toBe(false);
+    expect(result.error_code).toBe('DSL_EVAL_ERROR');
+    expect(result.error).toMatch(/exceed.*maximum node count|maximum node count/i);
+  });
+
+  it('超限后，下一次合法图可正常执行（执行器无状态，可恢复）', () => {
+    const executor = new GraphExecutor(globalRegistry);
+
+    // 第一次：超限
+    const oversized = makeNNodeGraph(GRAPH_MAX_NODES + 1);
+    const failResult = executor.execute(oversized);
+    expect(failResult.success).toBe(false);
+
+    // 第二次：合法图
+    const validGraph: GraphDef = {
+      nodes: [
+        {
+          node_id: 'n1',
+          atom_type: 'result_collector',
+          inputs: { entries: { type: 'static', value: { ok: true } } },
+        },
+      ],
+      output_node_id: 'n1',
+    };
+    const recoverResult = executor.execute(validGraph);
+    expect(recoverResult.success).toBe(true);
+    const output = recoverResult.output as Record<string, unknown>;
+    expect(output['ok']).toBe(true);
+  });
+
+  it('节点数 = 0 时返回失败（已有 nodes.length === 0 保护）', () => {
+    const executor = new GraphExecutor(globalRegistry);
+    const graph: GraphDef = { nodes: [], output_node_id: 'nonexistent' };
+    const result = executor.execute(graph);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/no nodes/i);
+  });
+
+  it('节点数 = 1 时执行成功（最小合法图）', () => {
+    const executor = new GraphExecutor(globalRegistry);
+    const graph: GraphDef = {
+      nodes: [
+        {
+          node_id: 'single',
+          atom_type: 'result_collector',
+          inputs: { entries: { type: 'static', value: { result: 42 } } },
+        },
+      ],
+      output_node_id: 'single',
+    };
+    const result = executor.execute(graph);
+    expect(result.success).toBe(true);
+    const output = result.output as Record<string, unknown>;
+    expect(output['result']).toBe(42);
   });
 });

@@ -7,7 +7,7 @@ const router = Router();
 
 // POST /api/reports - 提交举报
 router.post('/', requireAuth, async (req, res) => {
-  const userId = (req as any).user?.id;
+  const userId = req.user!.id;
   const { content_type, content_id, reason } = req.body;
 
   if (!content_type || !content_id || !reason) {
@@ -37,8 +37,8 @@ router.post('/', requireAuth, async (req, res) => {
 
 // GET /api/reports (管理员) - MVP 简单实现
 router.get('/', requireAuth, async (req, res) => {
-  const user = (req as any).user;
-  const isAdmin = Array.isArray(user?.user_type) && user.user_type.includes('admin');
+  const user = req.user!;
+  const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) return res.status(403).json({ error: '无权限' });
 
   const reports = await db('content_reports')

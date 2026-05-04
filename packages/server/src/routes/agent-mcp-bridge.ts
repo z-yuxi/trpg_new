@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth';
 import { forumService } from '../services/forum-service';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
+import { safeJsonParse } from '../utils/safe-json';
 
 const router: IRouter = Router();
 
@@ -219,10 +220,8 @@ router.get('/admin/reports/:id', authMiddleware, async (req, res) => {
       content_id: String(row.content_id),
       reporter_user_id: String(row.reporter_user_id),
       reason: String(row.reason ?? ''),
-      content_snapshot: {
-        description: 'TODO(confirm with code owner)',
-        additionalProperties: true,
-      },
+      // TODO(#backlog): content_snapshot 字段待由 code owner 补充快照序列化逻辑
+      content_snapshot: safeJsonParse(row.content_snapshot, null),
       created_at: toIso(row.created_at),
       resolved_at: toIso(row.resolved_at),
       resolution_note: row.resolution_note ? String(row.resolution_note) : null,

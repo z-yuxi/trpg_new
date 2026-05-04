@@ -90,6 +90,26 @@ export interface ServerToClientEvents {
     result?: unknown;
     error?: string;
   }) => void;
+  /** GM 收到玩家申请进入场景（仅推送给 GM 的 socket） */
+  move_requested: (data: {
+    move_id: string;
+    character_id: string;
+    to_scene_id: string;
+    campaign_id: string;
+  }) => void;
+  /** 用户被授予旁观权限（仅推送给被授权用户） */
+  ob_permission_granted: (data: {
+    campaign_id: string;
+    scene_id: string;
+    user_id: string;
+    granted_at: string | Date;
+  }) => void;
+  /** 用户旁观权限被撤销（仅推送给被撤销用户） */
+  ob_permission_revoked: (data: {
+    campaign_id: string;
+    scene_id: string;
+    user_id: string;
+  }) => void;
 }
 
 // ===== Client → Server 事件 =====

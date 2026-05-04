@@ -20,6 +20,21 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
+// ENCRYPTION_KEY 格式校验（若已配置则必须合法；上线后将其加入 requiredEnvVars）
+const encKey = process.env['ENCRYPTION_KEY'];
+if (encKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(encKey)) {
+  console.error('[FATAL] ENCRYPTION_KEY must be a 64-char hex string (32 bytes). ' +
+    'Generate: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
+
+// 校验可选配置枚举值，非法值立即退出（避免运行时静默降级）
+const visibilityPolicy = process.env['VISIBILITY_POLICY'];
+if (visibilityPolicy !== undefined && !['legacy', 'new'].includes(visibilityPolicy)) {
+  console.error(`[FATAL] Invalid VISIBILITY_POLICY: "${visibilityPolicy}". Must be "legacy" or "new"`);
+  process.exit(1);
+}
+
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 

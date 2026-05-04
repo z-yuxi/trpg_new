@@ -163,11 +163,13 @@ describe('executeCommand + mock_context — API 集成', () => {
   });
 
   it('mock_context 中技能数据注入后 /rc 能正确执行检定', async () => {
+    // /rc 命令使用 character_skill_reader field_type='attribute'，
+    // 因此数据需在 attributes 对象中提供，而非 skills
     const result = await service.executeCommand('rs-exec-test', {
       command: '/rc field_name=侦查',
       mock_context: {
-        attributes: {},
-        skills: { 侦查: 70 },
+        attributes: { 侦查: 70 },
+        skills: {},
         resources: {},
       },
     });

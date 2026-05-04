@@ -150,7 +150,7 @@ describe('E2E - 模组 CRUD', () => {
     const res = await request
       .post(`/api/modules/${moduleId}/report`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ report_type: 'violation', description: '测试举报' });
+      .send({ report_type: 'inappropriate', description: '测试举报内容：内容不当，违反了平台规范，请审核处理。' });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
