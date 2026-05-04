@@ -1,5 +1,8 @@
 const BASE = '/api';
 
+const ACCESS_REFRESH_AHEAD_MS = 10 * 60 * 1000; // 到期前10分钟静默刷新
+const REFRESH_RETRY_DELAYS_MS = [1000, 2000, 4000]; // 指数退避重试
+
 /** 读取当前登录 access token */
 export function getToken(): string {
   return localStorage.getItem('token') ?? '';
@@ -26,28 +29,67 @@ function authHeaders(): HeadersInit {
 
 // ─── Token Refresh（防止并发多次 refresh）──────────────────────────────────
 let _refreshPromise: Promise<string> | null = null;
+let _autoRefreshTimer: number | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function requestTokenRefreshOnce(refreshToken: string): Promise<string> {
+  const res = await fetch('/api/auth/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+
+  // 4xx 视为不可恢复错误：token 无效/过期，直接清理登录态
+  if (!res.ok && res.status < 500 && res.status !== 429) {
+    clearAuth();
+    throw new Error('Refresh token expired or invalid');
+  }
+
+  // 5xx / 429 属于临时失败，可由上层重试
+  if (!res.ok) {
+    throw new Error(`Refresh request failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  const newAccessToken: string = data?.tokens?.access_token ?? data?.access_token ?? '';
+  const newRefreshToken: string = data?.tokens?.refresh_token ?? '';
+  const expiresIn: number | undefined = data?.tokens?.expires_in ?? data?.expires_in;
+  if (!newAccessToken) throw new Error('Refresh response missing access_token');
+
+  localStorage.setItem('token', newAccessToken);
+  if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
+  if (typeof expiresIn === 'number' && Number.isFinite(expiresIn) && expiresIn > 0) {
+    localStorage.setItem('token_expires_at', String(Date.now() + expiresIn * 1000));
+  }
+
+  return newAccessToken;
+}
 
 async function tryRefreshToken(): Promise<string> {
   if (_refreshPromise) return _refreshPromise;
   _refreshPromise = (async () => {
     const refreshToken = localStorage.getItem('refresh_token');
     if (!refreshToken) throw new Error('No refresh token stored');
-    const res = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!res.ok) {
-      clearAuth();
-      throw new Error('Refresh token expired');
+
+    // 首次尝试 + 指数退避重试（1s/2s/4s）
+    try {
+      return await requestTokenRefreshOnce(refreshToken);
+    } catch (firstErr) {
+      for (const delay of REFRESH_RETRY_DELAYS_MS) {
+        await sleep(delay);
+        try {
+          return await requestTokenRefreshOnce(refreshToken);
+        } catch {
+          // continue retry
+        }
+      }
+      throw firstErr;
     }
-    const data = await res.json();
-    const newAccessToken: string = data?.tokens?.access_token ?? data?.access_token ?? '';
-    const newRefreshToken: string = data?.tokens?.refresh_token ?? '';
-    if (!newAccessToken) throw new Error('Refresh response missing access_token');
-    localStorage.setItem('token', newAccessToken);
-    if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
-    return newAccessToken;
   })().finally(() => {
     _refreshPromise = null;
   });
@@ -55,8 +97,27 @@ async function tryRefreshToken(): Promise<string> {
 }
 
 /**
- * 带 auth 头的 fetch，遇 401 时自动尝试 refresh 并重试一次。
- * refresh 失败则清除 auth 并跳转 /login。
+ * 启动 Access Token 的静默预刷新调度器。
+ * 建议在应用启动时调用一次。
+ */
+export function startTokenAutoRefresh(): void {
+  if (_autoRefreshTimer != null) return;
+  _autoRefreshTimer = window.setInterval(() => {
+    const token = localStorage.getItem('token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    const expiresAt = Number(localStorage.getItem('token_expires_at') || '0');
+    if (!token || !refreshToken || !expiresAt) return;
+
+    // 到期前 10 分钟静默刷新，不打断用户
+    if (expiresAt - Date.now() <= ACCESS_REFRESH_AHEAD_MS) {
+      void tryRefreshToken();
+    }
+  }, 60 * 1000);
+}
+
+/**
+ * 带 auth 头的 fetch：关键请求在 401 时自动“挂起 -> refresh -> 续发”。
+ * refresh 最终失败才跳转登录，尽量减少用户感知中断。
  */
 async function fetchWithAuth(url: string, init: RequestInit): Promise<Response> {
   const res = await fetch(url, { ...init, headers: { ...authHeaders(), ...(init.headers as Record<string, string> ?? {}) } });
