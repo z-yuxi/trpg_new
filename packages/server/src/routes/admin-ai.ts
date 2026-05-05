@@ -9,9 +9,11 @@
  */
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import { z } from 'zod';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
+import { generateId } from '@trpg/shared';
 
 const router = Router();
 
@@ -141,5 +143,84 @@ router.get('/ai/training', authMiddleware, requireAdmin, async (_req: Request, r
     res.status(500).json({ error: 'QUERY_FAILED', message });
   }
 });
+/**
+ * POST /admin/ai-suggestions
+ *
+ * 供代码包B（Agent 服务）上报 AI 审查建议，写入 ai_suggestion_log。
+ * 认证：Bearer Token，值为环境变量 AGENT_SERVICE_API_KEY。
+ *
+ * 请求体字段：
+ *   agent_id*    string   发起建议的 Agent 标识（如 agent_ab）
+ *   report_id*   string   关联举报工单 ID
+ *   action*      string   建议操作（如 delete_post / restrict_user）
+ *   confidence*  number   置信度 0-100
+ *   evidence     string   违规证据描述（可选）
+ *   rule         string   匹配规则引用（可选）
+ *   decision_trace string 详细推理轨迹（可选，敏感，前端默认折叠）
+ */
+const aiSuggestionSchema = z.object({
+  agent_id: z.string().min(1).max(64),
+  report_id: z.string().min(1).max(64),
+  action: z.string().min(1).max(64),
+  confidence: z.number().int().min(0).max(100),
+  evidence: z.string().max(4000).optional(),
+  rule: z.string().max(1000).optional(),
+  decision_trace: z.string().max(10000).optional(),
+});
 
+/** 验证代码包B服务的 API Key，不复用用户 JWT */
+function verifyAgentApiKey(req: Request, res: Response): boolean {
+  const expectedKey = process.env['AGENT_SERVICE_API_KEY'];
+  if (!expectedKey) {
+    // 未配置时拒绝所有请求（防止生产环境误放行）
+    res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'Agent 服务未配置' });
+    return false;
+  }
+  const authHeader = req.headers['authorization'] ?? '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (token !== expectedKey) {
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Agent API Key 无效' });
+    return false;
+  }
+  return true;
+}
+
+router.post('/ai-suggestions', async (req: Request, res: Response): Promise<void> => {
+  if (!verifyAgentApiKey(req, res)) return;
+
+  const parsed = aiSuggestionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'INVALID_PARAM', message: '参数不合法', details: parsed.error.flatten() });
+    return;
+  }
+
+  const { agent_id, report_id, action, confidence, evidence, rule, decision_trace } = parsed.data;
+
+  try {
+    // 确认关联工单存在
+    const report = await db('content_reports').where({ id: report_id }).first();
+    if (!report) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '关联举报工单不存在' });
+      return;
+    }
+
+    const id = generateId();
+    await db('ai_suggestion_log').insert({
+      id,
+      report_id,
+      agent_id,
+      action,
+      confidence,
+      evidence: evidence ?? null,
+      rule: rule ?? null,
+      decision_trace: decision_trace ?? null,
+    });
+
+    res.status(201).json({ id, report_id, status: 'recorded' });
+  } catch (err: unknown) {
+    console.error('[admin:ai:suggestions]', err instanceof Error ? err.message : err);
+    const message = safeErrorMessage(err, 'AI 建议写入失败');
+    res.status(500).json({ error: 'INTERNAL_ERROR', message });
+  }
+});
 export default router;

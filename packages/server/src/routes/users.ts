@@ -38,6 +38,8 @@ router.get('/me/settings', authMiddleware, async (req, res) => {
       'dm_visibility',
       'allow_stats',
       'allow_ai_train',
+      'allow_ai_social',
+      'allow_ai_creative',
     )
     .first<Record<string, unknown>>();
 
@@ -67,6 +69,8 @@ router.get('/me/settings', authMiddleware, async (req, res) => {
       dm_visibility: (row?.['dm_visibility'] as string) ?? 'all',
       allow_stats: row?.['allow_stats'] !== false,
       allow_ai_train: row?.['allow_ai_train'] === true,
+      allow_ai_social: row?.['allow_ai_social'] === true,
+      allow_ai_creative: row?.['allow_ai_creative'] === true,
     },
   });
 });
@@ -302,6 +306,8 @@ router.put('/me/privacy', authMiddleware, async (req, res) => {
     dm_visibility: z.enum(['all', 'following', 'none']).optional(),
     allow_stats: z.boolean().optional(),
     allow_ai_train: z.boolean().optional(),
+    allow_ai_social: z.boolean().optional(),
+    allow_ai_creative: z.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {

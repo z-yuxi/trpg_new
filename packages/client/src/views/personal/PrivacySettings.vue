@@ -10,6 +10,8 @@ const router = useRouter();
 const profilePublic = ref(true);
 const onlineVisible = ref(true);
 const campaignHistoryPublic = ref(false);
+const allowAiSocial = ref(false);
+const allowAiCreative = ref(false);
 const saving = ref(false);
 
 async function save() {
@@ -19,6 +21,8 @@ async function save() {
       profile_visibility: profilePublic.value ? 'public' : 'private',
       online_visible: onlineVisible.value,
       campaign_history_public: campaignHistoryPublic.value,
+      allow_ai_social: allowAiSocial.value,
+      allow_ai_creative: allowAiCreative.value,
     });
     ElMessage.success('隐私设置已保存');
   } catch {
@@ -34,7 +38,7 @@ function debouncedSave() {
   if (timer) clearTimeout(timer);
   timer = setTimeout(save, 600);
 }
-watch([profilePublic, onlineVisible, campaignHistoryPublic], debouncedSave);
+watch([profilePublic, onlineVisible, campaignHistoryPublic, allowAiSocial, allowAiCreative], debouncedSave);
 </script>
 
 <template>
@@ -80,6 +84,33 @@ watch([profilePublic, onlineVisible, campaignHistoryPublic], debouncedSave);
         </label>
       </div>
 
+      <div class="section-divider">
+        <span class="section-label">AI 社交辅助授权</span>
+        <span class="section-hint">以下开关默认关闭，公开内容不等于允许 AI 读取</span>
+      </div>
+
+      <div class="toggle-item">
+        <div class="toggle-info">
+          <div class="toggle-name">允许 AI 读取我的社区社交内容</div>
+          <div class="toggle-desc">开启后，AI 可读取你的公开帖子、评论、组队需求，用于智能匹配队友与同好。关闭后 AI 完全不接触你的社区内容。</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" v-model="allowAiSocial" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-item">
+        <div class="toggle-info">
+          <div class="toggle-name">允许 AI 读取我的原创创作内容</div>
+          <div class="toggle-desc">开启后，AI 可读取你发布的模组、跑团记录、原创文稿，用于匹配创作同好和灵感辅助。关闭后 AI 完全不接触你的创作内容。</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" v-model="allowAiCreative" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <div v-if="saving" class="saving-hint">正在保存…</div>
     </div>
   </div>
@@ -104,4 +135,7 @@ watch([profilePublic, onlineVisible, campaignHistoryPublic], debouncedSave);
 input:checked + .slider { background: var(--color-accent); }
 input:checked + .slider::before { transform: translateX(20px); }
 .saving-hint { font-size: var(--text-xs); color: var(--text-muted); text-align: right; margin-top: var(--space-3); }
+.section-divider { display: flex; flex-direction: column; gap: 2px; padding: var(--space-4) 0 var(--space-2); border-top: 1px solid var(--border-default); margin-top: var(--space-2); }
+.section-label { font-size: var(--text-sm); font-weight: 700; color: var(--text-primary); }
+.section-hint { font-size: var(--text-xs); color: var(--text-muted); }
 </style>

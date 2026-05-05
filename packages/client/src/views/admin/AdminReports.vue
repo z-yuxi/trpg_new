@@ -2,6 +2,16 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../../utils/api';
 
+interface AiSuggestion {
+  agent_id: string;
+  action: string;
+  confidence: number;
+  evidence?: string | null;
+  rule?: string | null;
+  decision_trace?: string | null;
+  created_at: string;
+}
+
 interface Report {
   id: string;
   reporter_user_id: string;
@@ -11,12 +21,35 @@ interface Report {
   status: string;
   resolution_note?: string;
   created_at: string;
+  ai_suggestion?: AiSuggestion | null;
 }
 
 const loading = ref(false);
 const error = ref('');
 const reports = ref<Report[]>([]);
 const actionBusy = ref<string | null>(null); // report id being actioned
+
+/** AI 建议弹窗状态 */
+const modalSuggestion = ref<AiSuggestion | null>(null);
+const modalReportId = ref<string | null>(null);
+const traceExpanded = ref(false);
+
+function openSuggestion(r: Report) {
+  modalSuggestion.value = r.ai_suggestion ?? null;
+  modalReportId.value = r.id;
+  traceExpanded.value = false;
+}
+function closeSuggestion() {
+  modalSuggestion.value = null;
+  modalReportId.value = null;
+}
+
+/** 根据 confidence 返回颜色类 */
+function confidenceClass(c: number): string {
+  if (c >= 80) return 'conf-high';
+  if (c >= 50) return 'conf-mid';
+  return 'conf-low';
+}
 
 async function load() {
   loading.value = true;
@@ -94,6 +127,15 @@ onMounted(load);
             </td>
             <td class="time-cell">{{ r.created_at ? new Date(r.created_at).toLocaleString() : '—' }}</td>
             <td class="action-cell">
+              <!-- AI 建议标签 -->
+              <button
+                v-if="r.ai_suggestion"
+                class="ai-badge"
+                :class="[confidenceClass(r.ai_suggestion.confidence), r.status !== 'pending' ? 'ai-badge-done' : '']"
+                @click="openSuggestion(r)"
+              >
+                AI建议：{{ r.ai_suggestion.action }}
+              </button>
               <template v-if="r.status === 'pending'">
                 <button
                   class="action-btn resolve"
@@ -113,6 +155,53 @@ onMounted(load);
       </table>
     </template>
   </div>
+
+  <!-- AI 建议详情弹窗 -->
+  <Teleport to="body">
+    <div v-if="modalSuggestion" class="modal-overlay" @click.self="closeSuggestion">
+      <div class="modal-box" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <span class="modal-title">🤖 AI 审查建议</span>
+          <button class="modal-close" @click="closeSuggestion">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-row">
+            <span class="modal-label">建议 Agent</span>
+            <span class="modal-value">{{ modalSuggestion.agent_id }}</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">建议操作</span>
+            <span class="modal-value">{{ modalSuggestion.action }}</span>
+          </div>
+          <div class="modal-row">
+            <span class="modal-label">置信度</span>
+            <span class="modal-value conf-bar-wrap">
+              <span
+                class="conf-bar"
+                :class="confidenceClass(modalSuggestion.confidence)"
+                :style="{ width: modalSuggestion.confidence + '%' }"
+              ></span>
+              <span class="conf-num">{{ modalSuggestion.confidence }}%</span>
+            </span>
+          </div>
+          <div v-if="modalSuggestion.evidence" class="modal-row">
+            <span class="modal-label">违规证据</span>
+            <span class="modal-value">{{ modalSuggestion.evidence }}</span>
+          </div>
+          <div v-if="modalSuggestion.rule" class="modal-row">
+            <span class="modal-label">匹配规则</span>
+            <span class="modal-value">{{ modalSuggestion.rule }}</span>
+          </div>
+          <div v-if="modalSuggestion.decision_trace" class="modal-row modal-row-trace">
+            <button class="trace-toggle" @click="traceExpanded = !traceExpanded">
+              {{ traceExpanded ? '▾ 折叠决策轨迹' : '▸ 展开决策轨迹' }}
+            </button>
+            <pre v-if="traceExpanded" class="trace-pre">{{ modalSuggestion.decision_trace }}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -141,4 +230,31 @@ onMounted(load);
 .action-btn.dismiss { border-color: var(--border-default); color: var(--text-muted); background: transparent; }
 .action-btn.dismiss:hover:not(:disabled) { background: var(--surface-hover); }
 .action-done { color: var(--text-muted); }
+/* AI 建议标签 */
+.ai-badge { display: inline-block; margin-bottom: 4px; padding: 2px 8px; border-radius: 999px; font-size: var(--text-xs); font-weight: 600; border: none; cursor: pointer; transition: opacity 0.12s; }
+.ai-badge:hover { opacity: 0.8; }
+.ai-badge.conf-high { background: #e6f7ee; color: #1a7a46; }
+.ai-badge.conf-mid  { background: #fff3e0; color: #b36200; }
+.ai-badge.conf-low  { background: var(--surface-hover); color: var(--text-muted); }
+.ai-badge.ai-badge-done { opacity: 0.5; }
+/* 弹窗 */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+.modal-box { background: var(--surface-card); border-radius: var(--radius-lg); width: 480px; max-width: 92vw; max-height: 80vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.18); display: flex; flex-direction: column; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-default); }
+.modal-title { font-weight: 700; font-size: var(--text-base); color: var(--text-primary); }
+.modal-close { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-muted); padding: 2px 6px; border-radius: var(--radius-md); }
+.modal-close:hover { background: var(--surface-hover); }
+.modal-body { padding: var(--space-4) var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); }
+.modal-row { display: flex; gap: var(--space-3); font-size: var(--text-sm); }
+.modal-label { color: var(--text-muted); white-space: nowrap; min-width: 80px; }
+.modal-value { color: var(--text-primary); flex: 1; word-break: break-word; }
+.conf-bar-wrap { display: flex; align-items: center; gap: var(--space-2); flex: 1; }
+.conf-bar { display: inline-block; height: 8px; border-radius: 4px; min-width: 4px; }
+.conf-bar.conf-high { background: #1a7a46; }
+.conf-bar.conf-mid  { background: #b36200; }
+.conf-bar.conf-low  { background: var(--text-muted); }
+.conf-num { font-size: var(--text-xs); color: var(--text-muted); }
+.modal-row-trace { flex-direction: column; gap: var(--space-2); }
+.trace-toggle { background: none; border: none; cursor: pointer; font-size: var(--text-xs); color: var(--color-accent); padding: 0; text-align: left; }
+.trace-pre { background: var(--surface-hover); border-radius: var(--radius-md); padding: var(--space-3); font-size: 11px; overflow-y: auto; max-height: 300px; white-space: pre-wrap; word-break: break-all; color: var(--text-secondary); margin: 0; }
 </style>

@@ -44,7 +44,30 @@ router.get('/', requireAuth, async (req, res) => {
   const reports = await db('content_reports')
     .orderBy('created_at', 'desc')
     .limit(100);
-  res.json(reports);
+
+  // 拼接每条工单最新的 AI 建议（动态拼接，不持久化为独立字段）
+  const reportIds = reports.map((r: any) => r.id as string);
+  const suggestions = reportIds.length
+    ? await db('ai_suggestion_log')
+        .whereIn('report_id', reportIds)
+        .orderBy('created_at', 'desc')
+        .select('report_id', 'agent_id', 'action', 'confidence', 'evidence', 'rule', 'created_at')
+    : [];
+
+  const suggestionMap = new Map<string, typeof suggestions[number]>();
+  for (const s of suggestions) {
+    // 保留每条工单最新一条（已按 created_at desc，Map 首次写入即最新）
+    if (!suggestionMap.has(s.report_id as string)) {
+      suggestionMap.set(s.report_id as string, s);
+    }
+  }
+
+  const result = reports.map((r: any) => ({
+    ...r,
+    ai_suggestion: suggestionMap.get(r.id as string) ?? null,
+  }));
+
+  res.json(result);
 });
 
 // PATCH /api/reports/:id (管理员) - 更新举报状态

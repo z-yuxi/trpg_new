@@ -976,3 +976,27 @@ function buildFullPrompt(taskType: TaskType, customContext?: string): string {
 2. **工具封装**：每个工具应有独立的入参 Schema 与输出 Schema，由 Zod 或 JSON Schema 约束。
 3. **失败容错**：单条失败（如单个字段无法解析）应返回 partial result，而非整体失败。
 4. **幂等性**：相同输入应返回相同结果，便于客户端重试与缓存。
+
+
+### 5.10 AI 审查建议日志表（`ai_suggestion_log`）
+
+```sql
+-- AI 审查建议日志表
+CREATE TABLE ai_suggestion_log (
+  id VARCHAR(64) PRIMARY KEY,
+  report_id VARCHAR(64) NOT NULL,
+  agent_id VARCHAR(64) NOT NULL,
+  action VARCHAR(64) NOT NULL,
+  confidence INT NOT NULL,
+  evidence TEXT,
+  rule TEXT,
+  decision_trace TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_report (report_id)
+);
+```
+
+**说明**：
+- 每条 AI 审查建议写入时均追加一条记录，供安全审计与 LoRA 优化使用。
+- 工单查询返回的 `ai_suggestion` 字段为动态拼接（取最新一条），**不在数据库持久化为独立字段**。
+- `decision_trace` 字段存储 Agent 详细推理轨迹，敏感度高，前端默认折叠展示。

@@ -224,8 +224,13 @@ router.get('/admin/reports/:id', authMiddleware, async (req, res) => {
       content_snapshot: safeJsonParse(row.content_snapshot, null),
       created_at: toIso(row.created_at),
       resolved_at: toIso(row.resolved_at),
-      resolution_note: row.resolution_note ? String(row.resolution_note) : null,
-    });
+      resolution_note: row.resolution_note ? String(row.resolution_note) : null,      // 动态拼接最新 AI 建议（取最近一条，不持久化为独立字段）
+      ai_suggestion: await db('ai_suggestion_log')
+        .where({ report_id: req.params['id']! })
+        .orderBy('created_at', 'desc')
+        .select('agent_id', 'action', 'confidence', 'evidence', 'rule', 'decision_trace', 'created_at')
+        .first()
+        .then((r: any) => r ?? null),    });
   } catch (err: unknown) {
     const message = safeErrorMessage(err, '查询举报失败');
     res.status(500).json({ error: 'INTERNAL_ERROR', message });
@@ -444,6 +449,49 @@ router.post('/agent/evidence-analysis', authMiddleware, async (req, res) => {
       },
     },
   });
+});
+
+/**
+ * POST /api/agent/preferences
+ *
+ * 用户对 AI 社交引荐的偏好操作：
+ *   action="dismiss"  → 永久拒绝该匹配对（rejected_match_pair_id）
+ *   action="snooze"   → 30 天内不推荐（snooze_until）
+ *
+ * 需要登录（JWT），操作的是当前登录用户自己的偏好。
+ */
+router.post('/agent/preferences', authMiddleware, async (req, res) => {
+  const schema = z.object({
+    action: z.enum(['dismiss', 'snooze']),
+    match_pair_id: z.string().min(1).max(128).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'INVALID_PARAM', message: '参数不合法', details: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.user!.id;
+  const { action, match_pair_id } = parsed.data;
+
+  if (action === 'dismiss' && !match_pair_id) {
+    res.status(400).json({ error: 'INVALID_PARAM', message: 'dismiss 操作需要提供 match_pair_id' });
+    return;
+  }
+
+  const id = generateId();
+  const snoozeUntil = action === 'snooze'
+    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    : null;
+
+  await db('user_agent_preferences').insert({
+    id,
+    user_id: userId,
+    rejected_match_pair_id: action === 'dismiss' ? match_pair_id! : null,
+    snooze_until: snoozeUntil,
+  });
+
+  res.status(201).json({ id, action, status: 'recorded' });
 });
 
 export default router;

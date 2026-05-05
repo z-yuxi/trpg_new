@@ -50,6 +50,12 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     const data: Record<string, unknown> = { method: req.method, path: req.path, status, duration_ms, ip };
     if (request_id) data.request_id = request_id;
 
+    // 若 Agent 请求携带 x-agent-check，原样写入 request_meta（供安全审计）
+    const agentCheck = req.body?.['x-agent-check'];
+    if (agentCheck !== undefined && agentCheck !== null) {
+      data.request_meta = { 'x-agent-check': agentCheck };
+    }
+
     if (status >= 500) {
       logLine('ERROR', data);
     } else if (status >= 400) {

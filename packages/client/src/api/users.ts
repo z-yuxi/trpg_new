@@ -53,6 +53,10 @@ export interface PrivacySettings {
   dm_visibility?: 'all' | 'following' | 'none';
   allow_stats?: boolean;
   allow_ai_train?: boolean;
+  /** 允许 AI 读取社区社交内容（帖子/评论/组队需求），用于智能匹配 */
+  allow_ai_social?: boolean;
+  /** 允许 AI 读取原创创作内容（模组/跑团记录/原创文稿），用于匹配创作同好 */
+  allow_ai_creative?: boolean;
   show_campaigns?: boolean;
   show_characters?: boolean;
   allow_dm_from?: 'all' | 'following' | 'none';

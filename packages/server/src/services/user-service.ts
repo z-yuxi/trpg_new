@@ -183,6 +183,8 @@ export class UserService {
     dm_visibility?: string;
     allow_stats?: boolean;
     allow_ai_train?: boolean;
+    allow_ai_social?: boolean;
+    allow_ai_creative?: boolean;
   }): Promise<void> {
     const update: Record<string, unknown> = {};
     // 同时支持两种写法：profile_visibility(string) 或 profile_public(boolean)
@@ -195,6 +197,8 @@ export class UserService {
     if (settings.dm_visibility !== undefined) update['dm_visibility'] = settings.dm_visibility;
     if (settings.allow_stats !== undefined) update['allow_stats'] = settings.allow_stats;
     if (settings.allow_ai_train !== undefined) update['allow_ai_train'] = settings.allow_ai_train;
+    if (settings.allow_ai_social !== undefined) update['allow_ai_social'] = settings.allow_ai_social;
+    if (settings.allow_ai_creative !== undefined) update['allow_ai_creative'] = settings.allow_ai_creative;
     if (Object.keys(update).length > 0) {
       await db('users').where({ id: userId }).update(update);
     }
