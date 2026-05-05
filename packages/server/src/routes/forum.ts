@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { forumService, type ForumBoard, type ThreadSort } from '../services/forum-service';
 import { notificationService } from '../services/notification-service';
 import { db } from '../db';
@@ -39,13 +40,13 @@ router.post('/threads', authMiddleware, async (req, res) => {
   try {
     const thread = await forumService.createThread({
       board: parsed.data.board,
-      author_id: req.user!.id,
+      author_id: getAuthedUser(req).id,
       title: parsed.data.title,
       content: parsed.data.content,
     });
     res.status(201).json(thread);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Create failed' });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Create failed' });
   }
 });
 
@@ -72,7 +73,7 @@ router.post('/threads/:id/posts', authMiddleware, async (req, res) => {
   try {
     const post = await forumService.createPost({
       thread_id: req.params['id']!,
-      author_id: req.user!.id,
+      author_id: getAuthedUser(req).id,
       content: parsed.data.content,
       reply_to_post_id: parsed.data.reply_to_post_id,
     });
@@ -89,30 +90,30 @@ router.post('/threads/:id/posts', authMiddleware, async (req, res) => {
     ]);
 
     const threadAuthorId = threadRow?.['author_id'] as string | undefined;
-    if (threadAuthorId && threadAuthorId !== req.user!.id) {
+    if (threadAuthorId && threadAuthorId !== getAuthedUser(req).id) {
       notificationService.createNotification({
         userId: threadAuthorId,
         type: 'social',
         title: '你的帖子有新回复',
-        content: `《${threadRow?.['title'] as string ?? '帖子'}》收到了新的回复。`,
+        content: `《{threadRow?.['title'] as string ?? '帖子'}》收到了新的回复。`,
         metadata: { thread_id: req.params['id']!, post_id: post.id },
       }).catch(() => {});
     }
 
     const quotedAuthorId = replyTargetRow?.['author_id'] as string | undefined;
-    if (quotedAuthorId && quotedAuthorId !== req.user!.id && quotedAuthorId !== threadAuthorId) {
+    if (quotedAuthorId && quotedAuthorId !== getAuthedUser(req).id && quotedAuthorId !== threadAuthorId) {
       notificationService.createNotification({
         userId: quotedAuthorId,
         type: 'social',
-        title: '你的回复被引用',
+        title: '你的回复被引用了',
         content: `你在 ${replyTargetRow?.['floor_number'] as number ?? '?'} 楼的回复被其他玩家引用了。`,
         metadata: { thread_id: req.params['id']!, post_id: post.id, reply_to_post_id: parsed.data.reply_to_post_id },
       }).catch(() => {});
     }
 
     res.status(201).json(post);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Reply failed' });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Reply failed' });
   }
 });
 

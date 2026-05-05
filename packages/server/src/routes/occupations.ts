@@ -10,6 +10,7 @@
  */
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import type { OccupationTemplate } from '@trpg/shared';
@@ -60,7 +61,7 @@ router.post('/', authMiddleware, async (req, res): Promise<void> => {
     // 鉴权：规则集必须属于当前用户
     const ruleset = await db('rulesets').where({ id: body.ruleset_id }).select('author_id').first();
     if (!ruleset) { res.status(404).json({ error: 'Ruleset not found' }); return; }
-    if (ruleset.author_id !== req.user!.id) {
+    if (ruleset.author_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Only ruleset author can create occupation templates' });
       return;
     }
@@ -93,7 +94,7 @@ router.put('/:id', authMiddleware, async (req, res): Promise<void> => {
     if (!row) { res.status(404).json({ error: 'Not found' }); return; }
     // 鉴权：规则集必须属于当前用户
     const ruleset = await db('rulesets').where({ id: row.ruleset_id }).select('author_id').first();
-    if (!ruleset || ruleset.author_id !== req.user!.id) {
+    if (!ruleset || ruleset.author_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -123,7 +124,7 @@ router.delete('/:id', authMiddleware, async (req, res): Promise<void> => {
     const row = await db('occupation_templates').where({ id: req.params['id'] }).first();
     if (!row) { res.status(404).json({ error: 'Not found' }); return; }
     const ruleset = await db('rulesets').where({ id: row.ruleset_id }).select('author_id').first();
-    if (!ruleset || ruleset.author_id !== req.user!.id) {
+    if (!ruleset || ruleset.author_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

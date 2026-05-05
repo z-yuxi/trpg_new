@@ -18,6 +18,7 @@ export function safeErrorMessage(err: unknown, fallback: string): string {
  */
 import type { Request, Response, NextFunction } from 'express';
 import { AppError } from './app-error';
+import { logError } from './structured-logger';
 
 export function globalErrorHandler(
   err: unknown,
@@ -28,7 +29,7 @@ export function globalErrorHandler(
   // 业务错误：直接返回 userMessage，不泄露内部信息
   if (err instanceof AppError) {
     if (err.internalMessage) {
-      console.error(`[AppError] ${req.method} ${req.path} → ${err.internalMessage}`);
+      logError('APP_ERROR', 'medium', err.internalMessage, { method: req.method, path: req.path });
     }
     const body: Record<string, unknown> = { error: err.userMessage };
     if (err.code) body['error_code'] = err.code;
@@ -41,7 +42,8 @@ export function globalErrorHandler(
   const code = typeof status === 'number' ? status : 500;
 
   if (code >= 500) {
-    console.error('[Unhandled Error]', err);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logError('UNHANDLED_ERROR', 'critical', errMsg, { method: req.method, path: req.path });
   }
 
   res.status(code).json({ error: message });

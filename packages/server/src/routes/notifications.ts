@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { notificationService } from '../services/notification-service';
 import type { NotificationType, NotificationCategory } from '@trpg/shared';
 import { NOTIFICATION_CATEGORY_TYPES } from '@trpg/shared';
@@ -9,7 +10,7 @@ const router = Router();
 // GET /api/notifications
 // 支持 ?category=trpg|community|system（UI 分类）或 ?type=具体类型
 router.get('/', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const { type, category, is_read, page, limit } = req.query as Record<string, string>;
 
   // category 优先于 type：把分类展开为多个 type 过滤
@@ -32,7 +33,7 @@ router.get('/', authMiddleware, async (req, res) => {
 
 // GET /api/notifications/unread-count
 router.get('/unread-count', authMiddleware, async (req, res) => {
-  const count = await notificationService.getUnreadCount(req.user!.id);
+  const count = await notificationService.getUnreadCount(getAuthedUser(req).id);
   res.json({ count });
 });
 
@@ -44,13 +45,13 @@ router.put('/read-all', authMiddleware, async (req, res) => {
   if (category && category in NOTIFICATION_CATEGORY_TYPES) {
     typesFilter = NOTIFICATION_CATEGORY_TYPES[category];
   }
-  await notificationService.markAllAsRead(req.user!.id, type, typesFilter);
+    await notificationService.markAllAsRead(getAuthedUser(req).id, type, typesFilter);
   res.json({ success: true });
 });
 
 // PUT /api/notifications/:id/read
 router.put('/:id/read', authMiddleware, async (req, res) => {
-  const ok = await notificationService.markAsRead(req.params['id']!, req.user!.id);
+  const ok = await notificationService.markAsRead(req.params['id']!, getAuthedUser(req).id);
   if (!ok) return res.status(404).json({ error: 'NOT_FOUND' });
   res.json({ success: true });
 });

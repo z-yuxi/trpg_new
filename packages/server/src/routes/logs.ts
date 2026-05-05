@@ -1,6 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { payGate } from '../middleware/pay-gate';
 import { exportCampaignLog } from '../services/log-export-service';
 import { db } from '../db';
@@ -52,10 +53,10 @@ router.get('/:campaignId/export', authMiddleware, payGate('log_export'), async (
   }
 
   try {
-    // simulate_user_id 仅允许 GM 使用
-    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== req.user!.id) {
+    // simulate_user_id 仅允�?GM 使用
+    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== getAuthedUser(req).id) {
       const campaign = await db('campaigns').where({ id: req.params['campaignId']! }).select('gm_user_id').first();
-      if (!campaign || campaign.gm_user_id !== req.user!.id) {
+      if (!campaign || campaign.gm_user_id !== getAuthedUser(req).id) {
         res.status(403).json({ error: 'Only GM can simulate other user views' });
         return;
       }
@@ -66,7 +67,7 @@ router.get('/:campaignId/export', authMiddleware, payGate('log_export'), async (
       perspective: parsed.data.perspective,
       sort: parsed.data.sort,
       format: parsed.data.format,
-      requesterId: req.user!.id,
+      requesterId: getAuthedUser(req).id,
       sceneIds: parsed.data.scenes ? parsed.data.scenes.split(',').map((id) => id.trim()).filter(Boolean) : undefined,
       includeOoc: parsed.data.include_ooc,
       includeSystem: parsed.data.include_system,
@@ -85,13 +86,13 @@ router.get('/:campaignId/export', authMiddleware, payGate('log_export'), async (
     }
 
     sendExportFile(res, result);
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res.status(status).json({ error: err?.message ?? 'Internal server error' });
+  } catch (err: unknown) {
+    const status = err instanceof Error && 'status' in err ? (err as { status: number }).status : 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : 'Internal server error' });
   }
 });
 
-// POST /api/logs/export 兼容旧调用
+// POST /api/logs/export 兼容旧调�?
 router.post('/export', authMiddleware, payGate('log_export'), async (req, res) => {
   const parsed = legacyBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -99,10 +100,10 @@ router.post('/export', authMiddleware, payGate('log_export'), async (req, res) =
     return;
   }
 
-  try {    // simulate_user_id 仅允许 GM 使用
-    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== req.user!.id) {
+  try {    // simulate_user_id 仅允�?GM 使用
+    if (parsed.data.simulate_user_id && parsed.data.simulate_user_id !== getAuthedUser(req).id) {
       const campaign = await db('campaigns').where({ id: parsed.data.campaign_id }).select('gm_user_id').first();
-      if (!campaign || campaign.gm_user_id !== req.user!.id) {
+      if (!campaign || campaign.gm_user_id !== getAuthedUser(req).id) {
         res.status(403).json({ error: 'Only GM can simulate other user views' });
         return;
       }
@@ -116,7 +117,7 @@ router.post('/export', authMiddleware, payGate('log_export'), async (req, res) =
           ? 'strict'
           : 'main_interleave',
       format: parsed.data.format === 'json' ? 'ilf' : parsed.data.format === 'markdown' ? 'md' : 'txt',
-      requesterId: req.user!.id,
+      requesterId: getAuthedUser(req).id,
       sceneIds: parsed.data.scene_ids,
       includeOoc: parsed.data.include_ooc,
       includeSystem: parsed.data.include_system,
@@ -130,9 +131,9 @@ router.post('/export', authMiddleware, payGate('log_export'), async (req, res) =
     }
 
     res.type('application/octet-stream').send(result.body);
-  } catch (err: any) {
-    const status = err?.status ?? 500;
-    res.status(status).json({ error: err?.message ?? 'Internal server error' });
+  } catch (err: unknown) {
+    const status = err instanceof Error && 'status' in err ? (err as { status: number }).status : 500;
+    res.status(status).json({ error: err instanceof Error ? err.message : 'Internal server error' });
   }
 });
 

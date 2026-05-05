@@ -14,6 +14,7 @@
  */
 import { generateId } from '@trpg/shared';
 import { db } from '../db';
+import { logWarn } from '../utils/structured-logger';
 
 export type TaskType = 'import_module' | 'check_text' | 'log_summary' | 'generate_recipe' | 'import_character';
 export type AiEndpoint = 'pro' | 'flash';
@@ -97,7 +98,7 @@ async function fetchDeepSeek(
         : err as Error;
       const delay = RETRY_DELAYS_MS[attempt];
       if (delay !== undefined) {
-        console.warn(`[AI] 第 ${attempt + 1} 次调用失败，${delay / 1000}s 后重试:`, lastError.message);
+        logWarn('AI_CALL_RETRY', `第 ${attempt + 1} 次调用失败，${delay / 1000}s 后重试`, { error: lastError.message });
         await sleep(delay);
       }
     } finally {

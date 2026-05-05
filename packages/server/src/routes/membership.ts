@@ -1,19 +1,20 @@
 /**
- * 会员与支付路由
+ * 会员与支付路�?
  *
- * GET  /api/membership/benefits          — 查询当前用户有效档位和所有权益
- * POST /api/membership/grant             — 运营手工授予会员（需 admin）
- * GET  /api/membership/events            — 查询当前用户订阅事件历史
+ * GET  /api/membership/benefits          �?查询当前用户有效档位和所有权�?
+ * POST /api/membership/grant             �?运营手工授予会员（需 admin�?
+ * GET  /api/membership/events            �?查询当前用户订阅事件历史
  *
- * POST /api/membership/orders            — 创建支付订单（前端发起，返回三方预付单参数）
- * GET  /api/membership/orders/:id        — 轮询订单状态
- * POST /api/membership/orders/:id/cancel — 取消待支付订单
- * POST /api/membership/webhook/:channel  — 三方支付回调（RSA2/SHA256 真实签名验证）
+ * POST /api/membership/orders            �?创建支付订单（前端发起，返回三方预付单参数）
+ * GET  /api/membership/orders/:id        �?轮询订单状�?
+ * POST /api/membership/orders/:id/cancel �?取消待支付订�?
+ * POST /api/membership/webhook/:channel  �?三方支付回调（RSA2/SHA256 真实签名验证�?
  */
 import { Router, type IRouter, type Request } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { membershipService } from '../services/membership-service';
 import { db } from '../db';
 import { generateId, MEMBERSHIP_BENEFITS } from '@trpg/shared';
@@ -30,29 +31,30 @@ import {
   createAlipayWapOrder,
   createWechatJsapiOrder,
 } from '../services/payment-gateway';
+import { logError } from '../utils/structured-logger';
 
 const router: IRouter = Router();
 
-// GET /api/membership/benefits — 返回当前有效档位和权益列表
+// GET /api/membership/benefits �?返回当前有效档位和权益列�?
 router.get('/benefits', authMiddleware, async (req, res) => {
   try {
-    const tier = await membershipService.getEffectiveTier(req.user!.id);
+    const tier = await membershipService.getEffectiveTier(getAuthedUser(req).id);
     const benefits = MEMBERSHIP_BENEFITS[tier];
     res.json({
       tier,
       benefits,
-      expires_at: req.user!.subscription_expires_at ?? null,
+      expires_at: getAuthedUser(req).subscription_expires_at ?? null,
     });
   } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Failed to get membership info') });
   }
 });
 
-// GET /api/membership/events — 当前用户订阅变更历史（最近 50 条）
+// GET /api/membership/events �?当前用户订阅变更历史（最�?50 条）
 router.get('/events', authMiddleware, async (req, res) => {
   try {
     const rows = await db('subscription_events')
-      .where({ user_id: req.user!.id })
+      .where({ user_id: getAuthedUser(req).id })
       .orderBy('created_at', 'desc')
       .limit(50);
     res.json(rows);
@@ -64,13 +66,13 @@ router.get('/events', authMiddleware, async (req, res) => {
 const grantSchema = z.object({
   target_user_id: z.string().min(1),
   tier: z.enum(['pro', 'creator']),
-  /** ISO 日期字符串，如 "2027-04-29T00:00:00Z" */
+  /** ISO 日期字符串，�?"2027-04-29T00:00:00Z" */
   expires_at: z.string().datetime(),
 });
 
-// POST /api/membership/grant — admin 手工授予会员（仅管理员）
+// POST /api/membership/grant �?admin 手工授予会员（仅管理员）
 router.post('/grant', authMiddleware, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) {
     res.status(403).json({ error: 'Admin only' });
@@ -98,10 +100,10 @@ router.post('/grant', authMiddleware, async (req, res) => {
 
 // ── 支付订单 SKU 定义 ─────────────────────────────────────────────────────────
 const SKU_CATALOG: Record<string, { product_type: string; tier: MembershipTier; months: number; amount_cents: number; label: string }> = {
-  pro_monthly:     { product_type: 'sub_pro',     tier: 'pro',     months: 1,  amount_cents: 1800, label: 'Pro 会员 · 月' },
-  pro_yearly:      { product_type: 'sub_pro',     tier: 'pro',     months: 12, amount_cents: 19800, label: 'Pro 会员 · 年' },
-  creator_monthly: { product_type: 'sub_creator', tier: 'creator', months: 1,  amount_cents: 3800, label: 'Creator 会员 · 月' },
-  creator_yearly:  { product_type: 'sub_creator', tier: 'creator', months: 12, amount_cents: 38800, label: 'Creator 会员 · 年' },
+  pro_monthly:     { product_type: 'sub_pro',     tier: 'pro',     months: 1,  amount_cents: 1800, label: 'Pro 会员 · 月付' },
+  pro_yearly:      { product_type: 'sub_pro',     tier: 'pro',     months: 12, amount_cents: 19800, label: 'Pro 会员 · 年付' },
+  creator_monthly: { product_type: 'sub_creator', tier: 'creator', months: 1,  amount_cents: 3800, label: 'Creator 会员 · 月付' },
+  creator_yearly:  { product_type: 'sub_creator', tier: 'creator', months: 12, amount_cents: 38800, label: 'Creator 会员 · 年付' },
 };
 
 const createOrderSchema = z.object({
@@ -109,7 +111,7 @@ const createOrderSchema = z.object({
   channel: z.enum(['alipay', 'wechat']),
 });
 
-// POST /api/membership/orders — 创建支付订单
+// POST /api/membership/orders �?创建支付订单
 router.post('/orders', authMiddleware, async (req, res) => {
   const parsed = createOrderSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -125,7 +127,7 @@ router.post('/orders', authMiddleware, async (req, res) => {
     const orderId = generateId();
     await db('payment_orders').insert({
       id: orderId,
-      user_id: req.user!.id,
+      user_id: getAuthedUser(req).id,
       product_type: sku.product_type,
       product_sku: parsed.data.sku,
       amount_cents: sku.amount_cents,
@@ -133,7 +135,7 @@ router.post('/orders', authMiddleware, async (req, res) => {
       status: 'pending',
       metadata: JSON.stringify({ label: sku.label, months: sku.months }),
     });
-    // 生成三方预付单参数
+    // 生成三方预付单参�?
     let payParams: Record<string, unknown> | null = null;
     try {
       if (parsed.data.channel === 'alipay') {
@@ -145,7 +147,7 @@ router.post('/orders', authMiddleware, async (req, res) => {
         });
         if (result) payParams = { channel: 'alipay', pay_url: result.payUrl };
       } else if (parsed.data.channel === 'wechat') {
-        // WeChat JSAPI 需要 openid，从 request header 获取（前端在创建订单时传入）
+        // WeChat JSAPI 需�?openid，从 request header 获取（前端在创建订单时传入）
         const openid = (req as Request & { body: { openid?: string } }).body.openid;
         if (openid) {
           const result = await createWechatJsapiOrder({
@@ -172,10 +174,10 @@ router.post('/orders', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/membership/orders/:id — 轮询订单状态
+// GET /api/membership/orders/:id �?轮询订单状�?
 router.get('/orders/:id', authMiddleware, async (req, res) => {
   try {
-    const order = await db('payment_orders').where({ id: req.params.id, user_id: req.user!.id }).first();
+    const order = await db('payment_orders').where({ id: req.params.id, user_id: getAuthedUser(req).id }).first();
     if (!order) { res.status(404).json({ error: 'Not found' }); return; }
     res.json({
       order_id: order.id,
@@ -188,10 +190,10 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/membership/orders/:id/cancel — 取消待支付订单
+// POST /api/membership/orders/:id/cancel �?取消待支付订�?
 router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
   try {
-    const order = await db('payment_orders').where({ id: req.params.id, user_id: req.user!.id, status: 'pending' }).first();
+    const order = await db('payment_orders').where({ id: req.params.id, user_id: getAuthedUser(req).id, status: 'pending' }).first();
     if (!order) { res.status(404).json({ error: 'Order not found or cannot be cancelled' }); return; }
     await db('payment_orders').where({ id: req.params.id }).update({ status: 'failed' });
     res.json({ ok: true });
@@ -200,7 +202,7 @@ router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
   }
 });
 
-// POST /api/membership/webhook/:channel — 三方支付回调（RSA2/SHA256 真实签名验证）
+// POST /api/membership/webhook/:channel �?三方支付回调（RSA2/SHA256 真实签名验证�?
 router.post('/webhook/:channel', async (req, res) => {
   const channel = req.params.channel as 'alipay' | 'wechat';
   if (!['alipay', 'wechat'].includes(channel)) {
@@ -218,7 +220,7 @@ router.post('/webhook/:channel', async (req, res) => {
         return;
       }
     } else {
-      // 无公钥时降级为 HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed）
+      // 无公钥时降级�?HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed�?
       const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_ALIPAY;
       if (!hmacSecret) {
         res.status(503).json({ error: 'Alipay webhook not configured' });
@@ -238,7 +240,7 @@ router.post('/webhook/:channel', async (req, res) => {
         signature: req.headers['wechatpay-signature'] as string,
         serial:    req.headers['wechatpay-serial'] as string,
       };
-      // LOW-fix: 校验时间戳在 ±5 分钟内，防重放
+      // LOW-fix: 校验时间戳在 ±5 分钟内，防重�?
       const tsMs = Number(headers.timestamp) * 1000;
       if (!headers.timestamp || Number.isNaN(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
         res.status(401).json({ error: 'WeChat Pay timestamp expired or missing' });
@@ -249,7 +251,7 @@ router.post('/webhook/:channel', async (req, res) => {
         res.status(401).json({ error: 'Invalid WeChat Pay signature' });
         return;
       }
-      // 解密 resource 字段（微信 v3 回调加密）
+      // 解密 resource 字段（微�?v3 回调加密�?
       const resource = (req.body as Record<string, unknown>)['resource'] as Record<string, string> | undefined;
       if (resource?.ciphertext) {
         const apiV3Key = process.env.WECHAT_PAY_API_V3_KEY;
@@ -269,7 +271,7 @@ router.post('/webhook/:channel', async (req, res) => {
         }
       }
     } else {
-      // 无证书时降级为 HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed）
+      // 无证书时降级�?HMAC（仅测试环境）；若两者均未配置则拒绝（fail-closed�?
       const hmacSecret = process.env.PAYMENT_WEBHOOK_SECRET_WECHAT;
       if (!hmacSecret) {
         res.status(503).json({ error: 'WeChat Pay webhook not configured' });
@@ -301,7 +303,7 @@ router.post('/webhook/:channel', async (req, res) => {
       return;
     }
 
-    // 事务：更新订单 → 更新用户会员 → 写 subscription_event
+    // 事务：更新订�?�?更新用户会员 �?�?subscription_event
     await db.transaction(async (trx) => {
       await trx('payment_orders').where({ id: outTradeNo }).update({
         status: 'paid',
@@ -343,8 +345,8 @@ router.post('/webhook/:channel', async (req, res) => {
     });
 
     res.json({ ok: true });
-  } catch (err: any) {
-    console.error('[webhook] Error:', err);
+  } catch (err: unknown) {
+    logError('WEBHOOK_HANDLER_FAILED', 'high', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Internal error' });
   }
 });

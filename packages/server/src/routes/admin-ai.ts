@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
+import { logError } from '../utils/structured-logger';
 import { generateId } from '@trpg/shared';
 
 const router = Router();
@@ -89,7 +90,7 @@ router.get('/ai/stats', authMiddleware, requireAdmin, async (req: Request, res: 
       top_users: topUsers,
     });
   } catch (err: unknown) {
-    console.error('[admin:ai:stats]', err instanceof Error ? err.message : err);
+    logError('ADMIN_AI_STATS_QUERY_FAILED', 'high', safeErrorMessage(err, '统计数据查询失败'));
     const message = safeErrorMessage(err, '统计数据查询失败');
     res.status(500).json({ error: 'QUERY_FAILED', message });
   }
@@ -138,7 +139,7 @@ router.get('/ai/training', authMiddleware, requireAdmin, async (_req: Request, r
       notice: '此接口仅返回汇总统计，实际训练数据导出需人工审批，不可自动执行',
     });
   } catch (err: unknown) {
-    console.error('[admin:ai:training]', err instanceof Error ? err.message : err);
+    logError('ADMIN_AI_TRAINING_QUERY_FAILED', 'high', safeErrorMessage(err, '训练数据统计查询失败'));
     const message = safeErrorMessage(err, '训练数据统계查询失败');
     res.status(500).json({ error: 'QUERY_FAILED', message });
   }
@@ -218,7 +219,7 @@ router.post('/ai-suggestions', async (req: Request, res: Response): Promise<void
 
     res.status(201).json({ id, report_id, status: 'recorded' });
   } catch (err: unknown) {
-    console.error('[admin:ai:suggestions]', err instanceof Error ? err.message : err);
+    logError('ADMIN_AI_SUGGESTION_WRITE_FAILED', 'high', safeErrorMessage(err, 'AI 建议写入失败'), { agent_id: parsed.data?.agent_id });
     const message = safeErrorMessage(err, 'AI 建议写入失败');
     res.status(500).json({ error: 'INTERNAL_ERROR', message });
   }

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { payGate } from '../middleware/pay-gate';
 import { characterSheetService, characterInstanceService } from '../services/character-sheet-service';
 import { createCharacterPdfBuffer } from '../services/character-pdf-service';
@@ -19,7 +20,7 @@ router.post('/import', async (req, res) => {
     if (!cson_text) { res.status(400).json({ error: 'cson_text is required' }); return; }
     const parsed = importCSON(cson_text);
     const sheet = await characterSheetService.create({
-      user_id: req.user!.id,
+      user_id: getAuthedUser(req).id,
       ruleset_id: parsed.ruleset_id,
       name: parsed.name,
       occupation_id: parsed.occupation_id,
@@ -35,7 +36,7 @@ router.post('/import', async (req, res) => {
 // POST /api/characters - 创建角色卡
 router.post('/', async (req, res) => {
   try {
-    const sheet = await characterSheetService.create({ ...req.body, user_id: req.user!.id });
+    const sheet = await characterSheetService.create({ ...req.body, user_id: getAuthedUser(req).id });
     res.status(201).json(sheet);
   } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
@@ -45,7 +46,7 @@ router.post('/', async (req, res) => {
 // GET /api/characters - 我的角色卡列表
 router.get('/', async (req, res) => {
   try {
-    const sheets = await characterSheetService.findByUserId(req.user!.id);
+    const sheets = await characterSheetService.findByUserId(getAuthedUser(req).id);
     res.json(sheets);
   } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
@@ -57,7 +58,7 @@ router.get('/:id', async (req, res) => {
   try {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
     res.json(sheet);
   } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
@@ -69,7 +70,7 @@ router.put('/:id', async (req, res) => {
   try {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
     const allowed = ['name', 'avatar_url', 'background', 'attributes', 'skills', 'occupation_id', 'derived_max', 'equipment', 'avatar_custom_data'];
     const safeBody: Record<string, unknown> = {};
     for (const key of allowed) {
@@ -87,7 +88,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
     await characterSheetService.delete(req.params.id);
     res.status(204).send();
   } catch (err: unknown) {
@@ -100,8 +101,8 @@ router.post('/:id/export', async (req, res) => {
   try {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
-    const cson_text = exportCSON(sheet, req.user!.nickname ?? 'player');
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    const cson_text = exportCSON(sheet, getAuthedUser(req).nickname ?? 'player');
     res.json({ cson_text });
   } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Export failed') });
@@ -113,7 +114,7 @@ router.post('/:id/export/pdf', payGate('character_card_pdf'), async (req, res) =
   try {
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
     const buf = await createCharacterPdfBuffer(sheet);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
@@ -135,7 +136,7 @@ router.get('/:id/instance', async (req, res) => {
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
     // 允许：角色所有者 或 该团 GM
     const campaign = await db('campaigns').where({ id: campaign_id as string }).select('gm_user_id').first();
-    if (sheet.user_id !== req.user!.id && campaign?.['gm_user_id'] !== req.user!.id) {
+    if (sheet.user_id !== getAuthedUser(req).id && campaign?.['gm_user_id'] !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const instance = await characterInstanceService.getInstance(req.params.id, campaign_id as string);
@@ -154,7 +155,7 @@ router.put('/:id/instance/:campaignId', async (req, res) => {
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
     const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
     // 允许：角色所有者 或 GM
-    if (sheet.user_id !== req.user!.id && campaign?.['gm_user_id'] !== req.user!.id) {
+    if (sheet.user_id !== getAuthedUser(req).id && campaign?.['gm_user_id'] !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const { derived_current, temporary_effects, equipment } = req.body;
@@ -200,7 +201,7 @@ router.post('/:id/grow', async (req, res) => {
     }
     const sheet = await characterSheetService.findById(req.params.id);
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (sheet.user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
     await characterInstanceService.growSkill(req.params.id, campaign_id as string, skill_name as string, Number(new_value));
     res.json({ ok: true });
   } catch (err: unknown) {

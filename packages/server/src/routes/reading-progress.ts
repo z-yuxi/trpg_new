@@ -7,6 +7,7 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 
@@ -27,7 +28,7 @@ router.get('/:type/:assetId', authMiddleware, async (req, res): Promise<void> =>
   }
   try {
     const row = await db('reading_progress')
-      .where({ user_id: req.user!.id, asset_type: type, asset_id: assetId })
+      .where({ user_id: getAuthedUser(req).id, asset_type: type, asset_id: assetId })
       .select('scroll_percent', 'updated_at')
       .first();
     res.json(row ?? null);
@@ -51,17 +52,17 @@ router.put('/:type/:assetId', authMiddleware, async (req, res): Promise<void> =>
   }
   try {
     const existing = await db('reading_progress')
-      .where({ user_id: req.user!.id, asset_type: type, asset_id: assetId })
+      .where({ user_id: getAuthedUser(req).id, asset_type: type, asset_id: assetId })
       .first();
 
     if (existing) {
       await db('reading_progress')
-        .where({ user_id: req.user!.id, asset_type: type, asset_id: assetId })
+        .where({ user_id: getAuthedUser(req).id, asset_type: type, asset_id: assetId })
         .update({ scroll_percent: parsed.data.scroll_percent, updated_at: new Date() });
     } else {
       await db('reading_progress').insert({
         id: generateId(),
-        user_id: req.user!.id,
+        user_id: getAuthedUser(req).id,
         asset_type: type,
         asset_id: assetId,
         scroll_percent: parsed.data.scroll_percent,

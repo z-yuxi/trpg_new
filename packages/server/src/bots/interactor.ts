@@ -16,6 +16,7 @@ import { db } from '../db';
 import { botService } from './bot-service';
 import { publisher } from './publisher';
 import { seedGenerator } from './seed-generator';
+import { logError } from '../utils/structured-logger';
 
 /** 内存级互动去重 Set（key = `${botId}:like:${threadId}`） */
 const interactionMemory = new Set<string>();
@@ -83,7 +84,7 @@ export class Interactor {
       interactionMemory.add(replyKey);
       return { postId };
     } catch (err) {
-      console.error('[Interactor] 回复失败:', (err as Error).message);
+      logError('BOT_INTERACTOR_REPLY_FAILED', 'medium', (err as Error).message);
       return { postId: null };
     }
   }

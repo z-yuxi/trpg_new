@@ -14,8 +14,10 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
+import { logError } from '../utils/structured-logger';
 import { reputationAuditService } from '../services/reputation-audit-service';
 
 const router = Router();
@@ -47,8 +49,9 @@ router.get(
       });
 
       res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err: unknown) {
+      logError('REPUTATION_AUDIT_LOG_QUERY_FAILED', 'high', safeErrorMessage(err, 'Query failed'), { endpoint: 'GET /reputation/audit-log' });
+      res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
     }
   },
 );
@@ -68,8 +71,9 @@ router.get(
         Math.max(0,   parseInt(offset, 10) || 0),
       );
       res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err: unknown) {
+      logError('REPUTATION_SUSPICIOUS_QUERY_FAILED', 'high', safeErrorMessage(err, 'Query failed'), { endpoint: 'GET /reputation/suspicious' });
+      res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
     }
   },
 );
@@ -83,7 +87,7 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     const { reviewId } = req.params;
     const { reason } = req.body as { reason?: string };
-    const appellantId = req.userId!;
+    const appellantId = getAuthedUser(req).id;
 
     if (!reason || reason.trim().length === 0) {
       res.status(400).json({ error: '申诉理由不能为空' });
@@ -107,7 +111,8 @@ router.post(
         res.status(e.status).json({ error: e.message });
         return;
       }
-      res.status(500).json({ error: 'Internal server error' });
+      logError('REPUTATION_SUBMIT_APPEAL_FAILED', 'high', safeErrorMessage(err, '提交申诉失败'), { review_id: reviewId });
+      res.status(500).json({ error: safeErrorMessage(err, '提交申诉失败') });
     }
   },
 );
@@ -133,8 +138,9 @@ router.get(
         offset: Math.max(0,   parseInt(offset, 10) || 0),
       });
       res.json(result);
-    } catch (err) {
-      res.status(500).json({ error: 'Internal server error' });
+    } catch (err: unknown) {
+      logError('REPUTATION_LIST_APPEALS_FAILED', 'high', safeErrorMessage(err, '查询失败'), { endpoint: 'GET /reviews/appeals' });
+      res.status(500).json({ error: safeErrorMessage(err, '查询失败') });
     }
   },
 );
@@ -161,7 +167,7 @@ router.post(
     try {
       const appeal = await reputationAuditService.resolveAppeal({
         appeal_id:       appealId,
-        admin_user_id:   req.userId!,
+        admin_user_id:   getAuthedUser(req).id,
         decision:        decision as 'resolved_remove' | 'resolved_keep',
         resolution_note: resolution_note,
       });
@@ -172,7 +178,8 @@ router.post(
         res.status(404).json({ error: '申诉不存在或已处理' });
         return;
       }
-      res.status(500).json({ error: 'Internal server error' });
+      logError('REPUTATION_RESOLVE_APPEAL_FAILED', 'high', safeErrorMessage(err, '处理申诉失败'), { appeal_id: appealId });
+      res.status(500).json({ error: safeErrorMessage(err, '处理失败') });
     }
   },
 );
@@ -262,8 +269,8 @@ router.post(
       await db('modules').where({ id }).update({ status: 'public', updated_at: new Date() });
       res.json({ id, status: 'public' });
     } catch (err: unknown) {
-      console.error('[admin:approveModule]', err instanceof Error ? err.message : err);
-      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
+      logError('ADMIN_APPROVE_MODULE_FAILED', 'high', safeErrorMessage(err, '操作失败'), { module_id: id });
+      res.status(500).json({ error: safeErrorMessage(err, '操作失败') });
     }
   }
 );
@@ -295,8 +302,8 @@ router.post(
       });
       res.json({ id, status: 'suspended', suspended_reason: parsed.data.reason });
     } catch (err: unknown) {
-      console.error('[admin:suspendModule]', err instanceof Error ? err.message : err);
-      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
+      logError('ADMIN_SUSPEND_MODULE_FAILED', 'high', safeErrorMessage(err, '操作失败'), { module_id: id });
+      res.status(500).json({ error: safeErrorMessage(err, '操作失败') });
     }
   }
 );
@@ -316,8 +323,8 @@ router.post(
       await db('rulesets').where({ id }).update({ status: 'published', updated_at: new Date() });
       res.json({ id, status: 'published' });
     } catch (err: unknown) {
-      console.error('[admin:approveRuleset]', err instanceof Error ? err.message : err);
-      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
+      logError('ADMIN_APPROVE_RULESET_FAILED', 'high', safeErrorMessage(err, '操作失败'), { ruleset_id: id });
+      res.status(500).json({ error: safeErrorMessage(err, '操作失败') });
     }
   }
 );
@@ -342,8 +349,8 @@ router.post(
       });
       res.json({ id, status: 'deprecated', reason: parsed.data.reason });
     } catch (err: unknown) {
-      console.error('[admin:suspendRuleset]', err instanceof Error ? err.message : err);
-      res.status(500).json({ error: safeErrorMessage(err, '\u64cd\u4f5c\u5931\u8d25') });
+      logError('ADMIN_SUSPEND_RULESET_FAILED', 'high', safeErrorMessage(err, '操作失败'), { ruleset_id: id });
+      res.status(500).json({ error: safeErrorMessage(err, '操作失败') });
     }
   }
 );

@@ -10,6 +10,7 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { experimentService } from '../services/experiment-service';
 import { safeErrorMessage } from '../utils/error-response';
 
@@ -45,7 +46,7 @@ router.post('/track', authMiddleware, async (req, res) => {
   }
   await experimentService.track({
     experimentName: parsed.data.experiment_name,
-    userId: req.user!.id,
+    userId: getAuthedUser(req).id,
     eventType: parsed.data.event_type,
     eventName: parsed.data.event_name,
     properties: parsed.data.properties,
@@ -55,7 +56,7 @@ router.post('/track', authMiddleware, async (req, res) => {
 
 // GET /api/experiments/:name/stats — 实验统计（需 admin）
 router.get('/:name/stats', authMiddleware, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) { res.status(403).json({ error: 'Admin only' }); return; }
 
@@ -82,7 +83,7 @@ const createSchema = z.object({
 
 // POST /api/experiments — 创建实验（需 admin）
 router.post('/', authMiddleware, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) { res.status(403).json({ error: 'Admin only' }); return; }
 
@@ -112,7 +113,7 @@ const statusSchema = z.object({
 
 // PUT /api/experiments/:name/status — 更新实验状态（需 admin）
 router.put('/:name/status', authMiddleware, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) { res.status(403).json({ error: 'Admin only' }); return; }
 

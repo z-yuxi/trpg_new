@@ -16,11 +16,13 @@
 import { Router, type IRouter, type Request } from 'express';
 import { z } from 'zod';
 import { authMiddleware, requireAdmin } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import { paymentService, PaymentError } from '../services/payment-service';
 import { metrics } from '../utils/business-metrics';
 import { safeErrorMessage } from '../utils/error-response';
+import { logError } from '../utils/structured-logger';
 import {
   verifyAlipaySignature,
   verifyWechatPayV3Signature,
@@ -48,7 +50,7 @@ router.post('/orders', authMiddleware, paymentCreateLimiter, async (req, res) =>
   }
 
   const { product_type, product_id, payment_method } = parsed.data;
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
 
   try {
     // 查询商品价格
@@ -117,7 +119,7 @@ router.post('/orders', authMiddleware, paymentCreateLimiter, async (req, res) =>
 router.get('/orders', authMiddleware, async (req, res) => {
   try {
     const rows = await db('payment_orders')
-      .where({ user_id: req.user!.id })
+      .where({ user_id: getAuthedUser(req).id })
       .whereIn('product_type', ['module', 'ruleset'])
       .orderBy('created_at', 'desc')
       .limit(50);
@@ -147,7 +149,7 @@ router.get('/orders', authMiddleware, async (req, res) => {
 router.get('/orders/:id', authMiddleware, async (req, res) => {
   try {
     const row = await db('payment_orders')
-      .where({ id: req.params.id, user_id: req.user!.id })
+      .where({ id: req.params.id, user_id: getAuthedUser(req).id })
       .first();
     if (!row) { res.status(404).json({ error: 'Order not found' }); return; }
 
@@ -173,7 +175,7 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
 router.post('/orders/:id/cancel', authMiddleware, async (req, res) => {
   try {
     const row = await db('payment_orders')
-      .where({ id: req.params.id, user_id: req.user!.id, status: 'pending' })
+      .where({ id: req.params.id, user_id: getAuthedUser(req).id, status: 'pending' })
       .first();
     if (!row) { res.status(404).json({ error: 'Order not found or cannot be cancelled' }); return; }
     await db('payment_orders').where({ id: req.params.id }).update({ status: 'failed' });
@@ -338,7 +340,7 @@ router.get('/access/:type/:id', authMiddleware, async (req, res) => {
   }
   try {
     const hasAccess = await paymentService.hasContentAccess(
-      req.user!.id,
+      getAuthedUser(req).id,
       type as 'module' | 'ruleset',
       id,
     );
@@ -350,7 +352,7 @@ router.get('/access/:type/:id', authMiddleware, async (req, res) => {
 
 // POST /api/payments/admin/manual-grant — 运营补单（需 admin 权限）
 router.post('/admin/manual-grant', authMiddleware, requireAdmin, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const { order_id, note } = req.body as { order_id?: string; note?: string };
   if (!order_id) { res.status(400).json({ error: 'Missing order_id' }); return; }
 
@@ -362,7 +364,7 @@ router.post('/admin/manual-grant', authMiddleware, requireAdmin, async (req, res
       res.status(err.httpStatus).json({ error: err.message, code: err.code });
       return;
     }
-    console.error('[Payments] manual-grant error:', err instanceof Error ? err.message : err);
+    logError('PAYMENTS_MANUAL_GRANT_FAILED', 'high', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Manual grant failed' });
   }
 });
@@ -373,7 +375,7 @@ router.post('/admin/manual-grant', authMiddleware, requireAdmin, async (req, res
 //   reason        - 退款原因（必填，写入审计日志）
 //   revoke_access - 是否同步撤销内容访问权（默认 true）
 router.post('/admin/refund', authMiddleware, requireAdmin, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const { order_id, reason, revoke_access = true } = req.body as {
     order_id?: string;
     reason?: string;
@@ -399,7 +401,7 @@ router.post('/admin/refund', authMiddleware, requireAdmin, async (req, res) => {
       res.status(err.httpStatus).json({ error: err.message, code: err.code });
       return;
     }
-    console.error('[Payments] admin-refund error:', err instanceof Error ? err.message : err);
+    logError('PAYMENTS_ADMIN_REFUND_FAILED', 'high', err instanceof Error ? err.message : String(err));
     res.status(500).json({ error: 'Refund failed' });
   }
 });

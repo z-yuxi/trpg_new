@@ -1,23 +1,14 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { generateId } from '@trpg/shared';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, requireAdmin } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { forumService } from '../services/forum-service';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
 import { safeJsonParse } from '../utils/safe-json';
 
 const router: IRouter = Router();
-
-function ensureAdmin(req: any, res: any): boolean {
-  const userType = req.user?.user_type;
-  const isAdmin = Array.isArray(userType) && userType.includes('admin');
-  if (!isAdmin) {
-    res.status(403).json({ error: 'FORBIDDEN', message: '权限不足' });
-    return false;
-  }
-  return true;
-}
 
 const faqItems = [
   {
@@ -76,7 +67,7 @@ router.post('/posts', authMiddleware, async (req, res) => {
   try {
     const created = await forumService.createThread({
       board: parsed.data.board,
-      author_id: req.user!.id,
+      author_id: getAuthedUser(req).id,
       title: parsed.data.title,
       content: parsed.data.content,
     });
@@ -111,7 +102,7 @@ router.post('/comments', authMiddleware, async (req, res) => {
   try {
     const post = await forumService.createPost({
       thread_id: parsed.data.thread_id,
-      author_id: req.user!.id,
+      author_id: getAuthedUser(req).id,
       content: parsed.data.content,
       reply_to_post_id: parsed.data.reply_to_post_id,
     });
@@ -200,9 +191,7 @@ router.get('/help/faq', authMiddleware, async (req, res) => {
 });
 
 // GET /api/admin/reports/:id
-router.get('/admin/reports/:id', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.get('/admin/reports/:id', authMiddleware, requireAdmin, async (req, res) => {
   try {
     const row = await db('content_reports').where({ id: req.params['id']! }).first();
     if (!row) {
@@ -238,9 +227,7 @@ router.get('/admin/reports/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/agent/review-suggestion
-router.post('/agent/review-suggestion', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.post('/agent/review-suggestion', authMiddleware, requireAdmin, async (req, res) => {
   const schema = z.object({
     report_id: z.string().min(1),
     action: z.enum(['retain', 'delete', 'restrict', 'suspend']),
@@ -268,9 +255,7 @@ router.post('/agent/review-suggestion', authMiddleware, async (req, res) => {
 });
 
 // GET /api/admin/stats/trends
-router.get('/admin/stats/trends', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.get('/admin/stats/trends', authMiddleware, requireAdmin, async (req, res) => {
   const schema = z.object({
     days: z.coerce.number().int().min(1).max(90).optional(),
   });
@@ -336,9 +321,7 @@ router.get('/admin/stats/trends', authMiddleware, async (req, res) => {
 });
 
 // POST /api/agent/daily-report
-router.post('/agent/daily-report', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.post('/agent/daily-report', authMiddleware, requireAdmin, async (req, res) => {
   const schema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     timezone: z.string().optional(),
@@ -366,9 +349,7 @@ router.post('/agent/daily-report', authMiddleware, async (req, res) => {
 });
 
 // POST /api/agent/legal-search
-router.post('/agent/legal-search', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.post('/agent/legal-search', authMiddleware, requireAdmin, async (req, res) => {
   const schema = z.object({
     query: z.string().min(1).max(2000),
     jurisdiction: z.enum(['CN', 'US', 'EU']).optional(),
@@ -412,9 +393,7 @@ router.post('/agent/legal-search', authMiddleware, async (req, res) => {
 });
 
 // POST /api/agent/evidence-analysis
-router.post('/agent/evidence-analysis', authMiddleware, async (req, res) => {
-  if (!ensureAdmin(req, res)) return;
-
+router.post('/agent/evidence-analysis', authMiddleware, requireAdmin, async (req, res) => {
   const schema = z.object({
     evidence: z.object({
       type: z.enum(['text', 'image', 'timestamp', 'user_profile']),
@@ -471,7 +450,7 @@ router.post('/agent/preferences', authMiddleware, async (req, res) => {
     return;
   }
 
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const { action, match_pair_id } = parsed.data;
 
   if (action === 'dismiss' && !match_pair_id) {

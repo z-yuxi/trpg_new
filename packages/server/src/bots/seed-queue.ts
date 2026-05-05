@@ -21,6 +21,7 @@ import { seedGenerator } from './seed-generator';
 import { publisher } from './publisher';
 import { interactor } from './interactor';
 import type { BoardType } from './prompts';
+import { logInfo, logError } from '../utils/structured-logger';
 
 // ─────────────────────────────────────────────────────────
 // Job 数据类型
@@ -118,7 +119,7 @@ export function startSeedWorker(): Worker<SeedJobData> {
     'seed-tasks',
     async (job: Job<SeedJobData>) => {
       const data = job.data;
-      console.log(`[SeedWorker] 开始执行任务 ${job.id} type=${data.type}`);
+      logInfo('SEED_TASK_STARTED', '工作器开始执行任务', { job_id: job.id, type: data.type });
 
       switch (data.type) {
         case 'seed_thread': {
@@ -138,7 +139,7 @@ export function startSeedWorker(): Worker<SeedJobData> {
             content: post.content,
           });
 
-          console.log(`[SeedWorker] 发帖成功 threadId=${result.threadId} bot=${bot.nickname}`);
+          logInfo('SEED_THREAD_PUBLISHED', '帖子发布成功', { thread_id: result.threadId, bot_nickname: bot.nickname });
           return { threadId: result.threadId };
         }
 
@@ -150,14 +151,14 @@ export function startSeedWorker(): Worker<SeedJobData> {
             replyRatio: data.replyRatio,
             useAi: data.useAi ?? true,
           });
-          console.log(`[SeedWorker] 互动完成 likes=${result.likes} replies=${result.replies}`);
+          logInfo('SEED_INTERACT_DONE', '互动完成', { likes: result.likes, replies: result.replies });
           return result;
         }
 
         case 'seed_cleanup': {
           const hibernated = await botService.hibernateAll();
           const stats = await botService.getGeneratedContentStats();
-          console.log(`[SeedWorker] 清理完成 hibernated=${hibernated} threads=${stats.threads} posts=${stats.posts}`);
+          logInfo('SEED_CLEANUP_DONE', '清理完成', { hibernated, threads: stats.threads, posts: stats.posts });
           return { hibernated, ...stats };
         }
 
@@ -174,7 +175,7 @@ export function startSeedWorker(): Worker<SeedJobData> {
   );
 
   worker.on('failed', (job, err) => {
-    console.error(`[SeedWorker] 任务失败 jobId=${job?.id ?? 'unknown'}:`, err.message);
+    logError('SEED_TASK_FAILED', 'high', err.message, { job_id: job?.id ?? 'unknown' });
   });
 
   return worker;

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware as requireAuth } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 
@@ -7,7 +8,7 @@ const router = Router();
 
 // POST /api/reports - 提交举报
 router.post('/', requireAuth, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const { content_type, content_id, reason } = req.body;
 
   if (!content_type || !content_id || !reason) {
@@ -37,7 +38,7 @@ router.post('/', requireAuth, async (req, res) => {
 
 // GET /api/reports (管理员) - MVP 简单实现
 router.get('/', requireAuth, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) return res.status(403).json({ error: '无权限' });
 
@@ -72,7 +73,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // PATCH /api/reports/:id (管理员) - 更新举报状态
 router.patch('/:id', requireAuth, async (req, res) => {
-  const user = req.user!;
+  const user = getAuthedUser(req);
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) return res.status(403).json({ error: '无权限' });
 

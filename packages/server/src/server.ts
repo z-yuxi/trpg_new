@@ -11,6 +11,7 @@ import { trendingService } from './services/trending-service';
 import { startPaymentScheduler, stopPaymentScheduler } from './services/payment-scheduler';
 import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
+import { logInfo, logError, logWarn } from './utils/structured-logger';
 
 const requiredEnvVars: string[] = ['JWT_SECRET', 'DB_HOST', 'REDIS_HOST'];
 for (const envVar of requiredEnvVars) {
@@ -44,7 +45,7 @@ if (visibilityPolicy !== undefined && !['legacy', 'new'].includes(visibilityPoli
 }
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+httpServer.listen(PORT, () => logInfo('SERVER_START', `Server running on port ${PORT}`));
 
 // ── AI 异步任务 Worker ────────────────────────────────────────────────────────
 startAiWorker(io);
@@ -54,7 +55,7 @@ startPaymentScheduler();
 
 // ── 优雅关闭 ────────────────────────────────────────────────────────────────
 async function gracefulShutdown(signal: string) {
-  console.log(`[Shutdown] 收到 ${signal}，开始优雅关闭...`);
+  logInfo('SHUTDOWN_START', `收到 ${signal}，开始优雅关闭...`);
   stopPaymentScheduler();
   httpServer.close(async () => {
     try {
@@ -64,16 +65,17 @@ async function gracefulShutdown(signal: string) {
         redisSub.quit(),
         db.destroy(),
       ]);
-      console.log('[Shutdown] 所有连接已关闭');
+      logInfo('SHUTDOWN_DONE', '所有连接已关闭');
       process.exit(0);
     } catch (err) {
-      console.error('[Shutdown] 关闭失败:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      logError('SHUTDOWN_FAILED', 'critical', '关闭失败', { error: msg });
       process.exit(1);
     }
   });
   // 强制超时保底
   setTimeout(() => {
-    console.error('[Shutdown] 超时，强制退出');
+    logError('SHUTDOWN_TIMEOUT', 'critical', '超时，强制退出');
     process.exit(1);
   }, 10_000);
 }
@@ -85,9 +87,10 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 cron.schedule('0 * * * *', async () => {
   try {
     await moduleService.completeExpiredPublicNotices();
-    console.log(`[Cron] Completed expired public notices at ${new Date().toISOString()}`);
-  } catch (err: any) {
-    console.error('[Cron] Error completing public notices:', err?.message ?? err);
+    logInfo('CRON_MODULE_NOTICES', 'Completed expired public notices');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('CRON_MODULE_NOTICES_FAILED', 'medium', 'Error completing public notices', { error: msg });
   }
 });
 
@@ -156,12 +159,11 @@ cron.schedule('30 * * * *', async () => {
     }
 
     if (aboutToExpire.length > 0 || expired.length > 0) {
-      console.log(
-        `[Cron] Community claim buffer: warned=${aboutToExpire.length} archived=${expired.length} at ${now.toISOString()}`,
-      );
+      logInfo('CRON_CLAIM_BUFFER', 'Community claim buffer processed', { warned: aboutToExpire.length, archived: expired.length });
     }
-  } catch (err: any) {
-    console.error('[Cron] Error processing community claim buffer:', err?.message ?? err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('CRON_CLAIM_BUFFER_FAILED', 'medium', 'Error processing community claim buffer', { error: msg });
   }
 });
 
@@ -170,10 +172,11 @@ cron.schedule('*/5 * * * *', async () => {
   try {
     const count = await recruitmentService.expireInvites();
     if (count > 0) {
-      console.log(`[Cron] Expired ${count} recruitment invite(s) at ${new Date().toISOString()}`);
+      logInfo('CRON_INVITE_EXPIRE', `Expired ${count} recruitment invite(s)`, { count });
     }
-  } catch (err: any) {
-    console.error('[Cron] Error expiring recruitment invites:', err?.message ?? err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('CRON_INVITE_EXPIRE_FAILED', 'medium', 'Error expiring recruitment invites', { error: msg });
   }
 });
 
@@ -182,9 +185,10 @@ const trendingRefreshCron = process.env.TRENDING_REFRESH_CRON ?? '1 0 * * *';
 cron.schedule(trendingRefreshCron, async () => {
   try {
     await trendingService.refreshCache();
-    console.log(`[Cron] Trending cache refreshed at ${new Date().toISOString()}`);
-  } catch (err: any) {
-    console.error('[Cron] Error refreshing trending cache:', err?.message ?? err);
+    logInfo('CRON_TRENDING_REFRESH', 'Trending cache refreshed');
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('CRON_TRENDING_REFRESH_FAILED', 'medium', 'Error refreshing trending cache', { error: msg });
   }
 });
 
@@ -198,10 +202,10 @@ cron.schedule('0 2 * * *', async () => {
     const alerts = await recruitmentMetricsService.detectAlerts(7);
     if (alerts.length > 0) {
       for (const alert of alerts) {
-        console.warn(`[Metrics Alert] ${alert.type}: ${alert.message}`);
+        logWarn('METRICS_ALERT', alert.message, { alertType: alert.type });
       }
     } else {
-      console.log(`[Metrics] 巡检完成，无异常告警 ${new Date().toISOString()}`);
+      logInfo('CRON_METRICS_OK', '巡检完成，无异常告警');
     }
 
     // 数据治理巡检
@@ -210,10 +214,11 @@ cron.schedule('0 2 * * *', async () => {
     // 位置历史修复：回写未关闭的 position_history 记录
     const fixedCount = await repairOpenPositionHistory();
     if (fixedCount > 0) {
-      console.log(`[Cron] Repaired ${fixedCount} open position_history record(s)`);
+      logInfo('CRON_POSITION_REPAIR', `Repaired open position_history records`, { count: fixedCount });
     }
-  } catch (err: any) {
-    console.error('[Cron] Error in daily metrics check:', err?.message ?? err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('CRON_DAILY_METRICS_FAILED', 'high', 'Error in daily metrics check', { error: msg });
   }
 });
 

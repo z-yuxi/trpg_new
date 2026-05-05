@@ -17,6 +17,7 @@ import {
   extractJsonFromAiOutput,
   validateImportModuleOutput,
 } from '../services/ai-output-validator';
+import { logError, logInfo, logWarn } from '../utils/structured-logger';
 
 export interface AiJobData {
   taskId: string;
@@ -204,7 +205,7 @@ export function startAiWorker(io: Server): Worker<AiJobData> {
             const validated = validateImportModuleOutput(parsed);
             safeResult = JSON.stringify(validated);
           } catch (validationErr) {
-            console.warn('[AI Worker] import_module 输出校验失败，使用原始结果:', validationErr);
+            logWarn('AI_WORKER_IMPORT_MODULE_VALIDATION_FAILED', '输出校验失败，使用原始结果', { error: validationErr instanceof Error ? validationErr.message : String(validationErr) });
           }
         }
 
@@ -232,10 +233,10 @@ export function startAiWorker(io: Server): Worker<AiJobData> {
   );
 
   worker.on('error', (err) => {
-    console.error('[AI Worker] 错误:', err);
+    logError('AI_WORKER_ERROR', 'high', err instanceof Error ? err.message : String(err));
   });
 
-  console.log('[AI Worker] 已启动，监听 ai-tasks 队列');
+  logInfo('AI_WORKER_STARTED', '已启动，监听 ai-tasks 队列');
   return worker;
 }
 

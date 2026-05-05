@@ -10,11 +10,13 @@
 
 import { Router } from 'express';
 import { safeErrorMessage } from '../utils/error-response';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { grantObPermission, revokeObPermission } from '../services/scene-ob-permission-service';
 import { db } from '../db';
 import { redis, RedisKeys } from '../db/redis';
 import { io } from '../app';
 import { sceneObPermissionSchema } from './campaign-utils';
+import { logError } from '../utils/structured-logger';
 
 export const campaignRealtimeRouter = Router();
 
@@ -32,7 +34,7 @@ campaignRealtimeRouter.post('/:id/scenes/:sceneId/ob-permissions/grant', async (
       .first();
     if (!scene) { res.status(404).json({ error: 'SCENE_NOT_FOUND' }); return; }
 
-    const result = await grantObPermission(req.params.sceneId, parsed.data.user_id, req.user!.id);
+    const result = await grantObPermission(req.params.sceneId, parsed.data.user_id, getAuthedUser(req).id);
 
     // 推送到被授权用户的个人频道
     const socketId = await redis.get(RedisKeys.userSocket(parsed.data.user_id));
@@ -51,7 +53,7 @@ campaignRealtimeRouter.post('/:id/scenes/:sceneId/ob-permissions/grant', async (
       typeof (err as Record<string, unknown>)?.status === 'number'
         ? ((err as Record<string, unknown>).status as number)
         : 500;
-    console.error('[campaigns:grantOb]', err instanceof Error ? err.message : err);
+    logError('CAMPAIGNS_GRANT_OB_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     res.status(status).json({ error: safeErrorMessage(err, '授权失败') });
   }
 });
@@ -70,7 +72,7 @@ campaignRealtimeRouter.post('/:id/scenes/:sceneId/ob-permissions/revoke', async 
       .first();
     if (!scene) { res.status(404).json({ error: 'SCENE_NOT_FOUND' }); return; }
 
-    const result = await revokeObPermission(req.params.sceneId, parsed.data.user_id, req.user!.id);
+    const result = await revokeObPermission(req.params.sceneId, parsed.data.user_id, getAuthedUser(req).id);
 
     const socketId = await redis.get(RedisKeys.userSocket(parsed.data.user_id));
     if (socketId) {
@@ -87,7 +89,7 @@ campaignRealtimeRouter.post('/:id/scenes/:sceneId/ob-permissions/revoke', async 
       typeof (err as Record<string, unknown>)?.status === 'number'
         ? ((err as Record<string, unknown>).status as number)
         : 500;
-    console.error('[campaigns:revokeOb]', err instanceof Error ? err.message : err);
+    logError('CAMPAIGNS_REVOKE_OB_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     res.status(status).json({ error: safeErrorMessage(err, '撤销授权失败') });
   }
 });

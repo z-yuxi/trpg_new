@@ -13,6 +13,7 @@
  */
 import { db } from '../db';
 import { redis } from '../db/redis';
+import { logInfo, logError, logWarn } from '../utils/structured-logger';
 
 export interface DailyCheckResult {
   ts: string;
@@ -157,11 +158,14 @@ export async function runDailyDataCheck(): Promise<DailyCheckResult> {
 
   // ── 汇总输出 ──────────────────────────────────────────────────────────────
   if (result.issues.length === 0) {
-    console.log(`[DailyCheck] ✓ 全部检查通过 ${result.ts}`);
+    logInfo('DAILY_CHECK_ALL_PASSED', `全部检查通过`, { ts: result.ts });
   } else {
     for (const issue of result.issues) {
-      const fn = issue.severity === 'critical' ? console.error : console.warn;
-      fn(`[DailyCheck] ${issue.severity.toUpperCase()} ${issue.check}: ${issue.detail}`);
+      if (issue.severity === 'critical') {
+        logError('DAILY_CHECK_ISSUE', 'critical', issue.detail, { check: issue.check });
+      } else {
+        logWarn('DAILY_CHECK_ISSUE', issue.detail, { check: issue.check });
+      }
     }
   }
 

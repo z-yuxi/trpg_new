@@ -12,10 +12,12 @@ import { z } from 'zod';
 import { Job } from 'bullmq';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { checkAiQuota } from '../middleware/ai-quota';
 import { callAI } from '../services/ai-service';
 import { enqueueAiTask, getAiQueueInstance } from '../queue/ai-queue';
 import { safeErrorMessage } from '../utils/error-response';
+import { logError } from '../utils/structured-logger';
 import { db } from '../db';
 import type { TaskType } from '../services/ai-service';
 import {
@@ -71,12 +73,12 @@ router.post('/check-text', checkAiQuota('check_text'), async (req, res) => {
   ];
 
   try {
-    const raw = await callAI('flash', messages, 'check_text', req.user!.id);
+    const raw = await callAI('flash', messages, 'check_text', getAuthedUser(req).id);
     const parsed = extractJsonFromAiOutput(raw);
     const result = validateCheckTextOutput(parsed, rule_terms);
     res.json(result);
   } catch (err: unknown) {
-    console.error('[ai:checkText]', err instanceof Error ? err.message : err);
+    logError('AI_CHECK_TEXT_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     const message = safeErrorMessage(err, 'AI 服务暂时不可用');
     res.status(502).json({ error: 'AI_UNAVAILABLE', message });
   }
@@ -123,7 +125,7 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
     if (full_text) {
       const chunks = splitIntoChunks(full_text);
       const taskId = await enqueueAiTask({
-        userId: req.user!.id,
+        userId: getAuthedUser(req).id,
         taskType: 'import_module',
         endpoint: 'pro',
         // messages 为空，Worker 使用 chunks 字段自行构建每片消息
@@ -163,7 +165,7 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
     ];
 
     const taskId = await enqueueAiTask({
-      userId: req.user!.id,
+      userId: getAuthedUser(req).id,
       taskType: 'import_module',
       endpoint: 'pro',
       messages,
@@ -174,7 +176,7 @@ router.post('/import-module', checkAiQuota('import_module'), async (req, res) =>
       message: '模组分析任务已加入队列，完成后将通过 Socket.IO 推送 ai_task_update 事件',
     });
   } catch (err: unknown) {
-    console.error('[ai:importModule]', err instanceof Error ? err.message : err);
+    logError('AI_IMPORT_MODULE_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     const message = safeErrorMessage(err, '入队失败');
     res.status(503).json({ error: 'QUEUE_UNAVAILABLE', message });
   }
@@ -221,20 +223,20 @@ router.post('/import-character', checkAiQuota('import_character'), async (req, r
   ];
 
   try {
-    const raw = await callAI('flash', messages, 'import_character', req.user!.id);
+    const raw = await callAI('flash', messages, 'import_character', getAuthedUser(req).id);
     const jsonObj = extractJsonFromAiOutput(raw);
     const result = validateImportCharacterOutput(jsonObj);
     res.json(result);
   } catch (err: unknown) {
-    console.error('[ai:importCharacter]', err instanceof Error ? err.message : err);
+    logError('AI_IMPORT_CHARACTER_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     const message = safeErrorMessage(err, 'AI 服务暂时不可用');
     res.status(502).json({ error: 'AI_UNAVAILABLE', message });
   }
 });
 
 // ── GET /api/ai/quota ────────────────────────────────────────────────────────
-router.get('/quota', async (req, res) => {
-  const user = req.user!;
+router.get('/quota', authMiddleware, async (req, res) => {
+  const user = getAuthedUser(req);
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -268,11 +270,11 @@ router.get('/quota', async (req, res) => {
 });
 
 // ── GET /api/ai/tasks — 最近 AI 任务列表 ─────────────────────────────────────
-router.get('/tasks', async (req, res) => {
+router.get('/tasks', authMiddleware, async (req, res) => {
   const limit = Math.min(Number(req.query['limit'] ?? 30), 100);
 
   const tasks = await db('ai_usage_log')
-    .where('user_id', req.user!.id)
+    .where('user_id', getAuthedUser(req).id)
     .orderBy('created_at', 'desc')
     .limit(limit)
     .select('id', 'task_type', 'status', 'input_tokens', 'output_tokens', 'duration_ms', 'created_at');
@@ -281,9 +283,9 @@ router.get('/tasks', async (req, res) => {
 });
 
 // ── POST /api/ai/tasks/:id/retry — 失败任务重试 ──────────────────────────────
-router.post('/tasks/:id/retry', async (req, res) => {
+router.post('/tasks/:id/retry', authMiddleware, async (req, res) => {
   const taskId = req.params['id'];
-  const user = req.user!;
+  const user = getAuthedUser(req);
 
   // 确认是当前用户且任务状态为 failed
   const task = await db('ai_usage_log')
@@ -334,7 +336,7 @@ router.post('/tasks/:id/retry', async (req, res) => {
 
     res.json({ ok: true, task_id: taskId });
   } catch (err: unknown) {
-    console.error('[ai:retry]', err instanceof Error ? err.message : err);
+    logError('AI_RETRY_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     const message = safeErrorMessage(err, '重试失败');
     res.status(500).json({ error: 'RETRY_FAILED', message });
   }

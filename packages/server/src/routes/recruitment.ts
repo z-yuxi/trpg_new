@@ -1,7 +1,8 @@
-import { Router, type IRouter } from 'express';
+﻿import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed.js';
 import { idempotencyMiddleware } from '../middleware/idempotency';
 import { recruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
@@ -75,7 +76,7 @@ router.post('/', authMiddleware, async (req, res) => {
   try {
     const post = await recruitmentService.create({
       ...parsed.data,
-      poster_id: req.user!.id,
+      poster_id: getAuthedUser(req).id,
     });
     res.status(201).json(post);
   } catch (err: unknown) {
@@ -103,8 +104,8 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       type: req.query.type as 'gm_recruit' | 'player_seek' | undefined,
       ruleset_id: typeof req.query.ruleset_id === 'string' ? req.query.ruleset_id : undefined,
       status: typeof req.query.status === 'string' ? (req.query.status as any) : undefined,
-      poster_id: mine === 'posted' ? req.user!.id : undefined,
-      applicant_user_id: mine === 'applied' ? req.user!.id : undefined,
+      poster_id: mine === 'posted' ? getAuthedUser(req).id : undefined,
+      applicant_user_id: mine === 'applied' ? getAuthedUser(req).id : undefined,
       // 已登录的普通浏览：传 viewer_id 查每帖申请状态，不过滤结果
       viewer_id: !mine && req.user ? req.user.id : undefined,
       schedule_weekday: typeof req.query.schedule_weekday === 'string' ? req.query.schedule_weekday : undefined,
@@ -134,7 +135,7 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
 // POST /:id/publish — 发布草稿（draft → open）
 router.post('/:id/publish', authMiddleware, async (req, res) => {
   try {
-    const post = await recruitmentService.publish(req.params.id, req.user!.id);
+    const post = await recruitmentService.publish(req.params.id, getAuthedUser(req).id);
     res.json(post);
   } catch (err: any) {
     const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
@@ -145,7 +146,7 @@ router.post('/:id/publish', authMiddleware, async (req, res) => {
 // POST /:id/close — 手动关闭招募（open/full → closed）
 router.post('/:id/close', authMiddleware, async (req, res) => {
   try {
-    const post = await recruitmentService.close(req.params.id, req.user!.id);
+    const post = await recruitmentService.close(req.params.id, getAuthedUser(req).id);
     res.json(post);
   } catch (err: any) {
     const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
@@ -156,7 +157,7 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
 // POST /:id/dissolve — 解散团（grouped → dissolved）
 router.post('/:id/dissolve', authMiddleware, async (req, res) => {
   try {
-    const post = await recruitmentService.dissolve(req.params.id, req.user!.id);
+    const post = await recruitmentService.dissolve(req.params.id, getAuthedUser(req).id);
     res.json(post);
   } catch (err: any) {
     const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
@@ -170,7 +171,7 @@ router.post('/applications/:applicationId/confirm', authMiddleware, idempotencyM
   try {
     const application = await recruitmentService.confirmApplication({
       application_id: req.params.applicationId,
-      applicant_user_id: req.user!.id,
+      applicant_user_id: getAuthedUser(req).id,
     });
     res.json(application);
   } catch (err: any) {
@@ -200,14 +201,14 @@ router.post('/:id/apply', authMiddleware, applyLimiter, idempotencyMiddleware, a
   try {
     const application = await recruitmentService.createApplication({
       post_id: req.params.id,
-      applicant_user_id: req.user!.id,
+      applicant_user_id: getAuthedUser(req).id,
       character_id: parsed.data.character_id,
       message: parsed.data.message,
       apply_type: applyType,
     });
 
     const post = await db('recruitment_posts').where({ id: req.params.id }).select('poster_id', 'title').first();
-    if (post && post['poster_id'] !== req.user!.id) {
+    if (post && post['poster_id'] !== getAuthedUser(req).id) {
       notificationService.createNotification({
         userId: post['poster_id'] as string,
         type: 'social',
@@ -240,12 +241,12 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
   try {
     const comment = await recruitmentService.createComment({
       post_id: req.params.id,
-      user_id: req.user!.id,
+      user_id: getAuthedUser(req).id,
       content: parsed.data.content,
     });
     // 通知帖主（非本人评论才通知）
     const post = await db('recruitment_posts').where({ id: req.params.id }).select('poster_id', 'title').first();
-    if (post && post['poster_id'] !== req.user!.id) {
+    if (post && post['poster_id'] !== getAuthedUser(req).id) {
       notificationService.createNotification({
         userId: post['poster_id'] as string,
         type: 'social',
@@ -276,7 +277,7 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, reviewLim
     const result = await recruitmentService.reviewApplication({
       post_id: req.params.id,
       application_id: req.params.applicationId,
-      owner_id: req.user!.id,
+      owner_id: getAuthedUser(req).id,
       action: parsed.data.action,
       reject_reason: parsed.data.reject_reason,
     });
@@ -310,7 +311,7 @@ router.post('/:id/group', authMiddleware, groupLimiter, idempotencyMiddleware, a
   try {
     const result = await recruitmentService.formGroup({
       post_id: req.params.id,
-      owner_id: req.user!.id,
+      owner_id: getAuthedUser(req).id,
       module_name: parsed.data.module_name,
     });
     // 通知已确认玩家
@@ -347,7 +348,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    if (post.poster_id !== req.user!.id) {
+    if (post.poster_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -387,9 +388,9 @@ router.post('/:id/floors', authMiddleware, async (req, res) => {
       res.status(404).json({ error: 'Post not found' });
       return;
     }
-    const floor = await postCommentService.createFloor(req.params.id, req.user!.id, parsed.data.content);
+    const floor = await postCommentService.createFloor(req.params.id, getAuthedUser(req).id, parsed.data.content);
     // 通知帖主（非本人发楼才通知）
-    if ((post as Record<string, unknown>)['poster_id'] !== req.user!.id) {
+    if ((post as Record<string, unknown>)['poster_id'] !== getAuthedUser(req).id) {
       notificationService.createNotification({
         userId: (post as Record<string, unknown>)['poster_id'] as string,
         type: 'social',
@@ -407,7 +408,7 @@ router.post('/:id/floors', authMiddleware, async (req, res) => {
 // 软删除主楼层
 router.delete('/:id/floors/:floorId', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.deleteFloor(req.params.floorId, req.user!.id);
+    await postCommentService.deleteFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     const status = err.message === '无权删除' ? 403 : err.message === '楼层不存在' ? 404 : 500;
@@ -441,13 +442,13 @@ router.post('/:id/floors/:floorId/comments', authMiddleware, async (req, res) =>
   try {
     const comment = await postCommentService.createComment(
       req.params.floorId,
-      req.user!.id,
+      getAuthedUser(req).id,
       parsed.data.content,
       parsed.data.parent_comment_id ?? undefined,
     );
     // 通知楼主（非本人）
     const floor = await db('post_replies').where({ id: req.params.floorId }).select('user_id').first();
-    if (floor && (floor as Record<string, unknown>)['user_id'] !== req.user!.id) {
+    if (floor && (floor as Record<string, unknown>)['user_id'] !== getAuthedUser(req).id) {
       notificationService.createNotification({
         userId: (floor as Record<string, unknown>)['user_id'] as string,
         type: 'social',
@@ -467,7 +468,7 @@ router.post('/:id/floors/:floorId/comments', authMiddleware, async (req, res) =>
 // 删除楼中楼
 router.delete('/:id/floors/:floorId/comments/:commentId', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.deleteComment(req.params.commentId, req.user!.id);
+    await postCommentService.deleteComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     const status = err.message === '无权删除' ? 403 : err.message === '评论不存在' ? 404 : 500;
@@ -478,7 +479,7 @@ router.delete('/:id/floors/:floorId/comments/:commentId', authMiddleware, async 
 // 点赞主楼层
 router.post('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.likeFloor(req.params.floorId, req.user!.id);
+    await postCommentService.likeFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Like failed' });
@@ -488,7 +489,7 @@ router.post('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
 // 取消点赞主楼层
 router.delete('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.unlikeFloor(req.params.floorId, req.user!.id);
+    await postCommentService.unlikeFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Unlike failed' });
@@ -498,7 +499,7 @@ router.delete('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
 // 点赞楼中楼
 router.post('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.likeComment(req.params.commentId, req.user!.id);
+    await postCommentService.likeComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Like failed' });
@@ -508,7 +509,7 @@ router.post('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, asy
 // 取消点赞楼中楼
 router.delete('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, async (req, res) => {
   try {
-    await postCommentService.unlikeComment(req.params.commentId, req.user!.id);
+    await postCommentService.unlikeComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
   } catch (err: any) {
     res.status(400).json({ error: err?.message ?? 'Unlike failed' });

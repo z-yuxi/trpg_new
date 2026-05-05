@@ -5,7 +5,9 @@ import { userService } from '../services/user-service';
 import { authService } from '../services/auth-service';
 import { AppError } from '../utils/app-error';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { metrics } from '../utils/business-metrics';
+import { logError } from '../utils/structured-logger';
 
 const router: IRouter = Router();
 
@@ -57,9 +59,9 @@ router.post('/register', registerLimiter, async (req, res) => {
   } catch (err: unknown) {
     // 统一返回 400 + 通用消息，避免通过不同状态码暴露手机号是否已注册
     if (err instanceof AppError) {
-      console.error('[Register] error:', { code: err.code || 'REGISTER_FAILED', severity: 'medium' });
+      logError('AUTH_REGISTER_FAILED', 'medium', err.message, { code: err.code || 'REGISTER_FAILED' });
     } else if (err instanceof Error) {
-      console.error('[Register] error:', { code: 'REGISTER_FAILED', severity: 'medium', msg: err.message });
+      logError('AUTH_REGISTER_FAILED', 'medium', err.message);
     }
     res.status(400).json({ error: '注册失败，请稍后再试' });
   }
@@ -100,7 +102,7 @@ router.post('/refresh', loginLimiter, async (req, res) => {
 // POST /api/auth/logout — 吊销当前用户所有 refresh token
 router.post('/logout', authMiddleware, async (req, res) => {
   try {
-    await authService.revokeAllTokens(req.user!.id);
+    await authService.revokeAllTokens(getAuthedUser(req).id);
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Logout failed' });

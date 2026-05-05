@@ -13,6 +13,7 @@ import { forumService, type ForumBoard, type ForumThread, type ForumPost } from 
 import { botService } from './bot-service';
 import { contentQualityFilter } from './content-quality-filter';
 import { db } from '../db';
+import { logError } from '../utils/structured-logger';
 
 export interface PublishThreadResult {
   thread: ForumThread;
@@ -113,7 +114,7 @@ export class Publisher {
         });
         results.push(result);
       } catch (err) {
-        console.error(`[Publisher] 发布回复失败 threadId=${threadId}:`, (err as Error).message);
+        logError('BOT_PUBLISHER_REPLY_FAILED', 'medium', (err as Error).message, { thread_id: threadId });
       }
     }
 

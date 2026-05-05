@@ -15,6 +15,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { authMiddleware, requireCreator } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { creatorEarningsService } from '../services/creator-earnings-service';
 
 const router = Router();
@@ -23,7 +24,7 @@ const router = Router();
 
 router.get('/earnings/summary', authMiddleware, requireCreator, async (req, res) => {
   try {
-    const summary = await creatorEarningsService.getSummary(req.user!.id);
+    const summary = await creatorEarningsService.getSummary(getAuthedUser(req).id);
     res.json(summary);
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -36,7 +37,7 @@ router.get('/earnings/sales', authMiddleware, requireCreator, async (req, res) =
   try {
     const page = Math.max(1, Number(req.query['page'] ?? 1));
     const limit = Math.min(50, Math.max(1, Number(req.query['limit'] ?? 20)));
-    const result = await creatorEarningsService.listSales(req.user!.id, page, limit);
+    const result = await creatorEarningsService.listSales(getAuthedUser(req).id, page, limit);
     res.json(result);
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -59,7 +60,7 @@ router.post('/earnings/withdrawals', authMiddleware, requireCreator, async (req,
   }
   try {
     const result = await creatorEarningsService.createWithdrawal({
-      userId: req.user!.id,
+      userId: getAuthedUser(req).id,
       amountCents: parsed.data.amount_cents,
       channel: parsed.data.channel,
       accountInfo: parsed.data.account_info,
@@ -84,7 +85,7 @@ router.get('/earnings/withdrawals', authMiddleware, requireCreator, async (req, 
   try {
     const page = Math.max(1, Number(req.query['page'] ?? 1));
     const limit = Math.min(50, Math.max(1, Number(req.query['limit'] ?? 20)));
-    const result = await creatorEarningsService.listWithdrawals(req.user!.id, page, limit);
+    const result = await creatorEarningsService.listWithdrawals(getAuthedUser(req).id, page, limit);
     res.json(result);
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -106,7 +107,7 @@ router.post('/modules/:id/objections', authMiddleware, async (req, res) => {
   try {
     const record = await creatorEarningsService.submitObjection({
       moduleId: req.params['id']!,
-      userId: req.user!.id,
+      userId: getAuthedUser(req).id,
       reason: parsed.data.reason,
     });
     res.status(201).json(record);
@@ -130,7 +131,7 @@ router.post('/modules/:id/appeal', authMiddleware, async (req, res) => {
   try {
     const result = await creatorEarningsService.submitAppeal({
       moduleId: req.params['id']!,
-      userId: req.user!.id,
+      userId: getAuthedUser(req).id,
       reason: parsed.data.reason,
     });
     if (!result.ok) {

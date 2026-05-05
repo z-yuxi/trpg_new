@@ -10,6 +10,7 @@ import { characterInstanceService } from '../services/character-sheet-service';
 import { resolveCommand } from '../engine/command-resolver';
 import { announceTime } from '../services/time';
 import { approveMove } from '../services/movement';
+import { logError } from '../utils/structured-logger';
 
 type RoomSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -68,7 +69,7 @@ export function registerChatHandlers(
       } catch (err) {
         const safeMsg = err instanceof Error ? err.message : 'Unknown error';
         socket.emit('error_message', { message: '加入房间失败，请检查权限' });
-        console.error('[join_room] handler error:', { userId, code: 'JOIN_ROOM_FAILED', severity: 'medium', msg: safeMsg });
+        logError('SOCKET_JOIN_ROOM_FAILED', 'medium', safeMsg, { userId });
       }
     });
 
@@ -83,7 +84,7 @@ export function registerChatHandlers(
         }
       } catch (err) {
         const safeMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error('[leave_room] handler error:', { userId, code: 'LEAVE_ROOM_FAILED', severity: 'low', msg: safeMsg });
+        logError('SOCKET_LEAVE_ROOM_FAILED', 'warn', safeMsg, { userId });
       }
     });
 
@@ -226,7 +227,7 @@ export function registerChatHandlers(
         );
       }
       } catch (err) {
-        console.error('[chat_message] handler error:', err);
+        logError('SOCKET_CHAT_MESSAGE_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -277,7 +278,7 @@ export function registerChatHandlers(
         roomNsp.to(`campaign:${campaignId}`).emit('new_message', message);
         roomNsp.to(`campaign:${campaignId}`).emit('time_tag_announced', { time_label: timeLabel, message_id: messageId });
       } catch (err) {
-        console.error('[gm_announce_time] handler error:', err);
+        logError('SOCKET_GM_ANNOUNCE_TIME_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -313,7 +314,7 @@ export function registerChatHandlers(
           }
         }
       } catch (err) {
-        console.error('[request_move] handler error:', err);
+        logError('SOCKET_REQUEST_MOVE_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -385,7 +386,7 @@ export function registerChatHandlers(
           move_type: 'scheduled',
         });
       } catch (err) {
-        console.error('[gm_approve_move] handler error:', err);
+        logError('SOCKET_GM_APPROVE_MOVE_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -417,7 +418,7 @@ export function registerChatHandlers(
           }).catch(() => {});
         }
       } catch (err) {
-        console.error('[gm_reject_move] handler error:', err);
+        logError('SOCKET_GM_REJECT_MOVE_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -473,7 +474,7 @@ export function registerChatHandlers(
           token: data.token,
         });
       } catch (err) {
-        console.error('[grid_token_moved] handler error:', err);
+        logError('SOCKET_GRID_TOKEN_MOVED_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -496,7 +497,7 @@ export function registerChatHandlers(
           overlays,
         });
       } catch (err) {
-        console.error('[grid_area_marked] handler error:', err);
+        logError('SOCKET_GRID_AREA_MARKED_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId });
       }
     });
 
@@ -512,7 +513,7 @@ export function registerChatHandlers(
         socket.removeAllListeners();
       } catch (err) {
         const safeMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error('[disconnect] handler error:', { userId, code: 'DISCONNECT_CLEANUP_FAILED', severity: 'low', msg: safeMsg });
+        logError('SOCKET_DISCONNECT_CLEANUP_FAILED', 'warn', safeMsg, { userId });
       }
     });
   });
@@ -668,7 +669,7 @@ async function handleCommandMessage(
     // 全团广播
     roomNsp.to(`campaign:${campaignId}`).emit('new_message', diceMessage);
   } catch (err) {
-    console.error('[handleCommandMessage] error:', err);
+    logError('SOCKET_COMMAND_MESSAGE_FAILED', 'medium', err instanceof Error ? err.message : String(err), { userId, campaignId });
   }
 }
 

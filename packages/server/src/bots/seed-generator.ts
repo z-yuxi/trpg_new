@@ -9,6 +9,7 @@
  * 使用独立 fetch，不走 ai_usage_log（种子内容不占用用户配额）
  */
 import { randomUUID } from 'crypto';
+import { logWarn } from '../utils/structured-logger';
 import {
   type BoardType,
   type GeneratedPost,
@@ -147,10 +148,10 @@ export class SeedGenerator {
       if (parsed) {
         return { ...parsed, board };
       }
-      console.warn('[SeedGenerator] AI 返回解析失败，使用静态回退');
+      logWarn('SEED_GENERATOR_PARSE_FAILED', 'AI 返回解析失败，使用静态回退');
       return getFallbackPost(board);
     } catch (err) {
-      console.warn('[SeedGenerator] AI 调用失败，使用静态回退:', (err as Error).message);
+      logWarn('SEED_GENERATOR_AI_CALL_FAILED', 'AI 调用失败，使用静态回退', { error: (err as Error).message });
       return getFallbackPost(board);
     }
   }
@@ -177,7 +178,7 @@ export class SeedGenerator {
       const raw = await callDeepSeekDirect(REPLY_SYSTEM_PROMPT, userPrompt);
       return raw.trim().slice(0, 500) || this.getFallbackReply(threadTitle);
     } catch (err) {
-      console.warn('[SeedGenerator] 回复 AI 调用失败，使用静态回退:', (err as Error).message);
+      logWarn('SEED_GENERATOR_REPLY_AI_FAILED', '回复 AI 调用失败，使用静态回退', { error: (err as Error).message });
       return this.getFallbackReply(threadTitle);
     }
   }

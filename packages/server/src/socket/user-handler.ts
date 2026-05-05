@@ -1,6 +1,7 @@
 import type { Namespace, Socket } from 'socket.io';
 import type { ServerToClientEvents, ClientToServerEvents } from '@trpg/shared';
 import { redis, RedisKeys } from '../db/redis';
+import { logError } from '../utils/structured-logger';
 
 type UserSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 type UserNamespace = Namespace<ClientToServerEvents, ServerToClientEvents>;
@@ -29,7 +30,7 @@ export function setupUserHandler(userNsp: UserNamespace): void {
         socket.removeAllListeners();
       } catch (err) {
         const safeMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error('[user:disconnect] error:', { userId, code: 'USER_DISCONNECT_CLEANUP_FAILED', severity: 'low', msg: safeMsg });
+        logError('SOCKET_USER_DISCONNECT_CLEANUP_FAILED', 'warn', safeMsg, { userId });
       }
     });
   });

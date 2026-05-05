@@ -25,6 +25,7 @@ import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import { metrics } from '../utils/business-metrics';
 import { alertManager } from '../utils/alert-manager';
+import { logError, logWarn, logInfo } from '../utils/structured-logger';
 
 // ── 配置 ──────────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ async function scanPendingOrders(): Promise<number> {
       // const result = await queryPaymentProvider(order);
       // if (result?.status === 'paid') { await paymentService.handleCallback(...); }
     } catch (auditErr) {
-      console.error('[PaymentScheduler] 写审计日志失败:', auditErr instanceof Error ? auditErr.message : auditErr);
+      logError('PAYMENT_SCHEDULER_AUDIT_WRITE_FAILED', 'high', auditErr instanceof Error ? auditErr.message : String(auditErr));
     }
   }
 
@@ -87,9 +88,9 @@ async function scanPendingOrders(): Promise<number> {
   metrics.inc('reconcile_triggered');
   metrics.inc('reconcile_pending_timeout', pendingOrders.length);
 
-  console.warn(
-    `[PaymentScheduler] 对账扫描发现 ${pendingOrders.length} 笔超时挂起订单，` +
-    `orderId: ${(pendingOrders as Record<string, unknown>[]).map((o) => o['id']).join(', ')}`,
+  logWarn('PAYMENT_SCHEDULER_PENDING_TIMEOUT',
+    `对账扫描发现 ${pendingOrders.length} 笔超时挂起订单`,
+    { order_ids: (pendingOrders as Record<string, unknown>[]).map((o) => o['id']) },
   );
 
   return pendingOrders.length;
@@ -102,10 +103,10 @@ async function runAlertEval(): Promise<void> {
     const snapshot = metrics.snapshot();
     const fired = await alertManager.evaluate(snapshot);
     if (fired.length > 0) {
-      console.warn(`[AlertManager] 本轮触发 ${fired.length} 条告警:`, fired.map((f) => `[${f.level}] ${f.key}`).join(', '));
+      logWarn('ALERT_MANAGER_ALERTS_FIRED', `本轮触发 ${fired.length} 条告警`, { alerts: fired.map((f) => `[${f.level}] ${f.key}`) });
     }
   } catch (err) {
-    console.error('[AlertManager] 告警评估异常:', err instanceof Error ? err.message : err);
+    logError('ALERT_MANAGER_EVAL_FAILED', 'high', err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -116,34 +117,34 @@ let alertTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startPaymentScheduler(): void {
   if (reconcileTimer || alertTimer) {
-    console.warn('[PaymentScheduler] 调度器已启动，跳过重复启动');
+    logWarn('PAYMENT_SCHEDULER_ALREADY_STARTED', '调度器已启动，跳过重复启动');
     return;
   }
 
   // 启动时立即执行一次，之后按间隔循环
   void scanPendingOrders().catch((err) =>
-    console.error('[PaymentScheduler] 首次对账扫描失败:', err instanceof Error ? err.message : err),
+    logError('PAYMENT_SCHEDULER_FIRST_SCAN_FAILED', 'high', err instanceof Error ? err.message : String(err)),
   );
 
   reconcileTimer = setInterval(async () => {
     try {
       await scanPendingOrders();
     } catch (err) {
-      console.error('[PaymentScheduler] 对账扫描异常:', err instanceof Error ? err.message : err);
+      logError('PAYMENT_SCHEDULER_RECONCILE_SCAN_FAILED', 'high', err instanceof Error ? err.message : String(err));
     }
   }, RECONCILE_INTERVAL_MS);
 
   alertTimer = setInterval(runAlertEval, ALERT_EVAL_INTERVAL_MS);
 
-  console.log(
-    `[PaymentScheduler] 已启动 | 对账间隔=${RECONCILE_INTERVAL_MS / 1000}s` +
-    ` | 告警评估间隔=${ALERT_EVAL_INTERVAL_MS / 1000}s` +
-    ` | 挂起阈值=${RECONCILE_TIMEOUT_MS / 1000}s`,
-  );
+  logInfo('PAYMENT_SCHEDULER_STARTED', '已启动', {
+    reconcile_interval_s: RECONCILE_INTERVAL_MS / 1000,
+    alert_eval_interval_s: ALERT_EVAL_INTERVAL_MS / 1000,
+    pending_timeout_s: RECONCILE_TIMEOUT_MS / 1000,
+  });
 }
 
 export function stopPaymentScheduler(): void {
   if (reconcileTimer) { clearInterval(reconcileTimer); reconcileTimer = null; }
   if (alertTimer)     { clearInterval(alertTimer);     alertTimer     = null; }
-  console.log('[PaymentScheduler] 已停止');
+  logInfo('PAYMENT_SCHEDULER_STOPPED', '已停止');
 }

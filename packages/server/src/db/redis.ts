@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { logError } from '../utils/structured-logger';
 
 const redisConfig = {
   host: process.env.REDIS_HOST || '127.0.0.1',
@@ -14,15 +15,15 @@ const redisConfig = {
 
 /** 主 Redis 客户端（用于常规操作） */
 export const redis = new Redis(redisConfig);
-redis.on('error', (err) => console.error('[Redis] 主客户端错误:', err));
+redis.on('error', (err) => logError('REDIS_CLIENT_ERROR', 'critical', err.message, { client: 'main' }));
 
 /** 发布用客户端 */
 export const redisPub = new Redis(redisConfig);
-redisPub.on('error', (err) => console.error('[Redis] 发布客户端错误:', err));
+redisPub.on('error', (err) => logError('REDIS_CLIENT_ERROR', 'critical', err.message, { client: 'pub' }));
 
 /** 订阅用客户端 */
 export const redisSub = new Redis(redisConfig);
-redisSub.on('error', (err) => console.error('[Redis] 订阅客户端错误:', err));
+redisSub.on('error', (err) => logError('REDIS_CLIENT_ERROR', 'critical', err.message, { client: 'sub' }));
 
 /** Redis key 前缀生成 */
 export const RedisKeys = {

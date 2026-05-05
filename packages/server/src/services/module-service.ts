@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { generateId } from '@trpg/shared';
 import type { Module, ModuleQueryFilter, CreateModuleRequest, UpdateModuleRequest } from '@trpg/shared';
+import { logError } from '../utils/structured-logger';
 
 function rowToModule(row: Record<string, unknown>, includeContent = false): Module {
   const m: Module = {
@@ -401,7 +402,7 @@ export class ModuleService {
       }
     } catch (err) {
       // 快照创建失败不应阻止 autoSave，仅记录错误
-      console.error('[ModuleService] snapshot create failed:', err);
+      logError('MODULE_SNAPSHOT_CREATE_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     }
   }
 

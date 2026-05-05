@@ -5,6 +5,7 @@
 import { Router, type IRouter } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { feedbackService } from '../services/feedback-service';
 import { db } from '../db';
 
@@ -41,7 +42,7 @@ router.post('/campaigns/:campaignId/feedback', authMiddleware, async (req, res) 
   if (!parsed.success) {
     return res.status(400).json({ error: '参数错误', details: parsed.error.issues });
   }
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   try {
     const feedback = await feedbackService.upsertFeedback(
       req.params.campaignId,
@@ -64,7 +65,7 @@ router.post('/campaigns/:campaignId/feedback', authMiddleware, async (req, res) 
  * 获取当前用户自己的反馈
  */
 router.get('/campaigns/:campaignId/feedback/me', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   try {
     const feedback = await feedbackService.getMyFeedback(req.params.campaignId, userId);
     return res.json({ data: feedback });
@@ -78,7 +79,7 @@ router.get('/campaigns/:campaignId/feedback/me', authMiddleware, async (req, res
  * GM 获取全量反馈列表 + 未提交名单
  */
 router.get('/campaigns/:campaignId/feedback', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const isGm = await ensureGm(req.params.campaignId, userId);
   if (!isGm) {
     return res.status(403).json({ error: 'FORBIDDEN' });
@@ -96,7 +97,7 @@ router.get('/campaigns/:campaignId/feedback', authMiddleware, async (req, res) =
  * 软删除当前用户的反馈
  */
 router.delete('/campaigns/:campaignId/feedback', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   try {
     await feedbackService.deleteFeedback(req.params.campaignId, userId);
     return res.status(204).send();
@@ -116,7 +117,7 @@ router.patch('/campaigns/:campaignId/feedback/visibility', authMiddleware, async
   if (!parsed.success) {
     return res.status(400).json({ error: '参数错误', details: parsed.error.issues });
   }
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   try {
     await feedbackService.updateVisibility(
       req.params.campaignId,

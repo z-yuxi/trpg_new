@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { safeErrorMessage } from '../utils/error-response';
 
 const router = Router();
@@ -48,7 +49,7 @@ router.get('/', async (req, res) => {
   }
   try {
     const rows = await db('annotations')
-      .where({ user_id: req.user!.id, asset_type, asset_id })
+      .where({ user_id: getAuthedUser(req).id, asset_type, asset_id })
       .orderBy('range_start', 'asc');
     res.json(rows);
   } catch (err: unknown) {
@@ -72,7 +73,7 @@ router.post('/', async (req, res) => {
     const now = new Date();
     await db('annotations').insert({
       id,
-      user_id: req.user!.id,
+      user_id: getAuthedUser(req).id,
       asset_type,
       asset_id,
       selected_text,
@@ -101,7 +102,7 @@ router.patch('/:id', async (req, res) => {
     return;
   }
   try {
-    const existing = await db('annotations').where({ id: req.params.id, user_id: req.user!.id }).first();
+    const existing = await db('annotations').where({ id: req.params.id, user_id: getAuthedUser(req).id }).first();
     if (!existing) {
       res.status(404).json({ error: 'Annotation not found' });
       return;
@@ -124,7 +125,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const deleted = await db('annotations')
-      .where({ id: req.params.id, user_id: req.user!.id })
+      .where({ id: req.params.id, user_id: getAuthedUser(req).id })
       .delete();
     if (!deleted) {
       res.status(404).json({ error: 'Annotation not found' });

@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { authMiddleware } from '../middleware/auth';
 import { uploadLimiter } from '../middleware/rate-limiter';
+import { logError } from '../utils/structured-logger';
 
 const router: IRouter = Router();
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
@@ -81,7 +82,7 @@ router.post('/', authMiddleware, uploadLimiter, (req, res) => {
     } catch (err) {
       // 清理临时文件
       if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-      console.error('[Upload] Error:', err);
+      logError('UPLOAD_FAILED', 'medium', err instanceof Error ? err.message : String(err));
       res.status(500).json({ error: '上传处理失败' });
     }
   });

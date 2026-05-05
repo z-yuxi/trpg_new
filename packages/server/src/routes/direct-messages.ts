@@ -10,6 +10,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
 import { db } from '../db';
 import { metrics } from '../utils/business-metrics';
 
@@ -38,7 +39,7 @@ async function getUnreadCount(convId: string, userId: string): Promise<number> {
 
 // ── GET /api/messages/conversations ──────────────────────────────────────
 router.get('/conversations', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
 
   const rows = await db('direct_conversations as dc')
     .where('dc.user_a_id', userId)
@@ -72,7 +73,7 @@ router.get('/conversations', authMiddleware, async (req, res) => {
 // body: { target_user_id: string }
 // 幂等：若已存在则直接返回
 router.post('/conversations', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const { target_user_id } = req.body as { target_user_id?: string };
   if (!target_user_id || typeof target_user_id !== 'string') {
     return res.status(400).json({ error: 'MISSING_TARGET_USER_ID' });
@@ -104,7 +105,7 @@ router.post('/conversations', authMiddleware, async (req, res) => {
 
 // ── GET /api/messages/conversations/:id/messages ──────────────────────────
 router.get('/conversations/:id/messages', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const convId = req.params['id']!;
 
   const conv = await db('direct_conversations')
@@ -136,7 +137,7 @@ router.get('/conversations/:id/messages', authMiddleware, async (req, res) => {
 
 // ── POST /api/messages/conversations/:id/messages ─────────────────────────
 router.post('/conversations/:id/messages', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const convId = req.params['id']!;
 
   const conv = await db('direct_conversations')
@@ -191,7 +192,7 @@ router.post('/conversations/:id/messages', authMiddleware, async (req, res) => {
 
 // ── PUT /api/messages/conversations/:id/read ──────────────────────────────
 router.put('/conversations/:id/read', authMiddleware, async (req, res) => {
-  const userId = req.user!.id;
+  const userId = getAuthedUser(req).id;
   const convId = req.params['id']!;
 
   const conv = await db('direct_conversations')

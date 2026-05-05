@@ -1,6 +1,6 @@
 import type { NodeExecutionLog, EngineErrorCode } from '@trpg/shared';
 import type { AtomRegistry } from './registry';
-import { GRAPH_MAX_NODES } from './sandbox-limits';
+import { GRAPH_MAX_NODES, EXEC_TIMEOUT_MS } from './sandbox-limits';
 
 /** 输入来源：静态值 或 引用其他节点的输出 */
 export type InputSource =
@@ -37,6 +37,7 @@ export class GraphExecutor {
 
   execute(graph: GraphDef): GraphExecuteResult {
     const logs: NodeExecutionLog[] = [];
+    const execStart = Date.now();
 
     if (!graph.nodes || graph.nodes.length === 0) {
       return { success: false, output: null, error: 'Graph has no nodes', error_code: 'STEP_RESULT_UNAVAILABLE', logs };
@@ -121,6 +122,27 @@ export class GraphExecutor {
         };
       }
 
+      if (Date.now() - execStart > EXEC_TIMEOUT_MS) {
+        logs.push({
+          node_id: nodeId,
+          node_type: nodeDef.atom_type,
+          inputs: resolvedInputs,
+          output: null,
+          duration_ms: Date.now() - execStart,
+          status: 'failed',
+          error_code: 'EXPRESSION_TIMEOUT',
+          error_message: `Graph execution exceeded ${EXEC_TIMEOUT_MS}ms timeout`,
+        });
+        return {
+          success: false,
+          output: null,
+          failed_node_id: nodeId,
+          error_code: 'EXPRESSION_TIMEOUT',
+          error: `Graph execution exceeded ${EXEC_TIMEOUT_MS}ms timeout`,
+          logs,
+        };
+      }
+
       const start = Date.now();
       let atomOutput;
       try {
@@ -147,6 +169,28 @@ export class GraphExecutor {
         };
       }
       const duration_ms = Date.now() - start;
+
+      // Post-execution timeout check: catches atoms that ran long enough to breach the limit
+      if (Date.now() - execStart > EXEC_TIMEOUT_MS) {
+        logs.push({
+          node_id: nodeId,
+          node_type: nodeDef.atom_type,
+          inputs: resolvedInputs,
+          output: null,
+          duration_ms,
+          status: 'failed',
+          error_code: 'EXPRESSION_TIMEOUT',
+          error_message: `Graph execution exceeded ${EXEC_TIMEOUT_MS}ms timeout`,
+        });
+        return {
+          success: false,
+          output: null,
+          failed_node_id: nodeId,
+          error_code: 'EXPRESSION_TIMEOUT',
+          error: `Graph execution exceeded ${EXEC_TIMEOUT_MS}ms timeout`,
+          logs,
+        };
+      }
 
       nodeResults.set(nodeId, atomOutput.result);
       logs.push({

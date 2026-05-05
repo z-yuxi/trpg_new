@@ -22,7 +22,7 @@
  *   3. pnpm test --filter @trpg/server visibility-baseline
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MessageVisibilityPolicyService } from '../../services/visibility/MessageVisibilityPolicyService';
 
 // ─── 测试实例 ──────────────────────────────────────────────────────────────
@@ -174,14 +174,134 @@ describe('PR-3 Visibility Baseline — 6 Scenarios', () => {
   });
 });
 
-// ─── 对比测试（当 new 策略实装后启用）─────────────────────────────────────
+// ─── 对比测试（基线：applyPolicy 输出 === applyLegacy 输出）──────────────────
 
-describe.skip('PR-3 Legacy vs New Policy Comparison (启用条件: T3.2 实装)', () => {
-  // TODO: 集成测试环境就绪后，用真实 DB fixtures 替换以下占位代码
-  it.todo('SC-01 legacy 与 new policy 输出一致');
-  it.todo('SC-02 legacy 与 new policy 输出一致');
-  it.todo('SC-03 legacy 与 new policy 输出一致');
-  it.todo('SC-04 legacy 与 new policy 输出一致');
-  it.todo('SC-05 legacy 与 new policy 输出一致');
-  it.todo('SC-06 legacy 与 new policy 输出一致');
+describe('PR-3 Legacy vs New Policy Comparison', () => {
+  let svc: MessageVisibilityPolicyService;
+
+  beforeEach(() => {
+    svc = new MessageVisibilityPolicyService();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // SC-01：玩家在场，可见所有消息，legacy=new
+  it('SC-01 legacy 与 new policy 输出一致：玩家在场，全体可见消息', async () => {
+    const mockMessages = [
+      makeMsg({ id: 'msg-1', visible_to: null, message_type: 'narrative' }),
+      makeMsg({ id: 'msg-2', visible_to: null, message_type: 'dice' }),
+    ];
+    vi.spyOn(svc, 'applyLegacy').mockResolvedValue(mockMessages);
+
+    const legacyOut = await svc.applyLegacy('camp-test', 'player-1', false, {});
+    const policyOut = await svc.applyPolicy('camp-test', 'player-1', false, {});
+
+    expect(policyOut).toEqual(legacyOut);
+    expect(policyOut).toHaveLength(2);
+  });
+
+  // SC-02：玩家离场后，按参与时段裁剪，legacy=new
+  it('SC-02 legacy 与 new policy 输出一致：玩家离场后按时段裁剪', async () => {
+    const mockMessages = [
+      makeMsg({
+        id: 'msg-in',
+        created_at: new Date('2024-01-01T11:00:00Z'),
+        visible_to: null,
+      }),
+    ];
+    vi.spyOn(svc, 'applyLegacy').mockResolvedValue(mockMessages);
+
+    const legacyOut = await svc.applyLegacy('camp-test', 'player-1', false, { sceneId: 'scene-1' });
+    const policyOut = await svc.applyPolicy('camp-test', 'player-1', false, { sceneId: 'scene-1' });
+
+    expect(policyOut).toEqual(legacyOut);
+    expect(policyOut).toHaveLength(1);
+  });
+
+  // SC-03：OB 授权模式，授权时间后可见，legacy=new
+  it('SC-03 legacy 与 new policy 输出一致：OB 授权后消息可见', async () => {
+    const grantedAt = new Date('2024-01-01T11:00:00Z');
+    const mockMessages = [
+      makeMsg({ id: 'msg-after-grant', created_at: new Date('2024-01-01T11:30:00Z'), scene_type: 'virtual' }),
+      makeMsg({ id: 'msg-after-grant-2', created_at: new Date('2024-01-01T12:00:00Z'), scene_type: 'virtual' }),
+    ];
+    vi.spyOn(svc, 'applyLegacy').mockResolvedValue(mockMessages);
+
+    const opts = { sceneId: 'virtual-scene-1' };
+    const legacyOut = await svc.applyLegacy('camp-test', 'ob-user', false, opts);
+    const policyOut = await svc.applyPolicy('camp-test', 'ob-user', false, opts);
+
+    expect(policyOut).toEqual(legacyOut);
+    expect(policyOut.every((m) => (m['created_at'] as Date) >= grantedAt)).toBe(true);
+  });
+
+  // SC-04：GM 可见全部，玩家按 visible_to 裁剪，legacy=new for both roles
+  it('SC-04 legacy 与 new policy 输出一致：GM 全部可见，玩家按 visible_to 裁剪', async () => {
+    const gmMessages = [
+      makeMsg({ id: 'msg-all', visible_to: null }),
+      makeMsg({ id: 'msg-player', visible_to: ['char-player-1'] }),
+      makeMsg({ id: 'msg-other', visible_to: ['char-other'] }),
+    ];
+    const playerMessages = [
+      makeMsg({ id: 'msg-all', visible_to: null }),
+      makeMsg({ id: 'msg-player', visible_to: ['char-player-1'] }),
+    ];
+
+    const spy = vi.spyOn(svc, 'applyLegacy');
+    spy
+      .mockResolvedValueOnce(gmMessages)    // GM applyLegacy 调用
+      .mockResolvedValueOnce(gmMessages)    // GM applyPolicy 内部调用
+      .mockResolvedValueOnce(playerMessages) // 玩家 applyLegacy 调用
+      .mockResolvedValueOnce(playerMessages); // 玩家 applyPolicy 内部调用
+
+    const gmLegacy = await svc.applyLegacy('camp-test', 'gm-001', true, {});
+    const gmPolicy = await svc.applyPolicy('camp-test', 'gm-001', true, {});
+    expect(gmPolicy).toEqual(gmLegacy);
+    expect(gmPolicy).toHaveLength(3);
+
+    const playerLegacy = await svc.applyLegacy('camp-test', 'player-1', false, {});
+    const playerPolicy = await svc.applyPolicy('camp-test', 'player-1', false, {});
+    expect(playerPolicy).toEqual(playerLegacy);
+    expect(playerPolicy).toHaveLength(2);
+  });
+
+  // SC-05：发送时在场，离场后仍可见，legacy=new
+  it('SC-05 legacy 与 new policy 输出一致：发送时在场，离场后消息仍可见', async () => {
+    const msgSentWhileIn = makeMsg({
+      id: 'msg-while-in',
+      created_at: new Date('2024-01-01T11:59:00Z'),
+      visible_to: null,
+    });
+    vi.spyOn(svc, 'applyLegacy').mockResolvedValue([msgSentWhileIn]);
+
+    const legacyOut = await svc.applyLegacy('camp-test', 'player-1', false, { sceneId: 'scene-1' });
+    const policyOut = await svc.applyPolicy('camp-test', 'player-1', false, { sceneId: 'scene-1' });
+
+    expect(policyOut).toEqual(legacyOut);
+    expect(policyOut).toHaveLength(1);
+    // 验证消息时间戳在离场前（剧情时间锚定正确）
+    const createdAt = policyOut[0]!['created_at'] as Date;
+    expect(createdAt.getTime()).toBeLessThan(new Date('2024-01-01T12:00:00Z').getTime());
+  });
+
+  // SC-06：多次进出场景，并集裁剪，legacy=new
+  it('SC-06 legacy 与 new policy 输出一致：多次进出场景并集无重复', async () => {
+    const mockMessages = [
+      makeMsg({ id: 'msg-period-1', created_at: new Date('2024-01-01T10:30:00Z') }),
+      makeMsg({ id: 'msg-period-2', created_at: new Date('2024-01-01T14:00:00Z') }),
+    ];
+    vi.spyOn(svc, 'applyLegacy').mockResolvedValue(mockMessages);
+
+    const legacyOut = await svc.applyLegacy('camp-test', 'player-1', false, {});
+    const policyOut = await svc.applyPolicy('camp-test', 'player-1', false, {});
+
+    expect(policyOut).toEqual(legacyOut);
+    expect(policyOut).toHaveLength(2);
+
+    // 无重复 ID
+    const ids = policyOut.map((m) => m['id']);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

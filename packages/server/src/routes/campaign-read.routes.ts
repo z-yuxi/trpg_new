@@ -1,8 +1,8 @@
 /**
- * campaign-read.routes.ts — 战役只读端点
+ * campaign-read.routes.ts �?战役只读端点
  *
- * 职责：列表、详情、场景、消息历史、成员、角色、移动列表、线索查询。
- * 禁止：写数据、权限变更逻辑、直接 Socket.IO 推送。
+ * 职责：列表、详情、场景、消息历史、成员、角色、移动列表、线索查询�?
+ * 禁止：写数据、权限变更逻辑、直�?Socket.IO 推送�?
  */
 
 import { Router } from 'express';
@@ -23,13 +23,16 @@ import {
   toStoryMinutes,
   serverErr,
 } from './campaign-utils';
+import { authMiddleware } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed';
+import { logError } from '../utils/structured-logger';
 
 export const campaignReadRouter = Router();
 
 // GET /api/campaigns
 campaignReadRouter.get('/', async (req, res) => {
   try {
-    const campaigns = await campaignService.findByUserId(req.user!.id);
+    const campaigns = await campaignService.findByUserId(getAuthedUser(req).id);
     res.json(campaigns);
   } catch (err: unknown) {
     serverErr(res, err);
@@ -38,7 +41,7 @@ campaignReadRouter.get('/', async (req, res) => {
 
 // GET /api/campaigns/:id
 campaignReadRouter.get('/:id', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   const campaign = await campaignService.findById(req.params.id);
   if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
@@ -47,7 +50,7 @@ campaignReadRouter.get('/:id', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes
 campaignReadRouter.get('/:id/scenes', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const scenes = await campaignService.listScenes(req.params.id);
@@ -59,7 +62,7 @@ campaignReadRouter.get('/:id/scenes', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes/:sceneId/grid-map
 campaignReadRouter.get('/:id/scenes/:sceneId/grid-map', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const map = await campaignService.getGridMap(req.params.id, req.params.sceneId);
@@ -71,7 +74,7 @@ campaignReadRouter.get('/:id/scenes/:sceneId/grid-map', async (req, res) => {
 
 // GET /api/campaigns/:id/scenes/:sceneId/participants
 campaignReadRouter.get('/:id/scenes/:sceneId/participants', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const { getParticipants } = await import('../services/scene-participation.js');
@@ -90,7 +93,7 @@ campaignReadRouter.get('/:id/scenes/:sceneId/ob-permissions', async (req, res) =
       .first();
     if (!scene) { res.status(404).json({ error: 'SCENE_NOT_FOUND' }); return; }
 
-    const canManage = await canManageSceneObPermission(req.params.sceneId, req.user!.id);
+    const canManage = await canManageSceneObPermission(req.params.sceneId, getAuthedUser(req).id);
     if (!canManage) { res.status(403).json({ error: 'FORBIDDEN' }); return; }
 
     const permissions = await listSceneActiveObPermissions(req.params.sceneId);
@@ -103,7 +106,7 @@ campaignReadRouter.get('/:id/scenes/:sceneId/ob-permissions', async (req, res) =
 // GET /api/campaigns/:id/my-ob-permission-scenes
 campaignReadRouter.get('/:id/my-ob-permission-scenes', async (req, res) => {
   try {
-    const userId = req.user!.id;
+    const userId = getAuthedUser(req).id;
     const obPermissionMap = await getSceneActiveObPermissionMap(req.params.id, userId);
     res.json(Array.from(obPermissionMap.keys()));
   } catch (err: unknown) {
@@ -111,7 +114,7 @@ campaignReadRouter.get('/:id/my-ob-permission-scenes', async (req, res) => {
       typeof (err as Record<string, unknown>)?.status === 'number'
         ? ((err as Record<string, unknown>).status as number)
         : 500;
-    console.error('[campaigns:myObPermissionScenes]', err instanceof Error ? err.message : err);
+    logError('CAMPAIGNS_MY_OB_SCENES_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     res.status(status).json({ error: (err as Error).message ?? '加载旁听权限失败' });
   }
 });
@@ -120,7 +123,7 @@ campaignReadRouter.get('/:id/my-ob-permission-scenes', async (req, res) => {
 campaignReadRouter.get('/:id/my-virtual-scenes', async (req, res) => {
   try {
     const campaignId = req.params.id;
-    const userId = req.user!.id;
+    const userId = getAuthedUser(req).id;
     const charRows = await db('character_sheets')
       .where({ user_id: userId })
       .join('character_scene_states', 'character_sheets.id', 'character_scene_states.character_id')
@@ -144,7 +147,7 @@ campaignReadRouter.get('/:id/my-virtual-scenes', async (req, res) => {
 
 // GET /api/campaigns/:id/connections
 campaignReadRouter.get('/:id/connections', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     res.json(await listSceneConnections(req.params.id));
@@ -153,7 +156,7 @@ campaignReadRouter.get('/:id/connections', async (req, res) => {
   }
 });
 
-// GET /api/campaigns/:id/scenes/connections (兼容旧路径)
+// GET /api/campaigns/:id/scenes/connections (兼容旧路�?
 campaignReadRouter.get('/:id/scenes/connections', async (req, res) => {
   try {
     res.json(await listSceneConnections(req.params.id));
@@ -164,7 +167,7 @@ campaignReadRouter.get('/:id/scenes/connections', async (req, res) => {
 
 // GET /api/campaigns/:id/npcs
 campaignReadRouter.get('/:id/npcs', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     res.json(await db('campaign_npcs').where({ campaign_id: req.params.id }));
@@ -173,11 +176,11 @@ campaignReadRouter.get('/:id/npcs', async (req, res) => {
   }
 });
 
-// GET /api/campaigns/:id/messages  ← 接入 MessageVisibilityPolicyService
+// GET /api/campaigns/:id/messages  �?接入 MessageVisibilityPolicyService
 campaignReadRouter.get('/:id/messages', async (req, res) => {
   try {
     const campaignId = req.params.id;
-    const userId = req.user!.id;
+    const userId = getAuthedUser(req).id;
 
     const memberAuth = await ensureCampaignMember(campaignId, userId);
     if (!memberAuth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
@@ -198,7 +201,7 @@ campaignReadRouter.get('/:id/messages', async (req, res) => {
 
 // GET /api/campaigns/:id/round-state
 campaignReadRouter.get('/:id/round-state', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const state =
@@ -211,7 +214,7 @@ campaignReadRouter.get('/:id/round-state', async (req, res) => {
 
 // GET /api/campaigns/:id/position-history
 campaignReadRouter.get('/:id/position-history', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const history = await db('position_history')
@@ -225,7 +228,7 @@ campaignReadRouter.get('/:id/position-history', async (req, res) => {
 
 // GET /api/campaigns/:id/trajectory-matrix
 campaignReadRouter.get('/:id/trajectory-matrix', async (req, res) => {
-  const auth = await ensureCampaignMember(req.params.id, req.user!.id);
+  const auth = await ensureCampaignMember(req.params.id, getAuthedUser(req).id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
   try {
     const campaignId = req.params.id;
@@ -393,7 +396,7 @@ campaignReadRouter.get('/:id/characters/:charId', async (req, res) => {
     if (!state) { res.status(404).json({ error: 'Character not in campaign' }); return; }
     const sheet = await db('character_sheets').where({ id: req.params.charId }).first();
     if (!sheet) { res.status(404).json({ error: 'Not found' }); return; }
-    if (sheet.user_id !== req.user!.id && campaign.gm_user_id !== req.user!.id) {
+    if (sheet.user_id !== getAuthedUser(req).id && campaign.gm_user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     res.json({
@@ -416,7 +419,7 @@ campaignReadRouter.get('/:id/scheduled-moves', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const status = req.query['status'];
     const moves = await scheduledMoveService.listByCampaign({
       campaign_id: req.params.id,
@@ -433,7 +436,7 @@ campaignReadRouter.get('/:id/moves', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { listMoves } = await import('../services/movement.js');
     res.json(await listMoves(req.params.id, req.query.status as string | undefined));
   } catch (err: unknown) {
@@ -446,7 +449,7 @@ campaignReadRouter.get('/:id/moves/pending', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { listMoves } = await import('../services/movement.js');
     res.json(await listMoves(req.params.id, 'pending'));
   } catch (err: unknown) {
@@ -459,7 +462,7 @@ campaignReadRouter.get('/:id/moves/upcoming', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { listMoves } = await import('../services/movement.js');
     res.json(await listMoves(req.params.id, 'approved'));
   } catch (err: unknown) {
@@ -472,13 +475,13 @@ campaignReadRouter.get('/:id/clues', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id === req.user!.id) {
+    if (campaign.gm_user_id === getAuthedUser(req).id) {
       res.json(await clueService.listByCampaign(req.params.id));
     } else {
       const charRows = await db('character_sheets as cs')
         .join('character_scene_states as css', 'css.character_id', 'cs.id')
         .where('css.campaign_id', req.params.id)
-        .where('cs.user_id', req.user!.id)
+        .where('cs.user_id', getAuthedUser(req).id)
         .select('cs.id');
       const charIds = (charRows as Array<{ id: string }>).map((row) => row.id);
       res.json(await clueService.listVisibleToCharacters(req.params.id, charIds));
@@ -497,11 +500,11 @@ campaignReadRouter.get('/:id/clues/:clueId', async (req, res) => {
     if (!clue || clue.campaign_id !== req.params.id) {
       res.status(404).json({ error: 'Clue not found' }); return;
     }
-    if (campaign.gm_user_id !== req.user!.id) {
+    if (campaign.gm_user_id !== getAuthedUser(req).id) {
       const charRows = await db('character_sheets as cs')
         .join('character_scene_states as css', 'css.character_id', 'cs.id')
         .where('css.campaign_id', req.params.id)
-        .where('cs.user_id', req.user!.id)
+        .where('cs.user_id', getAuthedUser(req).id)
         .select('cs.id');
       const charIds = (charRows as Array<{ id: string }>).map((row) => row.id);
       const canView = clue.revealed_to == null || clue.revealed_to.some((id) => charIds.includes(id));

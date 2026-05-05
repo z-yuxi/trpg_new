@@ -1,8 +1,8 @@
 /**
- * campaign-write.routes.ts — 战役写入端点
+ * campaign-write.routes.ts �?战役写入端点
  *
- * 职责：创建、更新、删除战役/场景/NPC/线索、角色加入/离场、移动管理。
- * 禁止：直接查询只读数据做展示、OB 权限推送（由 campaign-realtime.routes.ts 负责）。
+ * 职责：创建、更新、删除战�?场景/NPC/线索、角色加�?离场、移动管理�?
+ * 禁止：直接查询只读数据做展示、OB 权限推送（�?campaign-realtime.routes.ts 负责）�?
  */
 
 import { Router } from 'express';
@@ -26,10 +26,12 @@ import {
   createNpcSchema,
   updateNpcSchema,
 } from './campaign-utils';
+import { getAuthedUser } from '../middleware/auth-typed';
+import { logError } from '../utils/structured-logger';
 
 export const campaignWriteRouter = Router();
 
-// 速率限制：防止房间码遍历，每 IP 每分钟最多 20 次
+// 速率限制：防止房间码遍历，每 IP 每分钟最�?20 �?
 const joinLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
@@ -52,7 +54,7 @@ campaignWriteRouter.post('/', async (req, res) => {
       name: parsed.data.name,
       ruleset_id: parsed.data.ruleset_id,
       module_id: parsed.data.module_id ?? undefined,
-      gm_user_id: req.user!.id,
+      gm_user_id: getAuthedUser(req).id,
       is_listed_publicly: parsed.data.is_listed_publicly,
       allow_ob: parsed.data.allow_ob,
     });
@@ -70,7 +72,7 @@ campaignWriteRouter.post('/quick-create', async (req, res) => {
     return;
   }
   const { name, ruleset_id, module_id, allow_ob, is_listed_publicly, recruit, recruitment } = parsed.data;
-  const gmUserId = req.user!.id;
+  const gmUserId = getAuthedUser(req).id;
 
   try {
     const campaign = await campaignService.create({
@@ -111,7 +113,7 @@ campaignWriteRouter.post('/quick-create', async (req, res) => {
   }
 });
 
-// POST /api/campaigns/join（必须在 /:id 之前注册）
+// POST /api/campaigns/join（必须在 /:id 之前注册�?
 campaignWriteRouter.post('/join', joinLimiter, async (req, res) => {
   const { code } = req.body;
   if (!code) { res.status(400).json({ error: 'room code is required' }); return; }
@@ -125,7 +127,7 @@ campaignWriteRouter.put('/:id', async (req, res) => {
   try {
     const campaign = await campaignService.findById(req.params.id);
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update campaign' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can update campaign' }); return; }
     const allowed = ['name', 'description', 'status', 'global_story_time', 'ruleset_id'];
     const safeBody: Record<string, unknown> = {};
     for (const key of allowed) {
@@ -151,7 +153,7 @@ campaignWriteRouter.post('/:id/scenes', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create scenes' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can create scenes' }); return; }
     const id = generateId();
     await db('scenes').insert({
       id,
@@ -160,7 +162,7 @@ campaignWriteRouter.post('/:id/scenes', async (req, res) => {
       type: parsed.data.type ?? 'room',
       description: parsed.data.description ?? '',
       atmosphere_keywords: JSON.stringify(parsed.data.atmosphere_keywords ?? []),
-      created_by: req.user!.id,
+      created_by: getAuthedUser(req).id,
     });
     const scene = await db('scenes').where({ id }).first();
     res.status(201).json({ ...scene, atmosphere_keywords: parsed.data.atmosphere_keywords ?? [] });
@@ -174,7 +176,7 @@ campaignWriteRouter.put('/:id/scenes/:sceneId', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const updates: Record<string, unknown> = {};
     if (req.body.name !== undefined) updates.name = req.body.name;
     if (req.body.description !== undefined) updates.description = req.body.description;
@@ -201,7 +203,7 @@ campaignWriteRouter.delete('/:id/scenes/:sceneId', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     await db.transaction(async (trx) => {
       const occupants = await trx('character_scene_states')
         .where({ current_spatial_scene_id: req.params.sceneId })
@@ -218,7 +220,7 @@ campaignWriteRouter.delete('/:id/scenes/:sceneId', async (req, res) => {
       typeof (err as Record<string, unknown>)?.status === 'number'
         ? ((err as Record<string, unknown>).status as number)
         : 500;
-    console.error('[campaigns:deleteScene]', err instanceof Error ? err.message : err);
+    logError('CAMPAIGNS_DELETE_SCENE_FAILED', 'medium', err instanceof Error ? err.message : String(err));
     res.status(status).json({ error: safeErrorMessage(err, '删除失败') });
   }
 });
@@ -228,7 +230,7 @@ campaignWriteRouter.put('/:id/scenes/:sceneId/grid-map', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) {
+    if (campaign.gm_user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Only GM can update grid map' }); return;
     }
     const body = req.body as {
@@ -253,7 +255,7 @@ campaignWriteRouter.post('/:id/characters/:characterId/join', async (req, res) =
     const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
     const character = await db('character_sheets').where({ id: characterId }).select('user_id').first();
     if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
-    if (character.user_id !== req.user!.id && campaign.gm_user_id !== req.user!.id) {
+    if (character.user_id !== getAuthedUser(req).id && campaign.gm_user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const instance = await characterInstanceService.getOrCreate({
@@ -276,7 +278,7 @@ campaignWriteRouter.post('/:id/scenes/:sceneId/join', async (req, res) => {
     const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
     const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
     if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id && character.user_id !== req.user!.id) {
+    if (campaign.gm_user_id !== getAuthedUser(req).id && character.user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const { joinScene } = await import('../services/scene-participation.js');
@@ -296,7 +298,7 @@ campaignWriteRouter.post('/:id/scenes/:sceneId/leave', async (req, res) => {
     const campaign = await db('campaigns').where({ id: campaignId }).select('gm_user_id').first();
     const character = await db('character_sheets').where({ id: character_id }).select('user_id').first();
     if (!campaign || !character) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id && character.user_id !== req.user!.id) {
+    if (campaign.gm_user_id !== getAuthedUser(req).id && character.user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const { leaveScene } = await import('../services/scene-participation.js');
@@ -354,7 +356,7 @@ async function upsertSceneConnection(
 // POST /api/campaigns/:id/connections
 campaignWriteRouter.post('/:id/connections', async (req, res) => {
   try {
-    const result = await upsertSceneConnection(req.params.id, req.user!.id, req.body);
+    const result = await upsertSceneConnection(req.params.id, getAuthedUser(req).id, req.body);
     res.status(result.status).json(result.body);
   } catch (err: unknown) {
     serverErr(res, err);
@@ -364,7 +366,7 @@ campaignWriteRouter.post('/:id/connections', async (req, res) => {
 // PUT /api/campaigns/:id/connections/:connId
 campaignWriteRouter.put('/:id/connections/:connId', async (req, res) => {
   try {
-    const result = await upsertSceneConnection(req.params.id, req.user!.id, req.body, req.params.connId);
+    const result = await upsertSceneConnection(req.params.id, getAuthedUser(req).id, req.body, req.params.connId);
     res.status(result.status).json(result.body);
   } catch (err: unknown) {
     serverErr(res, err);
@@ -374,7 +376,7 @@ campaignWriteRouter.put('/:id/connections/:connId', async (req, res) => {
 // DELETE /api/campaigns/:id/connections/:connId
 campaignWriteRouter.delete('/:id/connections/:connId', async (req, res) => {
   try {
-    const auth = await ensureCampaignGm(req.params.id, req.user!.id);
+    const auth = await ensureCampaignGm(req.params.id, getAuthedUser(req).id);
     if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
     const deleted = await db('scene_connections')
       .where({ id: req.params.connId, campaign_id: req.params.id })
@@ -386,10 +388,10 @@ campaignWriteRouter.delete('/:id/connections/:connId', async (req, res) => {
   }
 });
 
-// 兼容旧路径 POST /:id/scenes/connections
+// 兼容旧路�?POST /:id/scenes/connections
 campaignWriteRouter.post('/:id/scenes/connections', async (req, res) => {
   try {
-    const result = await upsertSceneConnection(req.params.id, req.user!.id, req.body);
+    const result = await upsertSceneConnection(req.params.id, getAuthedUser(req).id, req.body);
     res.status(result.status).json(result.body);
   } catch (err: unknown) {
     serverErr(res, err);
@@ -408,12 +410,12 @@ campaignWriteRouter.post('/:id/npcs', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create NPCs' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can create NPCs' }); return; }
     const id = generateId();
     await db('campaign_npcs').insert({
       id,
       campaign_id: req.params.id,
-      created_by: req.user!.id,
+      created_by: getAuthedUser(req).id,
       name: parsed.data.name,
       display_name: parsed.data.display_name ?? parsed.data.name,
       description: parsed.data.description,
@@ -444,7 +446,7 @@ campaignWriteRouter.put('/:id/npcs/:npcId', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update NPCs' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can update NPCs' }); return; }
     const updates: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(parsed.data)) {
       if (val !== undefined) updates[key] = val;
@@ -459,12 +461,12 @@ campaignWriteRouter.put('/:id/npcs/:npcId', async (req, res) => {
 
 // ─── 移动管理 ──────────────────────────────────────────────────────────────
 
-// POST /api/campaigns/:id/force-move（旧路径兼容）
+// POST /api/campaigns/:id/force-move（旧路径兼容�?
 campaignWriteRouter.post('/:id/force-move', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) {
+    if (campaign.gm_user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Only GM can force move characters' }); return;
     }
     const { character_id, to_scene_id } = req.body;
@@ -472,7 +474,7 @@ campaignWriteRouter.post('/:id/force-move', async (req, res) => {
       res.status(400).json({ error: 'character_id and to_scene_id are required' }); return;
     }
     const { forceMove } = await import('../services/movement.js');
-    const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
+    const result = await forceMove(character_id, to_scene_id, req.params.id, getAuthedUser(req).id);
     res.json({ character_id, ...result });
   } catch (err: unknown) {
     serverErr(res, err);
@@ -484,13 +486,13 @@ campaignWriteRouter.post('/:id/time/announce', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { announceTime } = await import('../services/time.js');
     const result = await announceTime(
       req.params.id,
       String(req.body.scene_id ?? ''),
       String(req.body.time_label ?? ''),
-      req.user!.id,
+      getAuthedUser(req).id,
     );
     res.json(result);
   } catch (err: unknown) {
@@ -512,7 +514,7 @@ campaignWriteRouter.post('/:id/moves/request', async (req, res) => {
       .select('gm_user_id', 'global_story_time')
       .first();
     if (!character || !campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (character.user_id !== req.user!.id && campaign.gm_user_id !== req.user!.id) {
+    if (character.user_id !== getAuthedUser(req).id && campaign.gm_user_id !== getAuthedUser(req).id) {
       res.status(403).json({ error: 'Forbidden' }); return;
     }
     const sceneState = await db('character_scene_states')
@@ -554,7 +556,7 @@ campaignWriteRouter.post('/:id/moves/request', async (req, res) => {
         execute_at_story: null,
       });
     } catch (moveErr: unknown) {
-      console.error('[campaigns:requestMove]', moveErr instanceof Error ? moveErr.message : moveErr);
+      logError('CAMPAIGNS_REQUEST_MOVE_FAILED', 'medium', moveErr instanceof Error ? moveErr.message : String(moveErr));
       res.status(400).json({ error: safeErrorMessage(moveErr, '移动申请失败') });
     }
   } catch (err: unknown) {
@@ -567,9 +569,9 @@ campaignWriteRouter.post('/:id/moves/:moveId/approve', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { approveMove } = await import('../services/movement.js');
-    const result = await approveMove(req.params.moveId!, req.user!.id, req.body.story_arrival_time ?? null);
+    const result = await approveMove(req.params.moveId!, getAuthedUser(req).id, req.body.story_arrival_time ?? null);
     if (!result.record) { res.status(404).json({ error: 'Move not found' }); return; }
     res.json(result);
   } catch (err: unknown) {
@@ -582,9 +584,9 @@ campaignWriteRouter.post('/:id/moves/:moveId/reject', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { rejectMove } = await import('../services/movement.js');
-    const move = await rejectMove(req.params.moveId!, req.user!.id);
+    const move = await rejectMove(req.params.moveId!, getAuthedUser(req).id);
     if (!move) { res.status(404).json({ error: 'Move not found' }); return; }
     res.json(move);
   } catch (err: unknown) {
@@ -597,11 +599,11 @@ campaignWriteRouter.post('/:id/moves/force', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM' }); return; }
     const { character_id, to_scene_id } = req.body;
     if (!character_id || !to_scene_id) { res.status(400).json({ error: 'Missing fields' }); return; }
     const { forceMove } = await import('../services/movement.js');
-    const result = await forceMove(character_id, to_scene_id, req.params.id, req.user!.id);
+    const result = await forceMove(character_id, to_scene_id, req.params.id, getAuthedUser(req).id);
 
     // 插入系统过渡消息到聊天流
     const [toScene, charSheet] = await Promise.all([
@@ -618,7 +620,7 @@ campaignWriteRouter.post('/:id/moves/force', async (req, res) => {
       id: String(snowflake.nextId()),
       scene_id: to_scene_id,
       campaign_id: req.params.id,
-      sender_user_id: req.user!.id,
+      sender_user_id: getAuthedUser(req).id,
       sender_character_id: null,
       content: transitionContent,
       message_type: 'system' as const,
@@ -653,7 +655,7 @@ campaignWriteRouter.post('/:id/clues', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can create clues' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can create clues' }); return; }
     const { title, content, theme, is_revealed, revealed_to } = req.body as {
       title?: string;
       content?: string;
@@ -676,7 +678,7 @@ campaignWriteRouter.put('/:id/clues/:clueId', async (req, res) => {
   try {
     const campaign = await db('campaigns').where({ id: req.params.id }).select('gm_user_id').first();
     if (!campaign) { res.status(404).json({ error: 'Campaign not found' }); return; }
-    if (campaign.gm_user_id !== req.user!.id) { res.status(403).json({ error: 'Only GM can update clues' }); return; }
+    if (campaign.gm_user_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Only GM can update clues' }); return; }
     const clue = await clueService.update(req.params.clueId, req.body ?? {});
     if (!clue) { res.status(404).json({ error: 'Clue not found' }); return; }
     res.json(clue);

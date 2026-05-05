@@ -1,5 +1,6 @@
 ﻿import { Router, type IRouter } from 'express';
 import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed.js';
 import { rulesetService } from '../services/ruleset-service';
 import type { ExecuteRequest, RulesetStatus } from '@trpg/shared';
 import yaml from 'js-yaml';
@@ -10,7 +11,7 @@ const router: IRouter = Router();
 // ⚠️ 必须在 /:id 之前注册，否则 "mine" 会被当作 id 参数匹配
 router.get('/mine', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const rulesets = await rulesetService.listMine(req.userId!);
+    const rulesets = await rulesetService.listMine(getAuthedUser(req).id);
     res.json({ data: rulesets, total: rulesets.length });
   } catch {
     res.status(500).json({ error: 'Internal server error' });
@@ -76,7 +77,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res): Promise<void>
       name: name.trim(),
       version: (version ?? '1.0.0').trim(),
       description: description?.trim(),
-      author_id: req.userId!,
+      author_id: getAuthedUser(req).id,
       parent_ruleset_id,
       character_card_schema,
       recipe_source,
@@ -95,7 +96,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res): Promise<void>
 // PUT /api/rulesets/:id — 更新规则集（仅创作者作者）
 router.put('/:id', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.update(req.params['id']!, req.userId!, req.body);
+    const ruleset = await rulesetService.update(req.params['id']!, getAuthedUser(req).id, req.body);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string; errors?: unknown[] };
@@ -113,7 +114,7 @@ router.put('/:id', authMiddleware, requireCreator, async (req, res): Promise<voi
 // POST /api/rulesets/:id/publish — 发布规则集（draft → published，需创作者权限）
 router.post('/:id/publish', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.publish(req.params['id']!, req.userId!);
+    const ruleset = await rulesetService.publish(req.params['id']!, getAuthedUser(req).id);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -166,7 +167,7 @@ router.get('/:id/versions', authMiddleware, async (req, res): Promise<void> => {
 router.post('/:id/versions', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
     const { changelog } = req.body as { changelog?: string };
-    const version = await rulesetService.saveVersion(req.params['id']!, changelog ?? '', req.userId!);
+    const version = await rulesetService.saveVersion(req.params['id']!, changelog ?? '', getAuthedUser(req).id);
     res.status(201).json(version);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -179,7 +180,7 @@ router.post('/:id/versions', authMiddleware, requireCreator, async (req, res): P
 // POST /api/rulesets/:id/versions/:vid/rollback — 回滚到指定版本（需创作者权限）
 router.post('/:id/versions/:vid/rollback', authMiddleware, requireCreator, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.rollbackToVersion(req.params['id']!, req.params['vid']!, req.userId!);
+    const ruleset = await rulesetService.rollbackToVersion(req.params['id']!, req.params['vid']!, getAuthedUser(req).id);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -209,7 +210,7 @@ router.get('/:id/versions/compare', authMiddleware, async (req, res): Promise<vo
 // POST /api/rulesets/:id/submit-review — draft → published（V1.0 自动审核）
 router.post('/:id/submit-review', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.submitForReview(req.params['id']!, req.userId!);
+    const ruleset = await rulesetService.submitForReview(req.params['id']!, getAuthedUser(req).id);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -223,7 +224,7 @@ router.post('/:id/submit-review', authMiddleware, async (req, res): Promise<void
 // POST /api/rulesets/:id/deprecate — published → deprecated
 router.post('/:id/deprecate', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.deprecate(req.params['id']!, req.userId!);
+    const ruleset = await rulesetService.deprecate(req.params['id']!, getAuthedUser(req).id);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -237,7 +238,7 @@ router.post('/:id/deprecate', authMiddleware, async (req, res): Promise<void> =>
 // POST /api/rulesets/:id/fork — Fork 规则集
 router.post('/:id/fork', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const result = await rulesetService.forkRuleset(req.params['id']!, req.userId!);
+    const result = await rulesetService.forkRuleset(req.params['id']!, getAuthedUser(req).id);
     res.status(201).json(result);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -250,7 +251,7 @@ router.post('/:id/fork', authMiddleware, async (req, res): Promise<void> => {
 // POST /api/rulesets/:id/merge-from-parent — 从上游 parent 合并变更
 router.post('/:id/merge-from-parent', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const result = await rulesetService.mergeFromParent(req.params['id']!, req.userId!);
+    const result = await rulesetService.mergeFromParent(req.params['id']!, getAuthedUser(req).id);
     res.json(result);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
@@ -308,7 +309,7 @@ router.post('/import', authMiddleware, async (req, res): Promise<void> => {
     }
     const ruleset = await rulesetService.create({
       ...(parsed as any),
-      author_id: req.userId!,
+      author_id: getAuthedUser(req).id,
       status: 'draft',
     });
     res.status(201).json({ id: ruleset.id, name: ruleset.name });
@@ -324,7 +325,7 @@ router.post('/:id/test-recipe', authMiddleware, async (req, res): Promise<void> 
   try {
     const ruleset = await rulesetService.findById(req.params['id']!);
     if (!ruleset) { res.status(404).json({ error: 'Ruleset not found' }); return; }
-    if (ruleset.author_id !== req.userId) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (ruleset.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
     const { recipe, test_inputs, mock_context } = req.body as {
       recipe?: import('@trpg/shared').Recipe;
@@ -348,7 +349,7 @@ router.post('/:id/test-recipe', authMiddleware, async (req, res): Promise<void> 
 // POST /api/rulesets/:id/migrate-to-recipe — 将旧格式迁移为 Recipe（仅作者，不可逆）
 router.post('/:id/migrate-to-recipe', authMiddleware, async (req, res): Promise<void> => {
   try {
-    const ruleset = await rulesetService.migrateToRecipe(req.params['id']!, req.userId!);
+    const ruleset = await rulesetService.migrateToRecipe(req.params['id']!, getAuthedUser(req).id);
     res.json(ruleset);
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string; errors?: unknown[] };

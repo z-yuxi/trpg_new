@@ -15,11 +15,12 @@ import { z } from 'zod';
 import type { StoryTime } from '@trpg/shared';
 import { db } from '../db';
 import { safeErrorMessage } from '../utils/error-response';
+import { logError } from '../utils/structured-logger';
 
 // ─── 错误响应辅助 ──────────────────────────────────────────────────────────
 
 export function serverErr(res: Response, err: unknown, defaultMsg = '操作失败，请稍后再试'): void {
-  console.error('[campaigns]', err instanceof Error ? err.message : err);
+    logError('CAMPAIGNS_UTILS_FAILED', 'medium', err instanceof Error ? err.message : String(err));
   res.status(500).json({ error: safeErrorMessage(err, defaultMsg) });
 }
 

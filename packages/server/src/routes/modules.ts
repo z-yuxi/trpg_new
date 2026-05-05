@@ -1,8 +1,9 @@
-import { Router, type IRouter } from 'express';
+﻿import { Router, type IRouter } from 'express';
 import multer from 'multer';
 import path from 'path';
 import { z } from 'zod';
 import { authMiddleware, optionalAuthMiddleware, requireCreator } from '../middleware/auth';
+import { getAuthedUser } from '../middleware/auth-typed.js';
 import { payGate } from '../middleware/pay-gate';
 import { moduleService } from '../services/module-service';
 import { createModulePdfBuffer, importModuleFile } from '../services/module-transfer-service';
@@ -65,7 +66,7 @@ router.get('/', async (req, res) => {
 
 router.get('/mine', authMiddleware, async (req, res) => {
   try {
-    const data = await moduleService.listMine(req.user!.id);
+    const data = await moduleService.listMine(getAuthedUser(req).id);
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
@@ -162,7 +163,7 @@ router.post('/:id/import', authMiddleware, (req, res) => {
     }
     try {
       const moduleRow = await db('modules')
-        .where({ id: req.params['id']!, author_id: req.user!.id })
+        .where({ id: req.params['id']!, author_id: getAuthedUser(req).id })
         .select('id')
         .first();
 
@@ -193,7 +194,7 @@ router.post('/:id/import/confirm', authMiddleware, async (req, res) => {
   }
 
   try {
-    const module = await moduleService.applyImportedContent(req.params['id']!, req.user!.id, parsed.data);
+    const module = await moduleService.applyImportedContent(req.params['id']!, getAuthedUser(req).id, parsed.data);
     if (!module) {
       res.status(404).json({ error: 'Not found or no permission' });
       return;
@@ -211,7 +212,7 @@ router.post('/:id/export/pdf', authMiddleware, payGate('module_pdf'), async (req
       res.status(404).json({ error: 'Not found' });
       return;
     }
-    if (module.author_id !== req.user!.id && module.status !== 'public') {
+    if (module.author_id !== getAuthedUser(req).id && module.status !== 'public') {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
@@ -236,7 +237,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res) => {
     if (!body.name || !body.ruleset_id) {
       return res.status(400).json({ error: 'name and ruleset_id are required' });
     }
-    const module = await moduleService.create(req.user!.id, body);
+    const module = await moduleService.create(getAuthedUser(req).id, body);
     res.status(201).json(module);
   } catch (err: any) {
     res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
@@ -247,7 +248,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res) => {
 router.put('/:id', authMiddleware, requireCreator, async (req, res) => {
   try {
     const body = req.body as UpdateModuleRequest;
-    const result = await moduleService.update(req.params['id']!, req.user!.id, body);
+    const result = await moduleService.update(req.params['id']!, getAuthedUser(req).id, body);
     if (!result) return res.status(404).json({ error: 'Not found or no permission' });
     res.json(result);
   } catch (err: any) {
@@ -260,7 +261,7 @@ router.put('/:id/auto-save', authMiddleware, requireCreator, async (req, res) =>
   try {
     const body = req.body as AutoSaveModuleRequest;
     if (!body.content) return res.status(400).json({ error: 'content is required' });
-    const ok = await moduleService.autoSave(req.params['id']!, req.user!.id, body.content, body.word_count);
+    const ok = await moduleService.autoSave(req.params['id']!, getAuthedUser(req).id, body.content, body.word_count);
     if (!ok) return res.status(404).json({ error: 'Not found or no permission' });
     res.json({ success: true });
   } catch (err: any) {
@@ -271,7 +272,7 @@ router.put('/:id/auto-save', authMiddleware, requireCreator, async (req, res) =>
 // 删除模组（仅 draft 状态，需创作者权限）
 router.delete('/:id', authMiddleware, requireCreator, async (req, res) => {
   try {
-    const ok = await moduleService.delete(req.params['id']!, req.user!.id);
+    const ok = await moduleService.delete(req.params['id']!, getAuthedUser(req).id);
     if (!ok) return res.status(404).json({ error: 'Not found, no permission, or not in draft status' });
     res.json({ success: true });
   } catch (err: any) {
@@ -282,7 +283,7 @@ router.delete('/:id', authMiddleware, requireCreator, async (req, res) => {
 // 提交发布审核（需创作者权限）
 router.post('/:id/submit', authMiddleware, requireCreator, async (req, res) => {
   try {
-    const module = await moduleService.submitForReview(req.params['id']!, req.user!.id);
+    const module = await moduleService.submitForReview(req.params['id']!, getAuthedUser(req).id);
     if (!module) return res.status(404).json({ error: 'Not found or not in draft status' });
     res.json(module);
   } catch (err: any) {
@@ -293,7 +294,7 @@ router.post('/:id/submit', authMiddleware, requireCreator, async (req, res) => {
 // 撤回模组（需创作者权限）
 router.post('/:id/withdraw', authMiddleware, requireCreator, async (req, res) => {
   try {
-    const module = await moduleService.withdraw(req.params['id']!, req.user!.id);
+    const module = await moduleService.withdraw(req.params['id']!, getAuthedUser(req).id);
     if (!module) return res.status(404).json({ error: 'Not found or invalid state' });
     res.json(module);
   } catch (err: any) {
@@ -337,7 +338,7 @@ router.post('/:id/report', authMiddleware, async (req, res) => {
     await db('module_reports').insert({
       id: generateId(),
       module_id: req.params['id']!,
-      reporter_user_id: req.user!.id,
+      reporter_user_id: getAuthedUser(req).id,
       report_type,
       description,
       status: 'pending',
@@ -372,7 +373,7 @@ router.put('/:id/terms', authMiddleware, async (req, res) => {
   const moduleId = req.params['id'];
   const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string }>();
   if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
-  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (mod.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   const parsed = termsSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -469,7 +470,7 @@ router.get('/:id/entities', authMiddleware, async (req, res) => {
     .first<{ id: string; author_id: string; content: string | null }>();
   if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
   // 仅模组作者可访问（编辑器 @ Mention 仅在编辑态使用）
-  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (mod.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   const keyword = typeof req.query['keyword'] === 'string' ? req.query['keyword'].trim() : '';
   const typeFilter = typeof req.query['type'] === 'string' ? req.query['type'].trim() : '';
@@ -527,7 +528,7 @@ router.post('/:id/entities/apply', authMiddleware, requireCreator, async (req, r
   const moduleId = req.params['id'];
   const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string; content: string | null }>();
   if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
-  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (mod.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   const parsed = entitiesApplySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -604,7 +605,7 @@ router.get('/:id/snapshots', authMiddleware, async (req, res) => {
     const moduleId = req.params['id'];
     const mod = await db('modules').where({ id: moduleId }).first<{ author_id: string }>();
     if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
-    if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+    if (mod.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
     const snapshots = await moduleService.getSnapshots(moduleId);
     res.json({ data: snapshots });
@@ -617,7 +618,7 @@ router.get('/:id/snapshots', authMiddleware, async (req, res) => {
 router.post('/:id/rollback/:snapshotId', authMiddleware, async (req, res) => {
   try {
     const { id, snapshotId } = req.params;
-    const success = await moduleService.rollbackToSnapshot(id!, req.user!.id, snapshotId!);
+    const success = await moduleService.rollbackToSnapshot(id!, getAuthedUser(req).id, snapshotId!);
     if (!success) {
       return res.status(404).json({ error: 'Module or snapshot not found' });
     }
@@ -647,7 +648,7 @@ router.get('/:id/search', authMiddleware, async (req, res) => {
     .where({ id: moduleId })
     .first<{ author_id: string; content: string | null }>();
   if (!mod) { res.status(404).json({ error: 'Module not found' }); return; }
-  if (mod.author_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
+  if (mod.author_id !== getAuthedUser(req).id) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   const { q, limit } = parsed.data;
   const results = searchInModuleContent(mod.content, q, limit);
@@ -823,7 +824,7 @@ router.post('/community/upload/confirm', authMiddleware, async (req, res) => {
 
   try {
     const { generateId } = await import('@trpg/shared');
-    const userId = req.user!.id;
+    const userId = getAuthedUser(req).id;
 
     // 检测是否存在已入驻作者的同名/相似模组
     const similar = await detectSimilarModule(name, content);
@@ -932,7 +933,7 @@ router.post('/:id/claim', authMiddleware, requireCreator, async (req, res) => {
 
     // 同时通知作者本人需要处理
     await notificationService.createNotification({
-      userId: req.user!.id,
+      userId: getAuthedUser(req).id,
       type: 'module_claim_action_needed',
       title: '你已认领模组，请在7天内决定处置方式',
       content: `请在7天内对《${moduleRow.name}》的社区版本作出保留或下架的决定。`,
@@ -1031,7 +1032,7 @@ router.put('/:id/derivative-policy', authMiddleware, requireCreator, async (req,
   }
   try {
     const updated = await db('modules')
-      .where({ id: req.params['id']!, author_id: req.user!.id })
+      .where({ id: req.params['id']!, author_id: getAuthedUser(req).id })
       .update({ derivative_policy: parsed.data.derivative_policy, updated_at: new Date() });
 
     if (!updated) {
@@ -1072,7 +1073,7 @@ router.post('/:id/claim-letter', authMiddleware, async (req, res) => {
     await db('module_claim_letters').insert({
       id: letterId,
       module_id: req.params['id']!,
-      applicant_user_id: req.user!.id,
+      applicant_user_id: getAuthedUser(req).id,
       letter_type: parsed.data.letter_type,
       content: parsed.data.content,
       attachments: parsed.data.attachments ? JSON.stringify(parsed.data.attachments) : null,
@@ -1113,7 +1114,7 @@ router.put('/:id/claim-letter/:letterId/reply', authMiddleware, requireCreator, 
   }
   try {
     const moduleRow = await db('modules')
-      .where({ id: req.params['id']!, author_id: req.user!.id })
+      .where({ id: req.params['id']!, author_id: getAuthedUser(req).id })
       .first();
     if (!moduleRow) {
       return res.status(403).json({ error: 'No permission' });
@@ -1130,7 +1131,7 @@ router.put('/:id/claim-letter/:letterId/reply', authMiddleware, requireCreator, 
       status: decision,
       author_reply: reply ?? null,
       reviewed_at: new Date(),
-      reviewed_by: req.user!.id,
+      reviewed_by: getAuthedUser(req).id,
     });
 
     // 若批准，更新模组状态
