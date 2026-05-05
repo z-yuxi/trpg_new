@@ -23,6 +23,7 @@ import { paymentService, PaymentError } from '../services/payment-service';
 import { metrics } from '../utils/business-metrics';
 import { safeErrorMessage } from '../utils/error-response';
 import { logError } from '../utils/structured-logger';
+import { safeJsonParse } from '../utils/safe-json.js';
 import {
   verifyAlipaySignature,
   verifyWechatPayV3Signature,
@@ -125,7 +126,7 @@ router.get('/orders', authMiddleware, async (req, res) => {
       .limit(50);
 
     const result = rows.map((row: any) => {
-      const meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+      const meta = safeJsonParse<Record<string, unknown>>(row.metadata, {});
       return {
         id: row.id,
         order_no: row.id,

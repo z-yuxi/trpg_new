@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
       limit: Number(req.query['limit'] ?? 20),
     });
     res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -68,7 +68,7 @@ router.get('/mine', authMiddleware, async (req, res) => {
   try {
     const data = await moduleService.listMine(getAuthedUser(req).id);
     res.json(data);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -120,7 +120,7 @@ router.get('/announcements', async (req, res) => {
         type: 'ruleset',
       })),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -150,7 +150,7 @@ router.get('/:id', optionalAuthMiddleware, async (req, res) => {
       }
     }
     res.json({ ...data, is_owned });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -179,9 +179,10 @@ router.post('/:id/import', authMiddleware, (req, res) => {
 
       const preview = await importModuleFile(req.file.originalname, req.file.mimetype, req.file.buffer);
       res.json(preview);
-    } catch (err: any) {
-      const status = err?.status ?? 400;
-      res.status(status).json({ error: err?.message ?? '导入失败' });
+    } catch (err: unknown) {
+      const status = (err instanceof Error && 'status' in err && typeof (err as {status: unknown}).status === 'number')
+        ? (err as {status: number}).status : 400;
+      res.status(status).json({ error: safeErrorMessage(err, '导入失败') });
     }
   });
 });
@@ -200,7 +201,7 @@ router.post('/:id/import/confirm', authMiddleware, async (req, res) => {
       return;
     }
     res.json(module);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Import confirm failed') });
   }
 });
@@ -225,7 +226,7 @@ router.post('/:id/export/pdf', authMiddleware, payGate('module_pdf'), async (req
     // RFC 5987 编码，支持中文文件名
     res.setHeader('Content-Disposition', `attachment; filename="module.pdf"; filename*=UTF-8''${encodedName}`);
     res.send(pdfBuffer);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Export failed') });
   }
 });
@@ -239,7 +240,7 @@ router.post('/', authMiddleware, requireCreator, async (req, res) => {
     }
     const module = await moduleService.create(getAuthedUser(req).id, body);
     res.status(201).json(module);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Create failed') });
   }
 });
@@ -251,7 +252,7 @@ router.put('/:id', authMiddleware, requireCreator, async (req, res) => {
     const result = await moduleService.update(req.params['id']!, getAuthedUser(req).id, body);
     if (!result) return res.status(404).json({ error: 'Not found or no permission' });
     res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
@@ -264,7 +265,7 @@ router.put('/:id/auto-save', authMiddleware, requireCreator, async (req, res) =>
     const ok = await moduleService.autoSave(req.params['id']!, getAuthedUser(req).id, body.content, body.word_count);
     if (!ok) return res.status(404).json({ error: 'Not found or no permission' });
     res.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Auto-save failed') });
   }
 });
@@ -275,7 +276,7 @@ router.delete('/:id', authMiddleware, requireCreator, async (req, res) => {
     const ok = await moduleService.delete(req.params['id']!, getAuthedUser(req).id);
     if (!ok) return res.status(404).json({ error: 'Not found, no permission, or not in draft status' });
     res.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
   }
 });
@@ -286,7 +287,7 @@ router.post('/:id/submit', authMiddleware, requireCreator, async (req, res) => {
     const module = await moduleService.submitForReview(req.params['id']!, getAuthedUser(req).id);
     if (!module) return res.status(404).json({ error: 'Not found or not in draft status' });
     res.json(module);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Submit failed') });
   }
 });
@@ -297,7 +298,7 @@ router.post('/:id/withdraw', authMiddleware, requireCreator, async (req, res) =>
     const module = await moduleService.withdraw(req.params['id']!, getAuthedUser(req).id);
     if (!module) return res.status(404).json({ error: 'Not found or invalid state' });
     res.json(module);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Withdraw failed') });
   }
 });
@@ -316,7 +317,7 @@ router.get('/:id/public-notice', async (req, res) => {
       end_at: endAt,
       remaining_ms: endAt ? Math.max(0, endAt.getTime() - Date.now()) : 0,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -345,7 +346,7 @@ router.post('/:id/report', authMiddleware, async (req, res) => {
       created_at: new Date(),
     });
     res.status(201).json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Report failed') });
   }
 });
@@ -609,7 +610,7 @@ router.get('/:id/snapshots', authMiddleware, async (req, res) => {
 
     const snapshots = await moduleService.getSnapshots(moduleId);
     res.json({ data: snapshots });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });
@@ -624,7 +625,7 @@ router.post('/:id/rollback/:snapshotId', authMiddleware, async (req, res) => {
     }
     const module = await moduleService.getById(id!);
     res.json({ data: module });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Rollback failed') });
   }
 });
@@ -796,8 +797,10 @@ router.post(
           req.file.buffer,
         );
         res.json(preview);
-      } catch (err: any) {
-        res.status(err?.status ?? 400).json({ error: err?.message ?? '文件解析失败' });
+      } catch (err: unknown) {
+        const status = (err instanceof Error && 'status' in err && typeof (err as {status: unknown}).status === 'number')
+          ? (err as {status: number}).status : 400;
+        res.status(status).json({ error: safeErrorMessage(err, '文件解析失败') });
       }
     });
   },
@@ -890,7 +893,7 @@ router.post('/community/upload/confirm', authMiddleware, async (req, res) => {
       community_status: effective_community_status,
       needs_review: effective_community_status === 'pending_review',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Upload failed') });
   }
 });
@@ -944,7 +947,7 @@ router.post('/:id/claim', authMiddleware, requireCreator, async (req, res) => {
     });
 
     res.json({ success: true, claim_deadline_at: deadlineAt });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Claim failed') });
   }
 });
@@ -1017,7 +1020,7 @@ router.put('/:id/claim/decision', authMiddleware, requireCreator, async (req, re
     }
 
     res.json({ success: true, decision });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Decision failed') });
   }
 });
@@ -1039,7 +1042,7 @@ router.put('/:id/derivative-policy', authMiddleware, requireCreator, async (req,
       return res.status(404).json({ error: 'Not found or no permission' });
     }
     res.json({ success: true, derivative_policy: parsed.data.derivative_policy });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Update failed') });
   }
 });
@@ -1100,7 +1103,7 @@ router.post('/:id/claim-letter', authMiddleware, async (req, res) => {
     }
 
     res.status(201).json({ id: letterId, ai_report: aiReport });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Submit failed') });
   }
 });
@@ -1155,7 +1158,7 @@ router.put('/:id/claim-letter/:letterId/reply', authMiddleware, requireCreator, 
     });
 
     res.json({ success: true, decision });
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Reply failed') });
   }
 });
@@ -1170,7 +1173,7 @@ router.get('/:id/contributors', async (req, res) => {
       .select('mc.id', 'mc.user_id', 'mc.role', 'mc.created_at', 'u.nickname', 'u.avatar_url')
       .orderBy('mc.created_at', 'asc');
     res.json(rows);
-  } catch (err: any) {
+  } catch (err: unknown) {
     res.status(500).json({ error: safeErrorMessage(err, 'Query failed') });
   }
 });

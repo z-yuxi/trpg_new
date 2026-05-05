@@ -69,7 +69,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   }
   const isAdmin = Array.isArray(user.user_type) && user.user_type.includes('admin');
   if (!isAdmin) {
-    res.status(403).json({ error: 'Admin permission required' });
+    res.status(403).json({ error: 'FORBIDDEN', message: 'Admin permission required' });
     return;
   }
   next();

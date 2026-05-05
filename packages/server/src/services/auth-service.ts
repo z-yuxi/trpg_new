@@ -16,7 +16,7 @@ if (!JWT_REFRESH_SECRET) {
 }
 const _JWT_REFRESH_SECRET: string = JWT_REFRESH_SECRET;
 
-const JWT_EXPIRES_IN = '1h';
+const JWT_EXPIRES_IN = '15m';
 const JWT_REFRESH_EXPIRES_IN = '30d';
 const REFRESH_TOKEN_MAX_TTL = 30 * 24 * 60 * 60; // 30 天，秒
 const REFRESH_TOKEN_IDLE_TTL = 7 * 24 * 60 * 60; // 7 天，秒（不活跃阈值）
@@ -28,6 +28,21 @@ function refreshAllowKey(userId: string, jti: string): string {
 function refreshIdleKey(userId: string, jti: string): string {
   return `refresh_idle:${userId}:${jti}`;
 }
+
+/**
+ * 原子校验并删除 refresh token 双键（防止 TOCTOU 竞态）。
+ * Lua 脚本在 Redis 单线程内执行，确保 GET + DEL 是原子操作。
+ * 返回 1 表示两键均存在且已删除，0 表示校验失败。
+ */
+const CHECK_AND_DEL_SCRIPT = `
+  local allow = redis.call('GET', KEYS[1])
+  local idle  = redis.call('GET', KEYS[2])
+  if allow and idle then
+    redis.call('DEL', KEYS[1], KEYS[2])
+    return 1
+  end
+  return 0
+`;
 
 export interface TokenPayload {
   userId: string;
@@ -100,17 +115,16 @@ export class AuthService {
       throw new Error('Invalid refresh token: missing jti');
     }
 
-    // 需同时满足：
-    // - allow 键存在：未被吊销，且未超过 30 天最大生命周期
-    // - idle 键存在：7 天内有活跃（通过 refresh 行为维持）
-    const allowExists = await redis.get(refreshAllowKey(payload.userId, payload.jti));
-    const idleExists = await redis.get(refreshIdleKey(payload.userId, payload.jti));
-    if (!allowExists || !idleExists) {
+    // 原子校验 + 删除双键，防止并发请求复制同一 refresh token（TOCTOU）
+    const result = await redis.eval(
+      CHECK_AND_DEL_SCRIPT,
+      2,
+      refreshAllowKey(payload.userId, payload.jti),
+      refreshIdleKey(payload.userId, payload.jti),
+    );
+    if (result !== 1) {
       throw new Error('Refresh token has been revoked, expired, or idle timeout exceeded');
     }
-
-    // 撤销旧 token（一次性使用）
-    await redis.del(refreshAllowKey(payload.userId, payload.jti), refreshIdleKey(payload.userId, payload.jti));
 
     const user = await userService.findById(payload.userId);
     if (!user) {

@@ -13,7 +13,11 @@ import { redis, redisPub, redisSub } from './db/redis';
 import { db } from './db';
 import { logInfo, logError, logWarn } from './utils/structured-logger';
 
-const requiredEnvVars: string[] = ['JWT_SECRET', 'DB_HOST', 'REDIS_HOST'];
+const requiredEnvVars: string[] = [
+  'JWT_SECRET', 'JWT_REFRESH_SECRET',
+  'DB_HOST', 'REDIS_HOST',
+  'ENCRYPTION_KEY', 'PHONE_HMAC_KEY',
+];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
     console.error(`[FATAL] Missing required environment variable: ${envVar}`);
@@ -21,17 +25,16 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-// ENCRYPTION_KEY 格式校验（若已配置则必须合法；上线后将其加入 requiredEnvVars）
-const encKey = process.env['ENCRYPTION_KEY'];
-if (encKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(encKey)) {
+// ENCRYPTION_KEY / PHONE_HMAC_KEY 格式校验（必须为 64 位十六进制）
+const encKey = process.env['ENCRYPTION_KEY']!;
+if (!/^[0-9a-fA-F]{64}$/.test(encKey)) {
   console.error('[FATAL] ENCRYPTION_KEY must be a 64-char hex string (32 bytes). ' +
     'Generate: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
   process.exit(1);
 }
 
-// PHONE_HMAC_KEY 格式校验（独立于 ENCRYPTION_KEY，不可复用）
-const phoneHmacKey = process.env['PHONE_HMAC_KEY'];
-if (phoneHmacKey !== undefined && !/^[0-9a-fA-F]{64}$/.test(phoneHmacKey)) {
+const phoneHmacKey = process.env['PHONE_HMAC_KEY']!;
+if (!/^[0-9a-fA-F]{64}$/.test(phoneHmacKey)) {
   console.error('[FATAL] PHONE_HMAC_KEY must be a 64-char hex string (32 bytes). ' +
     'Generate: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
   process.exit(1);

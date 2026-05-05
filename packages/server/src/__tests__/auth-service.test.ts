@@ -20,6 +20,16 @@ vi.mock('../db/redis', () => ({
       return n;
     }),
     scan: vi.fn(async () => ['0', [] as string[]]),
+    // Lua CHECK_AND_DEL 模拟：检查两个 key 都存在，原子删除并返回 1；否则返回 0
+    eval: vi.fn(async (_script: string, _numkeys: number, ...keys: string[]) => {
+      const [allowKey, idleKey] = keys;
+      if (redisStore.has(allowKey) && redisStore.has(idleKey)) {
+        redisStore.delete(allowKey);
+        redisStore.delete(idleKey);
+        return 1;
+      }
+      return 0;
+    }),
   },
 }));
 

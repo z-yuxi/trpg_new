@@ -11,9 +11,10 @@
  * 注意：必须在 authMiddleware 之后使用（依赖 req.user）
  */
 import type { Request, Response, NextFunction } from 'express';
-import { membershipService } from '../services/membership-service';
+import { membershipService } from '../services/membership-service.js';
 import type { BenefitKey, MembershipTier } from '@trpg/shared';
 import { MEMBERSHIP_BENEFITS } from '@trpg/shared';
+import { logInfo } from '../utils/structured-logger.js';
 
 /** 计算拥有某权益所需的最低档位 */
 function requiredTierFor(key: BenefitKey): MembershipTier {
@@ -48,16 +49,13 @@ export function payGate(key: BenefitKey) {
 
     // 写入审计日志（异步，不阻塞响应）
     process.nextTick(() => {
-      const line = JSON.stringify({
-        ts: new Date().toISOString(),
-        event: 'benefit_access',
+      logInfo('BENEFIT_ACCESS', `${key} by ${user.id}`, {
         benefit_key: key,
         userId: user.id,
         method: req.method,
         path: req.path,
         tier: user.subscription_type,
       });
-      console.log(line);
     });
 
     next();

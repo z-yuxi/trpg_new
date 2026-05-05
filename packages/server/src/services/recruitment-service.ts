@@ -1,5 +1,6 @@
 ﻿import { db } from '../db';
 import { generateId } from '@trpg/shared';
+import { AppError, ErrorCode } from '../utils/app-error.js';
 import type {
   RecruitmentPost,
   RecruitmentApplication,
@@ -64,9 +65,9 @@ export class RecruitmentService {
   /** 将草稿发布为公开招募（draft → open） */
   async publish(postId: string, ownerId: string): Promise<RecruitmentPost> {
     const post = await this.findById(postId);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== ownerId) throw new Error('无权限');
-    if (post.status !== 'draft') throw new Error(`当前状态 ${post.status} 不可发布`);
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== ownerId) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
+    if (post.status !== 'draft') throw new AppError(400, `当前状态 ${post.status} 不可发布`, undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     await db('recruitment_posts').where({ id: postId }).update({ status: 'open' });
     return this.findById(postId) as Promise<RecruitmentPost>;
@@ -75,9 +76,9 @@ export class RecruitmentService {
   /** 手动关闭招募（open/full → closed） */
   async close(postId: string, ownerId: string): Promise<RecruitmentPost> {
     const post = await this.findById(postId);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== ownerId) throw new Error('无权限');
-    if (!['open', 'full'].includes(post.status)) throw new Error(`当前状态 ${post.status} 不可关闭`);
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== ownerId) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
+    if (!['open', 'full'].includes(post.status)) throw new AppError(400, `当前状态 ${post.status} 不可关闭`, undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     await db('recruitment_posts').where({ id: postId }).update({ status: 'closed' });
     return this.findById(postId) as Promise<RecruitmentPost>;
@@ -86,9 +87,9 @@ export class RecruitmentService {
   /** 解散团（grouped → dissolved） */
   async dissolve(postId: string, ownerId: string): Promise<RecruitmentPost> {
     const post = await this.findById(postId);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== ownerId) throw new Error('无权限');
-    if (post.status !== 'grouped') throw new Error('仅已成团的招募帖可解散');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== ownerId) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
+    if (post.status !== 'grouped') throw new AppError(400, '仅已成团的招募帖可解散', undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     await db('recruitment_posts').where({ id: postId }).update({ status: 'dissolved' });
     return this.findById(postId) as Promise<RecruitmentPost>;
@@ -306,16 +307,16 @@ export class RecruitmentService {
     apply_type?: 'normal' | 'waiting';
   }): Promise<RecruitmentApplication> {
     const post = await this.findById(params.post_id);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id === params.applicant_user_id) throw new Error('不能申请自己的招募帖');
-    if (!['open', 'full'].includes(post.status)) throw new Error('该招募帖当前不接受申请');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id === params.applicant_user_id) throw new AppError(403, '不能申请自己的招募帖', undefined, ErrorCode.RECRUITMENT_SELF_APPLY);
+    if (!['open', 'full'].includes(post.status)) throw new AppError(400, '该招募帖当前不接受申请', undefined, ErrorCode.RECRUITMENT_CLOSED);
 
     if (params.character_id) {
       const character = await db('character_sheets')
         .where({ id: params.character_id, user_id: params.applicant_user_id })
         .first() as Record<string, unknown> | null;
-      if (!character) throw new Error('角色卡不存在或无权限');
-      if (character['ruleset_id'] !== post.ruleset_id) throw new Error('角色卡规则包与招募帖不匹配');
+      if (!character) throw new AppError(404, '角色卡不存在或无权限', undefined, ErrorCode.NOT_FOUND);
+      if (character['ruleset_id'] !== post.ruleset_id) throw new AppError(400, '角色卡规则包与招募帖不匹配', undefined, ErrorCode.VALIDATION_FAILED);
     }
 
     // MEDIUM-fix: 将重复检查+插入放入事务，防止并发竞态导致重复申请
@@ -326,7 +327,7 @@ export class RecruitmentService {
         .where({ post_id: params.post_id, applicant_user_id: params.applicant_user_id })
         .forUpdate()
         .first();
-      if (existed) throw new Error('你已提交过申请');
+      if (existed) throw new AppError(409, '你已提交过申请', undefined, ErrorCode.RECRUITMENT_ALREADY_APPLIED);
 
       const isWaiting = params.apply_type === 'waiting' || post.status === 'full';
 
@@ -363,8 +364,8 @@ export class RecruitmentService {
     ownerId: string,
   ): Promise<RecruitmentApplication[]> {
     const post = await this.findById(postId);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== ownerId) throw new Error('无权限');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== ownerId) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
 
     const rows = await db('recruitment_applications as a')
       .leftJoin('users as u', 'a.applicant_user_id', 'u.id')
@@ -395,14 +396,14 @@ export class RecruitmentService {
     reject_reason?: string | null;
   }): Promise<RecruitmentApplication> {
     const post = await this.findById(params.post_id);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== params.owner_id) throw new Error('无权限');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== params.owner_id) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
 
     const application = await db('recruitment_applications')
       .where({ id: params.application_id, post_id: params.post_id })
       .first() as Record<string, unknown> | null;
-    if (!application) throw new Error('申请不存在');
-    if (application['status'] !== 'pending') throw new Error('只能审批 pending 状态的申请');
+    if (!application) throw new AppError(404, '申请不存在', undefined, ErrorCode.NOT_FOUND);
+    if (application['status'] !== 'pending') throw new AppError(400, '只能审批 pending 状态的申请', undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     if (params.action === 'approve') {
       const expiresAt = new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
@@ -438,8 +439,8 @@ export class RecruitmentService {
     const application = await db('recruitment_applications')
       .where({ id: params.application_id, applicant_user_id: params.applicant_user_id })
       .first() as Record<string, unknown> | null;
-    if (!application) throw new Error('申请不存在');
-    if (application['status'] !== 'invited') throw new Error('只能确认 invited 状态的申请');
+    if (!application) throw new AppError(404, '申请不存在', undefined, ErrorCode.NOT_FOUND);
+    if (application['status'] !== 'invited') throw new AppError(400, '只能确认 invited 状态的申请', undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     if (application['invited_expires_at']) {
       const expiresAt = new Date(application['invited_expires_at'] as string | number);
@@ -450,7 +451,7 @@ export class RecruitmentService {
           updated_at: db.fn.now(),
         });
         await promoteNextWaiting(application['post_id'] as string);
-        throw new Error('邀请已过期，请重新申请');
+        throw new AppError(400, '邀请已过期，请重新申请', undefined, ErrorCode.RECRUITMENT_INVITE_EXPIRED);
       }
     }
 
@@ -509,23 +510,23 @@ export class RecruitmentService {
     module_name?: string | null;
   }): Promise<{ campaign_id: string; member_count: number }> {
     const post = await this.findById(params.post_id);
-    if (!post) throw new Error('招募帖不存在');
-    if (post.poster_id !== params.owner_id) throw new Error('无权限');
-    if (!['open', 'full'].includes(post.status)) throw new Error('只有招募中的帖子可以成团');
-    if (post.campaign_id) throw new Error('该招募帖已成团');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
+    if (post.poster_id !== params.owner_id) throw new AppError(403, '无权限', undefined, ErrorCode.FORBIDDEN);
+    if (!['open', 'full'].includes(post.status)) throw new AppError(400, '只有招募中的帖子可以成团', undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
+    if (post.campaign_id) throw new AppError(400, '该招募帖已成团', undefined, ErrorCode.RECRUITMENT_WRONG_STATE);
 
     const confirmedApps = await db('recruitment_applications')
       .where({ post_id: params.post_id, status: 'confirmed' })
       .select('*') as Array<Record<string, unknown>>;
 
-    if (confirmedApps.length === 0) throw new Error('没有已确认入团的玩家，无法成团');
+    if (confirmedApps.length === 0) throw new AppError(400, '没有已确认入团的玩家，无法成团', undefined, ErrorCode.VALIDATION_FAILED);
 
     for (const app of confirmedApps) {
-      if (!app['character_id']) throw new Error('存在未绑定角色卡的确认玩家，无法成团');
+      if (!app['character_id']) throw new AppError(400, '存在未绑定角色卡的确认玩家，无法成团', undefined, ErrorCode.VALIDATION_FAILED);
       const sheet = await db('character_sheets')
         .where({ id: app['character_id'], user_id: app['applicant_user_id'] })
         .first();
-      if (!sheet) throw new Error('确认玩家的角色卡无效');
+      if (!sheet) throw new AppError(400, '确认玩家的角色卡无效', undefined, ErrorCode.VALIDATION_FAILED);
     }
 
     // 简化开团：module_id 在招募帖上不存储，走 formGroup 时传 null（来自规则包入口）
@@ -537,7 +538,7 @@ export class RecruitmentService {
 
     const scenes = await campaignService.listScenes(campaign.id);
     const lobby = scenes.find((scene) => scene.type === 'lobby') ?? scenes[0];
-    if (!lobby) throw new Error('默认场景创建失败');
+    if (!lobby) throw new AppError(500, '默认场景创建失败', undefined, ErrorCode.VALIDATION_FAILED);
 
     for (const app of confirmedApps) {
       const stateId = generateId();
@@ -581,7 +582,7 @@ export class RecruitmentService {
     content: string;
   }): Promise<Record<string, unknown>> {
     const post = await this.findById(params.post_id);
-    if (!post) throw new Error('招募帖不存在');
+    if (!post) throw new AppError(404, '招募帖不存在', undefined, ErrorCode.RECRUITMENT_NOT_FOUND);
 
     const id = generateId();
     await db('recruitment_comments').insert({

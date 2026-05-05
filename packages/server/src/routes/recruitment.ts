@@ -7,7 +7,7 @@ import { idempotencyMiddleware } from '../middleware/idempotency';
 import { recruitmentService } from '../services/recruitment-service';
 import { notificationService } from '../services/notification-service';
 import { postCommentService } from '../services/post-comment-service';
-import { ErrorCode } from '../utils/app-error';
+import { AppError, ErrorCode } from '../utils/app-error.js';
 import { safeErrorMessage } from '../utils/error-response';
 import { db } from '../db';
 
@@ -103,14 +103,20 @@ router.get('/', optionalAuthMiddleware, async (req, res) => {
       tag: typeof req.query.tag === 'string' ? req.query.tag.trim() : undefined,
       type: req.query.type as 'gm_recruit' | 'player_seek' | undefined,
       ruleset_id: typeof req.query.ruleset_id === 'string' ? req.query.ruleset_id : undefined,
-      status: typeof req.query.status === 'string' ? (req.query.status as any) : undefined,
+      status: typeof req.query.status === 'string' && ['draft','open','full','closed','grouped','dissolved'].includes(req.query.status)
+        ? req.query.status as 'draft' | 'open' | 'full' | 'closed' | 'grouped' | 'dissolved'
+        : undefined,
       poster_id: mine === 'posted' ? getAuthedUser(req).id : undefined,
       applicant_user_id: mine === 'applied' ? getAuthedUser(req).id : undefined,
       // 已登录的普通浏览：传 viewer_id 查每帖申请状态，不过滤结果
       viewer_id: !mine && req.user ? req.user.id : undefined,
       schedule_weekday: typeof req.query.schedule_weekday === 'string' ? req.query.schedule_weekday : undefined,
       schedule_time_slot: typeof req.query.schedule_time_slot === 'string' ? req.query.schedule_time_slot : undefined,
-      min_seats_available: typeof req.query.min_seats === 'string' ? Number(req.query.min_seats) : undefined,
+      min_seats_available: (() => {
+        if (typeof req.query.min_seats !== 'string') return undefined;
+        const n = Number(req.query.min_seats);
+        return Number.isInteger(n) && n > 0 ? n : undefined;
+      })(),
     });
 
     res.json(result);
@@ -137,9 +143,12 @@ router.post('/:id/publish', authMiddleware, async (req, res) => {
   try {
     const post = await recruitmentService.publish(req.params.id, getAuthedUser(req).id);
     res.json(post);
-  } catch (err: any) {
-    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
-    res.status(status).json({ error: err?.message ?? 'Publish failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Publish failed') });
+    }
   }
 });
 
@@ -148,9 +157,12 @@ router.post('/:id/close', authMiddleware, async (req, res) => {
   try {
     const post = await recruitmentService.close(req.params.id, getAuthedUser(req).id);
     res.json(post);
-  } catch (err: any) {
-    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
-    res.status(status).json({ error: err?.message ?? 'Close failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Close failed') });
+    }
   }
 });
 
@@ -159,9 +171,12 @@ router.post('/:id/dissolve', authMiddleware, async (req, res) => {
   try {
     const post = await recruitmentService.dissolve(req.params.id, getAuthedUser(req).id);
     res.json(post);
-  } catch (err: any) {
-    const status = err.message === '招募帖不存在' ? 404 : err.message === '无权限' ? 403 : 400;
-    res.status(status).json({ error: err?.message ?? 'Dissolve failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Dissolve failed') });
+    }
   }
 });
 
@@ -174,13 +189,12 @@ router.post('/applications/:applicationId/confirm', authMiddleware, idempotencyM
       applicant_user_id: getAuthedUser(req).id,
     });
     res.json(application);
-  } catch (err: any) {
-    const isExpired = err?.message?.includes('过期');
-    const status = err.message === '申请不存在' ? 404 : 400;
-    res.status(status).json({
-      error: err?.message ?? 'Confirm failed',
-      ...(isExpired ? { error_code: ErrorCode.RECRUITMENT_INVITE_EXPIRED } : {}),
-    });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Confirm failed') });
+    }
   }
 });
 
@@ -219,14 +233,12 @@ router.post('/:id/apply', authMiddleware, applyLimiter, idempotencyMiddleware, a
     }
 
     res.status(201).json(application);
-  } catch (err: any) {
-    const isAlreadyApplied = err?.message?.includes('已提交过');
-    const isClosed = err?.message?.includes('不接受申请');
-    res.status(400).json({
-      error: err?.message ?? 'Apply failed',
-      ...(isAlreadyApplied ? { error_code: ErrorCode.RECRUITMENT_ALREADY_APPLIED } : {}),
-      ...(isClosed ? { error_code: ErrorCode.RECRUITMENT_CLOSED } : {}),
-    });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Apply failed') });
+    }
   }
 });
 
@@ -256,8 +268,8 @@ router.post('/:id/comments', authMiddleware, async (req, res) => {
       }).catch(() => {});
     }
     res.status(201).json(comment);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Comment failed' });
+  } catch (err: unknown) {
+    res.status(400).json({ error: safeErrorMessage(err, 'Comment failed') });
   }
 });
 
@@ -292,8 +304,12 @@ router.post('/:id/applications/:applicationId/review', authMiddleware, reviewLim
       metadata: { post_id: req.params.id, application_id: req.params.applicationId },
     }).catch(() => {});
     res.json(result);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Review failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Review failed') });
+    }
   }
 });
 
@@ -330,8 +346,12 @@ router.post('/:id/group', authMiddleware, groupLimiter, idempotencyMiddleware, a
       }).catch(() => {});
     }
     res.json(result);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Group formation failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Group formation failed') });
+    }
   }
 });
 
@@ -400,8 +420,12 @@ router.post('/:id/floors', authMiddleware, async (req, res) => {
       }).catch(() => {});
     }
     res.status(201).json(floor);
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Create floor failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Create floor failed') });
+    }
   }
 });
 
@@ -410,9 +434,12 @@ router.delete('/:id/floors/:floorId', authMiddleware, async (req, res) => {
   try {
     await postCommentService.deleteFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    const status = err.message === '无权删除' ? 403 : err.message === '楼层不存在' ? 404 : 500;
-    res.status(status).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
+    }
   }
 });
 
@@ -458,10 +485,12 @@ router.post('/:id/floors/:floorId/comments', authMiddleware, async (req, res) =>
       }).catch(() => {});
     }
     res.status(201).json(comment);
-  } catch (err: any) {
-    const status = err.message === '楼层不存在' || err.message === '被回复的评论不存在' ? 404
-      : err.message === '不允许跨楼层回复' || err.message === '该楼层已删除，无法回复' ? 400 : 500;
-    res.status(status).json({ error: err?.message ?? 'Create comment failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Create comment failed') });
+    }
   }
 });
 
@@ -470,9 +499,12 @@ router.delete('/:id/floors/:floorId/comments/:commentId', authMiddleware, async 
   try {
     await postCommentService.deleteComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    const status = err.message === '无权删除' ? 403 : err.message === '评论不存在' ? 404 : 500;
-    res.status(status).json({ error: err?.message ?? 'Delete failed' });
+  } catch (err: unknown) {
+    if (err instanceof AppError) {
+      res.status(err.statusCode).json({ error: err.userMessage, error_code: err.code });
+    } else {
+      res.status(500).json({ error: safeErrorMessage(err, 'Delete failed') });
+    }
   }
 });
 
@@ -481,8 +513,8 @@ router.post('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
   try {
     await postCommentService.likeFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Like failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Like failed') });
   }
 });
 
@@ -491,8 +523,8 @@ router.delete('/:id/floors/:floorId/like', authMiddleware, async (req, res) => {
   try {
     await postCommentService.unlikeFloor(req.params.floorId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Unlike failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Unlike failed') });
   }
 });
 
@@ -501,8 +533,8 @@ router.post('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, asy
   try {
     await postCommentService.likeComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Like failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Like failed') });
   }
 });
 
@@ -511,8 +543,8 @@ router.delete('/:id/floors/:floorId/comments/:commentId/like', authMiddleware, a
   try {
     await postCommentService.unlikeComment(req.params.commentId, getAuthedUser(req).id);
     res.status(204).end();
-  } catch (err: any) {
-    res.status(400).json({ error: err?.message ?? 'Unlike failed' });
+  } catch (err: unknown) {
+    res.status(500).json({ error: safeErrorMessage(err, 'Unlike failed') });
   }
 });
 
