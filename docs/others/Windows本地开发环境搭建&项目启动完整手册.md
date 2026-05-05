@@ -1,8 +1,19 @@
-﻿# Windows本地开发环境搭建&项目启动完整手册
+# Windows本地开发环境搭建&项目启动完整手册
 
 适用系统：Windows 10/11
 适用场景：本地开发、联调、验收（不使用 Docker / Linux）
 项目结构：pnpm monorepo（packages/client + packages/server + packages/shared）
+文档版本：2026-05（与当前仓库脚本对齐）
+
+---
+
+## 0. 先读这一节（避免踩坑）
+
+1. 本项目是 pnpm workspace，必须使用 pnpm，不要混用 npm/yarn 安装主项目依赖。
+2. Windows 本地不要执行 start.sh（这是类 Unix 脚本）。
+3. 正确启动方式：先构建 shared，再启动 server，再启动 client。
+4. TypeScript 本地导入必须带 .js 扩展名（ESM + node16 解析）。
+5. 敏感信息只放本地 .env 或本机私有文件，不进仓库。
 
 ---
 
@@ -19,7 +30,7 @@ npm -v
 
 预期：Node 版本为 v20.x.x。
 
-### 1.2 pnpm
+### 1.2 pnpm（建议 >= 9）
 
 ```powershell
 npm install -g pnpm
@@ -88,10 +99,22 @@ REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 
 JWT_SECRET=replace-with-your-own-long-secret
+JWT_REFRESH_SECRET=replace-with-your-own-long-refresh-secret
 PORT=3000
+
+# 可选：仅当你要启用手机号加密存储时配置（必须是64位十六进制）
+# ENCRYPTION_KEY=
+# PHONE_HMAC_KEY=
+
+# 可选：机器人内容生成使用 AI 时配置
+# DEEPSEEK_API_KEY=
+# DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+# DEEPSEEK_FLASH_MODEL=deepseek-chat
 ```
 
-说明：服务端已支持自动读取 monorepo 根目录 .env。
+说明：
+1. 服务端会自动读取 monorepo 根目录 .env。
+2. 生产密钥、数据库密码、API Key 不要写进文档或提交到 Git。
 
 ---
 
@@ -112,7 +135,7 @@ pnpm --filter @trpg/shared build
 
 ---
 
-## 6. 执行数据库迁移（最新修复版）
+## 6. 执行数据库迁移
 
 步骤 1：重启正常的 MySQL 服务
 
@@ -124,24 +147,18 @@ net start MySQL80
 
 成功提示：MySQL80 服务已成功启动。
 
-步骤 2：用 `trpg` 用户连接 MySQL（代替 `root`）
-
-打开普通 PowerShell（不用管理员），执行：
+步骤 2：执行迁移
 
 ```powershell
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -u trpg -h 127.0.0.1 -P 3306 -pTrpg@2024! trpg_platform
-```
-
-成功表现：直接进入 MySQL 命令行（提示符变成 `mysql>`）。
-
-
-```powershell
+cd E:\Desktop\trpg_new
 pnpm --filter @trpg/server migrate
 ```
 
-当前迁移已改为 tsx 程序化执行，避免旧问题：
-- Failed to load ts-node/register
-- __dirname is not defined in ES module scope
+步骤 3（建议）：验证迁移一致性
+
+```powershell
+pnpm verify:migrations
+```
 
 ### 6.1 若你之前迁移失败过，先清库再迁移
 
@@ -153,6 +170,7 @@ CREATE DATABASE trpg_platform CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 然后重跑：
 
 ```powershell
+cd E:\Desktop\trpg_new
 pnpm --filter @trpg/server migrate
 ```
 
@@ -163,7 +181,7 @@ pnpm --filter @trpg/server migrate
 终端 A：
 
 ```powershell
-cd /d E:\Desktop\trpg_new
+cd E:\Desktop\trpg_new
 pnpm --filter @trpg/server dev
 ```
 
@@ -213,12 +231,12 @@ git commit -m "feat: 本次改动说明"
 git push
 ```
 
-### 10.3 回退方案
+### 10.3 回退方案（尽量用非破坏性方式）
 
-未提交时撤销某文件：
+未提交时撤销某文件（推荐）：
 
 ```powershell
-git checkout -- <文件路径>
+git restore <文件路径>
 ```
 
 撤销最后一次提交但保留改动：
@@ -227,7 +245,7 @@ git checkout -- <文件路径>
 git reset --soft HEAD~1
 ```
 
-强制回退（会丢失改动，谨慎）：
+强制回退会丢失改动（仅在你完全确认时使用）：
 
 ```powershell
 git reset --hard <commit_id>
@@ -237,26 +255,32 @@ git reset --hard <commit_id>
 
 ## 11. 常见问题排查
 
-1. pnpm: command not found
+1. pnpm: command not found  
 操作：重装 pnpm，并重开终端。
 
-2. Cannot find module '@trpg/shared'
+2. Cannot find module '@trpg/shared'  
 操作：先执行 pnpm --filter @trpg/shared build。
 
-3. ECONNREFUSED 127.0.0.1:3306
-操作：启动 MySQL 服务。
+3. ECONNREFUSED 127.0.0.1:3306  
+操作：启动 MySQL 服务并确认端口。
 
-4. Redis connection error
-操作：启动 Redis 服务。
+4. Redis connection error  
+操作：启动 Redis 服务并确认端口。
 
-5. Missing required environment variable: JWT_SECRET/DB_HOST/REDIS_HOST
+5. Missing required environment variable: JWT_SECRET/DB_HOST/REDIS_HOST  
 操作：检查根目录 .env 是否存在并包含对应键。
 
-6. 端口 3000/5173 被占用
+6. 端口 3000/5173 被占用  
 操作：结束占用进程后重启服务。
 
-7. server 性能测试偶发失败（P99 抖动）
-操作：使用性能阈值倍率开关 `PERF_P99_MULTIPLIER`。
+7. TS2835（import 缺扩展名）  
+操作：本地 TS 导入统一补 .js 扩展名。
+
+8. 执行 bash start.sh 失败（Windows）  
+操作：不要用 start.sh，按第 12 节顺序分别启动 server/client。
+
+9. server 性能测试偶发失败（P99 抖动）  
+操作：使用性能阈值倍率开关 PERF_P99_MULTIPLIER。
 
 PowerShell 临时放宽（仅当前终端生效）：
 
@@ -279,13 +303,26 @@ Remove-Item Env:PERF_P99_MULTIPLIER
 ```
 
 建议：
-- Windows 本地开发机：`2`
-- Linux CI（稳定机器）：`1` 或 `1.2`
-- 仅在性能压测任务中放宽，不建议长期全局设置。
+- Windows 本地开发机：2
+- Linux CI（稳定机器）：1 或 1.2
+- 仅在性能压测任务中放宽，不建议长期全局设置
 
 ---
 
 ## 12. 每次开发的快速启动顺序
+
+方式 A（推荐，使用根脚本）：
+
+```powershell
+cd E:\Desktop\trpg_new
+pnpm --filter @trpg/shared build
+pnpm dev:server
+# 新开一个终端
+cd E:\Desktop\trpg_new
+pnpm dev:client
+```
+
+方式 B（等价）：
 
 ```powershell
 cd E:\Desktop\trpg_new
@@ -298,156 +335,74 @@ pnpm --filter @trpg/client dev
 
 ---
 
-## 13. AI 机器人测试脚本使用指南
+## 13. 机器人账号与种子内容脚本（当前版本）
 
-本节说明如何使用 `packages/scripts/seeds/` 目录下的自动化测试脚本，一键驱动 5 个机器人账号完成发帖、表态、评论、举报的全链路测试。
+本节说明如何使用 server 内置 seed runner，在本地创建机器人账号、生成内容、执行互动、并在上线前清理。
 
-**适用场景**：社区功能联调、种子内容投放、全链路验收。
-
----
+适用场景：社区功能联调、种子内容投放、全链路验收。
 
 ### 13.1 前置条件
 
-1. 后端服务已启动（见第 7 节），本地 API 地址为 `http://localhost:3000/api`。
-2. 数据库迁移已完成（见第 6 节），`users` 表中已存在 UID `1000095–1000099` 的机器人账号（若无，手动插入，见 13.4 节）。
-3. `.env.local` 文件中已填写 `DEEPSEEK_API_KEY`（测试时 AI 生成文案才能工作）。
+1. 后端服务可连接 MySQL（已完成第 6 节迁移）。
+2. Redis 正常可用（互动与异步流程依赖）。
+3. 如需 AI 生成文案，根目录 .env 已配置 DEEPSEEK_API_KEY；否则使用 --no-ai。
 
----
+### 13.2 命令总览
 
-### 13.2 环境变量配置
-
-在项目根目录新建或编辑 `.env.local`（**不提交到 Git**）：
-
-```env
-# DeepSeek API Key（用于 AI 生成帖子文案）
-DEEPSEEK_API_KEY=sk-your-deepseek-key
-
-# 本地 API 地址（默认即可）
-API_BASE_URL=http://localhost:3000/api
-```
-
----
-
-### 13.3 安装脚本依赖
+在项目根目录执行：
 
 ```powershell
-cd E:\Desktop\trpg_new\packages\scripts
-npm install axios dotenv
+cd E:\Desktop\trpg_new
+
+# Phase 1：创建机器人账号（UID 1000095-1000099）
+pnpm --filter @trpg/server seed:phase1
+
+# Phase 2：内容预览（不写库）
+pnpm --filter @trpg/server seed:phase2
+
+# Phase 3：批量发帖+互动（无 AI）
+pnpm --filter @trpg/server seed:phase3
+
+# Phase 3（AI）
+pnpm --filter @trpg/server seed:phase3:ai
+
+# Phase 4：上线前清理（休眠机器人并打印统计）
+pnpm --filter @trpg/server seed:phase4
 ```
 
----
+### 13.3 各阶段说明
 
-### 13.4 初始化机器人账号 Token
+1. Phase 1：写入 5 个机器人账号（is_bot=1，bot_status=active）。
+2. Phase 2：预览内容生成质量（默认 dry-run，不写库）。
+3. Phase 3：批量发帖并自动执行点赞/回复互动。
+4. Phase 4：休眠机器人账号，输出生成内容统计，便于上线前验收。
 
-**首次使用**或机器人账号 Token 过期时执行。
+提示：当前机器人账号为脚本驱动账号（不可人工登录），无需维护“机器人密码”或“机器人登录 Token”。
 
-脚本会用测试环境的固定验证码 `000000` 登录 5 个机器人账号，并打印各自的 `access_token`：
+### 13.4 验收与清理
 
-```powershell
-cd E:\Desktop\trpg_new\packages\scripts\seeds
-node init-bot-tokens.js
-```
-
-输出示例：
-
-```
-===== 初始化机器人账号 Token =====
-
-✅ 叙言者 (UID 1000095) Token: eyJhbGci...
-✅ 帷幕之后 (UID 1000096) Token: eyJhbGci...
-✅ 墨菲斯 (UID 1000097) Token: eyJhbGci...
-✅ 夜骐 (UID 1000098) Token: eyJhbGci...
-✅ 旅人说书人 (UID 1000099) Token: eyJhbGci...
-```
-
-将每个账号的完整 Token 复制到 `ai-bot-test.config.js` 对应的 `token` 字段中：
-
-```javascript
-{ uid: 1000095, nickname: '叙言者', persona: 'coc_investigator', token: '在这里粘贴 Token' },
-```
-
-> **注意**：若后端验证码登录要求真实短信码，可临时将 `000000` 替换为数据库 `sms_verifications` 表中手动插入的固定验证码。
-
----
-
-### 13.5 手动插入机器人账号（若数据库中不存在）
-
-以下 5 个账号是系统保留号段 `1000095–1000099`，不会与正式用户冲突：
+脚本执行后可核查：
 
 ```sql
-INSERT INTO users (uid, nickname, phone, is_bot, user_type, status)
-VALUES
-  (1000095, '叙言者',   '13800000095', TRUE, 'player', 'active'),
-  (1000096, '帷幕之后', '13800000096', TRUE, 'player', 'active'),
-  (1000097, '墨菲斯',   '13800000097', TRUE, 'player', 'active'),
-  (1000098, '夜骐',     '13800000098', TRUE, 'player', 'active'),
-  (1000099, '旅人说书人','13800000099', TRUE, 'player', 'active');
+SELECT COUNT(*) AS thread_count FROM forum_threads WHERE is_bot_generated = 1;
+SELECT COUNT(*) AS post_count FROM forum_posts WHERE is_bot_generated = 1;
+SELECT uid, nickname, bot_status FROM users WHERE is_bot = 1 ORDER BY uid;
 ```
 
----
-
-### 13.6 执行全链路测试
-
-确认配置和 Token 已就绪后，执行：
+上线前建议执行：
 
 ```powershell
-cd E:\Desktop\trpg_new\packages\scripts\seeds
-node ai-bot-test.js
+pnpm --filter @trpg/server seed:phase4
 ```
 
-脚本会自动完成：
-
-| 步骤 | 操作 | 默认数量 |
-|:---:|------|:---:|
-| 1 | 调用 DeepSeek API 生成帖子文案 | 20 篇 |
-| 2 | 调用 `POST /api/posts` 发帖 | 20 次 |
-| 3 | 调用 `POST /api/posts/{id}/reactions` 表态 | 每帖 3 条 |
-| 4 | 调用 `POST /api/posts/{id}/replies` 评论 | 每帖 2 条 |
-| 5 | 调用 `POST /api/reports` 提交举报 | 每帖 1 条 |
-| 6 | 打印测试报告 | — |
-
-**调整参数**：修改 `ai-bot-test.config.js` 中的 `AI_POSTS` 和 `SIMULATION` 字段，无需改动主脚本。
-
----
-
-### 13.7 测试报告解读
-
-脚本结束后会打印如下报告：
-
-```
-===== 测试完成 =====
-总发帖: 20 | 表态: 60 | 评论: 40 | 举报: 20
-耗时: X.X 分钟
-结论: 全部通过。
-```
-
-若有失败，错误会以 `❌` 开头打印具体的帖子 ID 和 HTTP 错误码，便于定位。
-
----
-
-### 13.8 上线前清理机器人内容
-
-社区正式上线前，在 MySQL 中执行以下 SQL，将测试内容从信息流中隐藏，并将账号置为休眠：
-
-```sql
--- 将所有机器人帖子从信息流中隐藏
-UPDATE posts SET is_hidden_from_feed = TRUE WHERE author_uid BETWEEN 1000095 AND 1000099;
-
--- 将机器人账号置为休眠状态
-UPDATE users SET status = 'dormant' WHERE uid BETWEEN 1000095 AND 1000099;
-```
-
----
-
-### 13.9 常见问题
+### 13.5 常见问题
 
 | 错误 | 原因 | 解决方式 |
 |------|------|---------|
-| `Cannot find module 'axios'` | 脚本依赖未安装 | 见 13.3 节 |
-| `401 Unauthorized` | Token 无效或过期 | 重新执行 `init-bot-tokens.js` |
-| `404 Not Found` on /api/posts | 后端未启动或路由未注册 | 确认后端服务正常运行 |
-| `DEEPSEEK_API_KEY is not defined` | 未配置 `.env.local` | 见 13.2 节 |
-| `ER_DUP_ENTRY` on uid | 机器人账号已存在 | 跳过 13.5 节 |
+| seed 命令报 DB 连接失败 | MySQL 未启动或 .env 错误 | 先完成第 3/4/6 节 |
+| seed 命令报 Redis 连接失败 | Redis 未启动 | 启动 Redis 后重试 |
+| AI 文案未生效 | 未配置 DEEPSEEK_API_KEY | 配置根目录 .env 或改用 --no-ai |
+| UID 已存在 | 机器人账号已创建 | 可直接跳过 Phase 1 |
 
 ---
 
@@ -596,7 +551,7 @@ UPDATE users SET status = 'dormant' WHERE uid BETWEEN 1000095 AND 1000099;
 - 测试账号 A：手机号、密码、角色
 - 测试账号 B：手机号、密码、角色
 - 测试账号 C：手机号、密码、角色
-- 机器人账号 1000095-1000099：登录手机号、固定验证码口径、Token 更新日期
+- 机器人账号 1000095-1000099：由脚本维护状态（active/hibernated），记录最近一次 seed 执行时间
 
 注意：
 
@@ -604,28 +559,28 @@ UPDATE users SET status = 'dormant' WHERE uid BETWEEN 1000095 AND 1000099;
 2. 该文件不放网盘公开目录。
 3. 若团队多人使用，改为每人本地各自保存。
 
-### 15.3 机器人账号登录口径（写进手册）
+### 15.3 机器人账号口径（写进手册）
 
-机器人账号建议在手册中写“如何登录”，而不是写“固定密码明文”：
+机器人账号建议在手册中写“脚本驱动规则”，而不是写“登录密码明文”：
 
 1. 账号范围：UID 1000095-1000099。
-2. 登录方式：手机号 + 验证码登录（测试环境固定码策略见第 13.4 节）。
-3. Token 失效后：重新执行第 13.4 节脚本刷新。
+2. 使用方式：由 seed 脚本驱动创建与互动，不作为人工登录账号。
+3. 状态维护：开发期 active，上线前执行第 13.4 节清理流程切换为 hibernated。
 
-这样你可以完成全部测验，但不需要在文档里暴露密码。
+这样你可以完成内容联调，但不需要维护机器人密码/Token。
 
 ### 15.4 你可直接执行的账号台账模板
 
-| 账号标识 | 角色 | 登录方式 | 密码/验证码获取方式 | 最近验证时间 |
+| 账号标识 | 角色 | 登录方式 | 凭据获取方式 | 最近验证时间 |
 |------|------|------|------|------|
 | 账号 A | 玩家 | 手机号 + 密码 | 本机私有凭据文件 | YYYY-MM-DD |
 | 账号 B | 玩家 | 手机号 + 密码 | 本机私有凭据文件 | YYYY-MM-DD |
 | 账号 C | GM/创作者 | 手机号 + 密码 | 本机私有凭据文件 | YYYY-MM-DD |
-| 1000095 叙言者 | 机器人 | 手机号 + 验证码 | 第 13.4 节脚本刷新 Token | YYYY-MM-DD |
-| 1000096 帷幕之后 | 机器人 | 手机号 + 验证码 | 第 13.4 节脚本刷新 Token | YYYY-MM-DD |
-| 1000097 墨菲斯 | 机器人 | 手机号 + 验证码 | 第 13.4 节脚本刷新 Token | YYYY-MM-DD |
-| 1000098 夜骐 | 机器人 | 手机号 + 验证码 | 第 13.4 节脚本刷新 Token | YYYY-MM-DD |
-| 1000099 旅人说书人 | 机器人 | 手机号 + 验证码 | 第 13.4 节脚本刷新 Token | YYYY-MM-DD |
+| 1000095 | 机器人 | 不人工登录（脚本驱动） | 第 13.2 节 seed 命令 | YYYY-MM-DD |
+| 1000096 | 机器人 | 不人工登录（脚本驱动） | 第 13.2 节 seed 命令 | YYYY-MM-DD |
+| 1000097 | 机器人 | 不人工登录（脚本驱动） | 第 13.2 节 seed 命令 | YYYY-MM-DD |
+| 1000098 | 机器人 | 不人工登录（脚本驱动） | 第 13.2 节 seed 命令 | YYYY-MM-DD |
+| 1000099 | 机器人 | 不人工登录（脚本驱动） | 第 13.2 节 seed 命令 | YYYY-MM-DD |
 
 ### 15.5 最低安全红线
 
@@ -648,7 +603,7 @@ UPDATE users SET status = 'dormant' WHERE uid BETWEEN 1000095 AND 1000099;
 2. 账号 B（玩家）
 3. 账号 C（GM/创作者）
 
-机器人账号（UID 1000095-1000099）通常使用验证码登录与 Token 刷新，不走密码轮换。
+机器人账号（UID 1000095-1000099）为脚本驱动账号，不参与密码轮换。
 
 ### 16.2 轮换前准备（2 分钟）
 
