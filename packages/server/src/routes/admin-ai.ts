@@ -140,7 +140,7 @@ router.get('/ai/training', authMiddleware, requireAdmin, async (_req: Request, r
     });
   } catch (err: unknown) {
     logError('ADMIN_AI_TRAINING_QUERY_FAILED', 'high', safeErrorMessage(err, '训练数据统计查询失败'));
-    const message = safeErrorMessage(err, '训练数据统계查询失败');
+    const message = safeErrorMessage(err, '训练数据统计查询失败');
     res.status(500).json({ error: 'QUERY_FAILED', message });
   }
 });

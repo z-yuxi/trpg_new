@@ -1,17 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { authService } from '../services/auth-service';
-import { userService } from '../services/user-service';
-import type { User } from '@trpg/shared';
-
-// Extend Express Request to include user
-declare global {
-  namespace Express {
-    interface Request {
-      user?: User;
-      userId?: string;
-    }
-  }
-}
+import { authService } from '../services/auth-service.js';
+import { userService } from '../services/user-service.js';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];
@@ -29,7 +18,6 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return;
     }
     req.user = user;
-    req.userId = user.id;
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
@@ -85,7 +73,6 @@ export async function optionalAuthMiddleware(req: Request, _res: Response, next:
       const user = await userService.findById(payload.userId);
       if (user) {
         req.user = user;
-        req.userId = user.id;
       }
     } catch {
       // Ignore auth errors for optional auth

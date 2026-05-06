@@ -15,14 +15,14 @@
  */
 import { Router, type IRouter, type Request } from 'express';
 import { z } from 'zod';
-import { authMiddleware, requireAdmin } from '../middleware/auth';
-import { getAuthedUser } from '../middleware/auth-typed';
-import { db } from '../db';
+import { authMiddleware, requireAdmin } from '../middleware/auth.js';
+import { getAuthedUser } from '../middleware/auth-typed.js';
+import { db } from '../db/index.js';
 import { generateId } from '@trpg/shared';
-import { paymentService, PaymentError } from '../services/payment-service';
-import { metrics } from '../utils/business-metrics';
-import { safeErrorMessage } from '../utils/error-response';
-import { logError } from '../utils/structured-logger';
+import { paymentService, PaymentError } from '../services/payment-service.js';
+import { metrics } from '../utils/business-metrics.js';
+import { safeErrorMessage } from '../utils/error-response.js';
+import { logError } from '../utils/structured-logger.js';
 import { safeJsonParse } from '../utils/safe-json.js';
 import {
   verifyAlipaySignature,
@@ -30,8 +30,8 @@ import {
   decryptWechatResource,
   verifyHmacSignature,
   type WechatPayCallbackHeaders,
-} from '../services/payment-verifier';
-import { paymentCreateLimiter, paymentWebhookLimiter } from '../middleware/rate-limiter';
+} from '../services/payment-verifier.js';
+import { paymentCreateLimiter, paymentWebhookLimiter } from '../middleware/rate-limiter.js';
 
 const router: IRouter = Router();
 
@@ -154,7 +154,7 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
       .first();
     if (!row) { res.status(404).json({ error: 'Order not found' }); return; }
 
-    const meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata ?? {});
+    const meta = safeJsonParse<Record<string, unknown>>(row.metadata, {});
     res.json({
       id: row.id,
       order_no: row.id,

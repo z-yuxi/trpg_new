@@ -9,9 +9,10 @@
  * 计费口径：仅 status='success' 的记录计入配额，失败不扣次数。
  */
 import type { Request, Response, NextFunction } from 'express';
-import { db } from '../db';
-import { metrics } from '../utils/business-metrics';
-import type { TaskType } from '../services/ai-service';
+import { db } from '../db/index.js';
+import { metrics } from '../utils/business-metrics.js';
+import type { TaskType } from '../services/ai-service.js';
+import { getAuthedUser } from './auth-typed.js';
 
 type MembershipType = 'free' | 'pro' | 'creator';
 
@@ -23,7 +24,7 @@ const MONTHLY_QUOTA: Record<MembershipType, Record<TaskType, number>> = {
 
 export function checkAiQuota(taskType: TaskType) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const user = req.user!;
+    const user = getAuthedUser(req);
     const membership = (user.subscription_type as MembershipType | undefined) ?? 'free';
     // creator 会员同时也能享受 pro 配额的超集，直接按 subscription_type 映射
     const effectiveTier: MembershipType =
