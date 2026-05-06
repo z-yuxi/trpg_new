@@ -25,6 +25,7 @@
 | AI 模组分析（异步入队） | [ai-import-module.yaml](ai-import-module.yaml) |
 | AI 月度配额查询 | [ai-quota.yaml](ai-quota.yaml) |
 | 创建房间 | [campaign-create.yaml](campaign-create.yaml) |
+| 统一搜索与推荐标签 | [search-query.yaml](search-query.yaml) |
 | 规则引擎执行检定 | [engine-execute.yaml](engine-execute.yaml) |
 | GM 审批/拒绝移动 | [gm-approve-move.yaml](gm-approve-move.yaml) |
 | 拉取历史消息 | [messages-list.yaml](messages-list.yaml) |

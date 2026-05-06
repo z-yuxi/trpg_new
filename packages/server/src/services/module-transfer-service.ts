@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import fontkit from '@pdf-lib/fontkit';
 import mammoth from 'mammoth';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -23,6 +24,9 @@ const DOCX_EXTENSIONS = new Set(['.docx']);
 const PDF_CHARS_PER_LINE = 34;
 
 const WINDOWS_CJK_FONT_CANDIDATES = [
+  // 优先使用打包内置字体（兼容 Docker / Linux）
+  path.resolve(__dirname, '../../assets/fonts/NotoSansSC.ttf'),
+  // 其次尝试 Windows 系统字体（本地开发）
   'C:/Windows/Fonts/simhei.ttf',
   'C:/Windows/Fonts/msyh.ttf',
   'C:/Windows/Fonts/msyh.ttc',
@@ -232,7 +236,7 @@ export async function createModulePdfBuffer(moduleSource: ModulePdfSource): Prom
 
   const cjkFontPath = WINDOWS_CJK_FONT_CANDIDATES.find((candidate) => fs.existsSync(candidate));
   const fontBytes = cjkFontPath ? fs.readFileSync(cjkFontPath) : null;
-  const font = fontBytes ? await pdfDoc.embedFont(fontBytes) : fallbackFont;
+  const font = fontBytes ? await pdfDoc.embedFont(fontBytes, { subset: true }) : fallbackFont;
   const titleFont = fontBytes ? font : fallbackTitleFont;
 
   const plainText = extractPlainTextFromModuleContent(moduleSource.content);

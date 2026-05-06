@@ -192,6 +192,44 @@
 |----|------|------|------|------|
 | scenes | atmosphere_keywords | json | 否 | 氛围关键词数组，默认 `[]` |
 
+### 1.12 搜索标签推荐相关表（非 AI）
+
+`search_behavior_events`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| query_hash | string(128) | 是 | 归一化搜索词哈希（不可逆） |
+| entity_type | enum('modules','rulesets','recruitment_posts') | 是 | 搜索实体类型 |
+| content_id | string(64) | 是 | 被点击/下载/加入的内容 ID |
+| event_type | enum('search','click','download','join') | 是 | 行为类型 |
+| occurred_at | timestamp | 是 | 事件时间 |
+
+约束与索引：
+
+1. `index idx_sbe_query_time (query_hash, occurred_at)`
+2. `index idx_sbe_entity_content (entity_type, content_id)`
+3. 不存用户明文标识，不回写原创正文内容。
+
+`search_tag_cooccurrence_daily`：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string(64) | 是 | 主键 |
+| stat_date | date | 是 | 统计日期 |
+| entity_type | enum('modules','rulesets','recruitment_posts') | 是 | 实体类型 |
+| source_tag | string(64) | 是 | 源标签 |
+| target_tag | string(64) | 是 | 推荐标签 |
+| tag_type | enum('era','style','duration','difficulty','system','other') | 是 | 标签类别 |
+| weight | decimal(5,4) | 是 | 关联权重（0~1） |
+| updated_at | timestamp | 是 | 更新时间 |
+
+约束与索引：
+
+1. `unique(stat_date, entity_type, source_tag, target_tag)`
+2. `index idx_stcd_source (entity_type, source_tag, stat_date)`
+3. `weight` 取值范围应在 `0~1`。
+
 ---
 
 ## 2. 运行时数据结构

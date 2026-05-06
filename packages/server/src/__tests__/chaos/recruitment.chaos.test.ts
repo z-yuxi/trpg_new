@@ -49,10 +49,10 @@ describe('故障演练 A — Redis 不可用', () => {
     originalGet = (redis.get as ReturnType<typeof vi.fn>).getMockImplementation?.() ?? (() => null);
     originalSet = (redis.set as ReturnType<typeof vi.fn>).getMockImplementation?.() ?? (() => 'OK');
 
-    // 模拟 Redis 不可用：读/探活报错；写操作降级为 no-op，避免未 await 的 Promise rejection 噪音
+    // 模拟 Redis 全部报错
     vi.mocked(redis.get).mockRejectedValue(new Error('Redis connection refused'));
-    vi.mocked(redis.set).mockResolvedValue('OK');
-    vi.mocked(redis.setex).mockResolvedValue('OK');
+    vi.mocked(redis.set).mockRejectedValue(new Error('Redis connection refused'));
+    vi.mocked(redis.setex).mockRejectedValue(new Error('Redis connection refused'));
     vi.mocked(redis.ping).mockRejectedValue(new Error('Redis connection refused'));
   });
 
@@ -125,9 +125,16 @@ describe('故障演练 B — DB 异常降级', () => {
   });
 
   it('B2: 招募列表 DB 失败应返回 500（不崩溃进程）', async () => {
+    const { db } = await import('../../db/index.js');
+
+    // Mock 特定 table 查询失败
+    const spy = vi.spyOn(db, 'raw' as never).mockRejectedValueOnce(new Error('DB error'));
+
     const res = await request.get('/api/recruitment');
-    // 期望：接口可返回业务响应，且不引发进程级异常
+    // 期望：返回 5xx（合理错误），不是进程崩溃
     expect([200, 500, 503]).toContain(res.status);
+
+    spy.mockRestore();
   });
 });
 
