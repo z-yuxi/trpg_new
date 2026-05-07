@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TCard from '../components/base/TCard.vue';
@@ -12,63 +12,102 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
+// ── 模式 ──────────────────────────────────────────────────────────
+type LoginMode = 'code' | 'password' | 'username';
+const loginMode = ref<LoginMode>('code');
+
+// ── 表单字段 ───────────────────────────────────────────────────────
 const phone = ref('');
+const areaCode = ref('+86');
 const password = ref('');
-const isRegister = ref(false);
-const error = ref('');
+const username = ref('');
+const verificationCode = ref('');
+const agreedToTerms = ref(false);
 const loading = ref(false);
 
-// 模拟短信验证码（仅本地开发测试用，上线前替换为真实短信 API）
+// ── 字段级错误 ─────────────────────────────────────────────────────
+const phoneError = ref('');
+const codeError = ref('');
+const passwordError = ref('');
+const globalError = ref('');
+
+// ── 区号 ───────────────────────────────────────────────────────────
+const AREA_CODES = [
+  { label: '+86', desc: '中国大陆' },
+  { label: '+852', desc: '中国香港' },
+  { label: '+853', desc: '中国澳门' },
+  { label: '+886', desc: '中国台湾' },
+];
+const areaCodeOpen = ref(false);
+const areaCodeRef = ref<HTMLDivElement | null>(null);
+
+function selectAreaCode(code: string) {
+  areaCode.value = code;
+  areaCodeOpen.value = false;
+}
+
+function onDocClick(e: MouseEvent) {
+  if (areaCodeRef.value && !areaCodeRef.value.contains(e.target as Node)) {
+    areaCodeOpen.value = false;
+  }
+}
+onMounted(() => document.addEventListener('click', onDocClick));
+onUnmounted(() => document.removeEventListener('click', onDocClick));
+
+// ── 模拟短信验证码（上线前替换为真实短信 API） ─────────────────────
 const smsCode = ref('');
-const enteredCode = ref('');
 const codeSent = ref(false);
 const codeCountdown = ref(0);
 let codeTimer: ReturnType<typeof setInterval> | null = null;
 
-const submitLabel = computed(() => (isRegister.value ? '注册' : '登录'));
+const submitLabel = computed(() => loginMode.value === 'code' ? '登录 / 注册' : '登录');
 
-function normalizeAuthError(message: string, mode: 'register' | 'login' | 'code') {
-  if (mode === 'code') {
-    if (message.includes('手机号')) return '请先输入手机号';
-    return '验证码发送失败，请稍后重试';
-  }
+function clearErrors() {
+  phoneError.value = '';
+  codeError.value = '';
+  passwordError.value = '';
+  globalError.value = '';
+}
 
-  if (message.includes('Validation failed')) {
-    return mode === 'register' ? '请完整填写注册信息后再试' : '请输入手机号和密码';
-  }
+function switchMode(mode: LoginMode) {
+  loginMode.value = mode;
+  clearErrors();
+  resetSmsState();
+  agreedToTerms.value = false;
+}
 
+function normalizeAuthError(message: string): string {
+  if (message.includes('Validation failed')) return '请完整填写必填信息';
   if (message.includes('请求过于频繁')) return message;
   if (message.includes('手机号或密码错误')) return '手机号或密码不正确';
   if (message.includes('验证码不正确')) return '验证码不正确，请重新输入';
-  if (message.includes('请先获取验证码')) return '请先获取验证码';
+  if (message.includes('json') || message.includes('JSON')) return '网络异常，请稍后重试';
+  if (message.includes('Unexpected end')) return '服务器响应异常，请稍后重试';
   if (message.includes('注册失败')) return '注册失败，请稍后重试';
   if (message.includes('登录失败')) return '登录失败，请稍后重试';
   return message;
 }
 
-function sendMockCode() {
-  try {
-    if (!phone.value.trim()) {
-      throw new Error('请先输入手机号');
-    }
-    smsCode.value = String(Math.floor(100000 + Math.random() * 900000));
-    codeSent.value = true;
-    error.value = '';
-    codeCountdown.value = 60;
-    if (codeTimer) clearInterval(codeTimer);
-    codeTimer = setInterval(() => {
-      codeCountdown.value--;
-      if (codeCountdown.value <= 0) { clearInterval(codeTimer!); codeTimer = null; }
-    }, 1000);
-    ElMessage.success('验证码已发送，请查看下方测试验证码');
-  } catch (err) {
-    error.value = normalizeAuthError(err instanceof Error ? err.message : '', 'code');
+function sendCode() {
+  phoneError.value = '';
+  if (!phone.value.trim()) {
+    phoneError.value = '请先输入手机号';
+    return;
   }
+  smsCode.value = String(Math.floor(100000 + Math.random() * 900000));
+  codeSent.value = true;
+  codeCountdown.value = 60;
+  if (codeTimer) clearInterval(codeTimer);
+  codeTimer = setInterval(() => {
+    codeCountdown.value--;
+    if (codeCountdown.value <= 0) { clearInterval(codeTimer!); codeTimer = null; }
+  }, 1000);
+  ElMessage.success('验证码已发送，请查看下方测试验证码');
 }
 
 function resetSmsState() {
   smsCode.value = '';
-  enteredCode.value = '';
+  verificationCode.value = '';
   codeSent.value = false;
   codeCountdown.value = 0;
   if (codeTimer) { clearInterval(codeTimer); codeTimer = null; }
@@ -77,31 +116,32 @@ function resetSmsState() {
 onUnmounted(() => { if (codeTimer) clearInterval(codeTimer); });
 
 async function submit() {
-  error.value = '';
+  clearErrors();
   loading.value = true;
   try {
-    if (isRegister.value) {
-      // 验证短信验证码
-      if (!codeSent.value) { error.value = '请先获取验证码'; return; }
-      if (enteredCode.value !== smsCode.value) { error.value = '验证码不正确'; return; }
-      // 注册
+    if (loginMode.value === 'code') {
+      if (!codeSent.value) { codeError.value = '请先获取验证码'; return; }
+      if (verificationCode.value !== smsCode.value) { codeError.value = '验证码不正确，请重新输入'; return; }
+      // TODO: 上线后替换为 POST /api/auth/verify-code，后端统一判断新老用户
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.value, password: password.value }),
+        body: JSON.stringify({ phone: phone.value, password: `Trpg@${Date.now()}` }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '注册失败');
+      if (!res.ok) throw new Error(data.error || '操作失败');
       const accessToken = data?.tokens?.access_token;
-      if (!accessToken) throw new Error('注册成功但未获取到令牌');
+      if (!accessToken) throw new Error('操作成功但未获取到令牌');
       if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
       authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url, userType: data.user.user_type, expiresIn: data?.tokens?.expires_in });
     } else {
-      // 登录
+      const body = loginMode.value === 'password'
+        ? { phone: phone.value, password: password.value }
+        : { username: username.value, password: password.value };
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone.value, password: password.value }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '登录失败');
@@ -112,8 +152,8 @@ async function submit() {
     }
     const redirect = (route.query.redirect as string) || '/';
     router.push(redirect);
-  } catch (e: any) {
-    error.value = normalizeAuthError(e?.message || '操作失败', isRegister.value ? 'register' : 'login');
+  } catch (e) {
+    globalError.value = normalizeAuthError(e instanceof Error ? e.message : '操作失败');
   } finally {
     loading.value = false;
   }
@@ -123,32 +163,133 @@ async function submit() {
 <template>
   <div class="login-page">
     <TCard padding="lg" shadow class="login-card">
-      <div class="hero-mark" aria-hidden="true"></div>
-      <h1 class="title">{{ submitLabel }}</h1>
-      <p class="tagline">让故事因同行而生动</p>
+      <!-- 品牌区 -->
+      <template v-if="loginMode === 'code'">
+        <h1 class="title">登录 / 注册</h1>
+        <p class="tagline">让故事因同行而生动</p>
+      </template>
+      <h1 v-else class="title title-compact">登录</h1>
+
       <div class="form">
-        <div v-if="error" class="form-alert">{{ error }}</div>
-        <div v-if="isRegister" class="phone-row">
-          <div class="phone-input-wrap"><TInput v-model="phone" placeholder="手机号" /></div>
-          <TButton
-            type="secondary"
-            size="md"
-            class="code-btn"
-            :disabled="codeCountdown > 0"
-            @click="sendMockCode"
-          >{{ codeCountdown > 0 ? `${codeCountdown}s` : '获取验证码' }}</TButton>
-        </div>
-        <TInput v-else v-model="phone" placeholder="手机号" />
-        <template v-if="isRegister">
-          <div v-if="codeSent" class="code-hint">测试验证码：<strong>{{ smsCode }}</strong></div>
-          <TInput v-model="enteredCode" placeholder="输入验证码" />
+        <!-- 全局错误（字段级兜底） -->
+        <p v-if="globalError" class="field-error global-error">{{ globalError }}</p>
+
+        <!-- ── 验证码模式 ── -->
+        <template v-if="loginMode === 'code'">
+          <!-- 手机号 + 区号 -->
+          <div class="field-block">
+            <div ref="areaCodeRef" class="phone-wrap">
+              <div class="phone-row">
+                <button
+                  type="button"
+                  class="area-code-btn"
+                  @click="areaCodeOpen = !areaCodeOpen"
+                >{{ areaCode }} <span class="chevron">▾</span></button>
+                <input
+                  v-model="phone"
+                  type="tel"
+                  placeholder="请输入手机号"
+                  class="phone-input"
+                  inputmode="numeric"
+                  autocomplete="tel"
+                />
+              </div>
+              <ul v-if="areaCodeOpen" class="area-menu" role="listbox">
+                <li
+                  v-for="item in AREA_CODES"
+                  :key="item.label"
+                  :class="{ active: areaCode === item.label }"
+                  @click="selectAreaCode(item.label)"
+                >
+                  <span class="ac-code">{{ item.label }}</span>
+                  <span class="ac-desc">{{ item.desc }}</span>
+                </li>
+              </ul>
+            </div>
+            <p v-if="phoneError" class="field-error">{{ phoneError }}</p>
+          </div>
+
+          <!-- 验证码（内联操作区） -->
+          <div class="field-block">
+            <div class="inline-row">
+              <input
+                v-model="verificationCode"
+                type="text"
+                placeholder="请输入验证码"
+                class="inline-input"
+                inputmode="numeric"
+                maxlength="6"
+                autocomplete="one-time-code"
+              />
+              <span class="inline-sep" />
+              <button
+                type="button"
+                class="inline-btn"
+                :disabled="codeCountdown > 0"
+                @click="sendCode"
+              >{{ codeCountdown > 0 ? `${codeCountdown}s` : (codeSent ? '重新获取' : '获取验证码') }}</button>
+            </div>
+            <p v-if="codeSent && !codeError" class="code-hint">测试验证码：<strong>{{ smsCode }}</strong></p>
+            <p v-if="codeError" class="field-error">{{ codeError }}</p>
+          </div>
         </template>
-        <TInput v-model="password" type="password" placeholder="密码" />
-        <TButton type="primary" :loading="loading" class="submit-btn" @click="submit">
-          {{ submitLabel }}
-        </TButton>
-        <div class="switch-link" @click="isRegister = !isRegister; resetSmsState()">
-          {{ isRegister ? '已有账号？去登录' : '没有账号？去注册' }}
+
+        <!-- ── 手机号密码模式 ── -->
+        <template v-else-if="loginMode === 'password'">
+          <div class="field-block">
+            <TInput v-model="phone" placeholder="请输入手机号" />
+            <p v-if="phoneError" class="field-error">{{ phoneError }}</p>
+          </div>
+          <div class="field-block">
+            <TInput v-model="password" type="password" placeholder="请输入密码" />
+            <p v-if="passwordError" class="field-error">{{ passwordError }}</p>
+          </div>
+          <div class="forgot-row">
+            <span class="text-link" @click="router.push('/forgot-password')">忘记密码？</span>
+          </div>
+        </template>
+
+        <!-- ── 用户名密码模式 ── -->
+        <template v-else>
+          <div class="field-block">
+            <TInput v-model="username" placeholder="请输入用户名" />
+          </div>
+          <div class="field-block">
+            <TInput v-model="password" type="password" placeholder="请输入密码" />
+            <p v-if="passwordError" class="field-error">{{ passwordError }}</p>
+          </div>
+        </template>
+
+        <!-- 提交按钮 -->
+        <TButton
+          type="primary"
+          :loading="loading"
+          :disabled="!agreedToTerms"
+          class="submit-btn"
+          @click="submit"
+        >{{ submitLabel }}</TButton>
+
+        <!-- 协议勾选 -->
+        <label class="agreement-label">
+          <input type="checkbox" v-model="agreedToTerms" class="agreement-checkbox" />
+          <span>我已阅读并同意<a href="/terms" target="_blank" rel="noopener" class="agreement-link">《共叙平台服务协议》</a>和<a href="/privacy" target="_blank" rel="noopener" class="agreement-link">《共叙隐私政策》</a></span>
+        </label>
+
+        <!-- 模式切换 -->
+        <div class="mode-links">
+          <template v-if="loginMode === 'code'">
+            <span class="text-link" @click="switchMode('password')">使用密码登录</span>
+          </template>
+          <template v-else-if="loginMode === 'password'">
+            <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
+            <span class="link-sep">·</span>
+            <span class="text-link" @click="switchMode('username')">使用用户名登录</span>
+          </template>
+          <template v-else>
+            <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
+            <span class="link-sep">·</span>
+            <span class="text-link" @click="switchMode('password')">使用手机号登录</span>
+          </template>
         </div>
       </div>
     </TCard>
@@ -156,6 +297,7 @@ async function submit() {
 </template>
 
 <style scoped>
+/* ── 页面布局 ── */
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -169,73 +311,211 @@ async function submit() {
 .login-card {
   position: relative;
   width: min(100%, 380px);
-  overflow: hidden;
   border: 1px solid rgba(91, 141, 184, 0.14);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 254, 0.98));
-  box-shadow: 0 18px 52px rgba(41, 73, 102, 0.12);
-}
-.hero-mark {
-  width: 56px;
-  height: 6px;
-  margin: 0 auto 18px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(91, 141, 184, 0.18), rgba(91, 141, 184, 0.78), rgba(91, 141, 184, 0.18));
+  box-shadow: 0 8px 24px rgba(41, 73, 102, 0.08);
 }
 .title { font-size: var(--text-2xl); font-weight: 700; text-align: center; margin-bottom: 8px; }
+.title-compact { margin-bottom: 18px; }
 .tagline { margin: 0 0 18px; text-align: center; font-size: var(--text-sm); color: var(--text-secondary); }
-.form { display: flex; flex-direction: column; gap: 12px; }
-.form-alert {
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(196, 77, 86, 0.18);
-  background: linear-gradient(180deg, rgba(255, 244, 244, 0.96), rgba(255, 249, 249, 0.98));
-  color: #9c3c45;
-  font-size: var(--text-sm);
-  line-height: 1.4;
+.form { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── 字段块 ── */
+.field-block { display: flex; flex-direction: column; gap: 4px; }
+.field-error { margin: 0; font-size: 12px; color: #c44d56; line-height: 1.4; }
+.global-error {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 244, 244, 0.7);
+  border: 1px solid rgba(196, 77, 86, 0.15);
 }
-.switch-link { text-align: center; margin-top: 2px; font-size: var(--text-sm); color: var(--color-accent); cursor: pointer; }
-.switch-link:hover { text-decoration: underline; }
-.phone-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; align-items: stretch; }
-.phone-input-wrap { flex: 1; min-width: 0; }
-.code-btn {
+
+/* ── 手机号行（含区号） ── */
+.phone-wrap { position: relative; }
+.phone-row {
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  border: 1px solid rgba(41, 73, 102, 0.18);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.phone-row:focus-within { border-color: var(--color-accent, #5b8db8); }
+
+.area-code-btn {
   flex-shrink: 0;
-  min-height: 36px;
+  height: 100%;
+  padding: 0 10px;
+  border: none;
+  border-right: 1px solid rgba(41, 73, 102, 0.1);
+  background: rgba(91, 141, 184, 0.04);
+  color: var(--text-primary, #1a2b3c);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
   white-space: nowrap;
-  border-radius: 12px;
+  transition: background 0.15s;
 }
-.code-hint {
-  padding: 8px 12px;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed rgba(91, 141, 184, 0.24);
-  border-radius: 12px;
+.area-code-btn:hover { background: rgba(91, 141, 184, 0.09); }
+.chevron { font-size: 10px; color: var(--text-muted, #8fa3b1); }
+
+.phone-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 12px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-primary, #1a2b3c);
+  background: transparent;
 }
-.code-hint strong { color: var(--color-accent); font-family: monospace; letter-spacing: 0.12em; }
+.phone-input::placeholder { color: var(--text-muted, #8fa3b1); }
+
+/* ── 区号下拉菜单 ── */
+.area-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid rgba(41, 73, 102, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(41, 73, 102, 0.1);
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+.area-menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+.area-menu li:hover { background: rgba(91, 141, 184, 0.07); }
+.area-menu li.active { color: var(--color-accent, #5b8db8); }
+.ac-code { font-weight: 500; color: var(--text-primary, #1a2b3c); min-width: 42px; }
+.ac-desc { font-size: 12px; color: var(--text-muted, #8fa3b1); }
+
+/* ── 内联操作区（验证码） ── */
+.inline-row {
+  display: flex;
+  align-items: stretch;
+  height: 44px;
+  border: 1px solid rgba(41, 73, 102, 0.18);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.inline-row:focus-within { border-color: var(--color-accent, #5b8db8); }
+.inline-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 12px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-primary, #1a2b3c);
+  background: transparent;
+}
+.inline-input::placeholder { color: var(--text-muted, #8fa3b1); }
+.inline-sep {
+  width: 1px;
+  background: rgba(41, 73, 102, 0.1);
+  flex-shrink: 0;
+  margin: 10px 0;
+}
+.inline-btn {
+  padding: 0 14px;
+  border: none;
+  background: none;
+  color: var(--color-accent, #5b8db8);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.inline-btn:hover:not(:disabled) { background: rgba(91, 141, 184, 0.07); }
+.inline-btn:disabled { color: var(--text-muted, #8fa3b1); cursor: default; }
+
+/* ── 验证码提示 ── */
+.code-hint { margin: 0; font-size: 12px; color: var(--text-muted, #8fa3b1); }
+.code-hint strong { color: var(--color-accent, #5b8db8); font-family: monospace; letter-spacing: 0.1em; }
+
+/* ── 忘记密码 ── */
+.forgot-row { text-align: right; margin-top: -4px; }
+.text-link { font-size: 12px; color: var(--color-accent, #5b8db8); cursor: pointer; }
+.text-link:hover { text-decoration: underline; }
+
+/* ── 提交按钮 ── */
 .submit-btn {
   width: 100%;
   min-height: 40px;
-  margin-top: 4px;
+  margin-top: 2px;
   background: linear-gradient(135deg, #5b8db8 0%, #44739a 100%);
-  box-shadow: 0 12px 28px rgba(91, 141, 184, 0.28);
+  box-shadow: 0 4px 12px rgba(91, 141, 184, 0.2);
 }
 .submit-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, #5687b0 0%, #3d6a8f 100%);
 }
+
+/* ── 协议勾选 ── */
+.agreement-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--text-xs, 12px);
+  color: var(--text-secondary, #5c6b7a);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.agreement-checkbox {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--color-accent, #5b8db8);
+}
+.agreement-link {
+  color: var(--color-accent, #5b8db8);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.agreement-link:hover { text-decoration: underline; }
+
+/* ── 模式切换 ── */
+.mode-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm, 13px);
+  margin-top: 2px;
+}
+.link-sep { color: var(--text-muted, #8fa3b1); }
+
+/* ── autofill 修复 ── */
+:deep(input:-webkit-autofill),
+:deep(input:-webkit-autofill:hover),
+:deep(input:-webkit-autofill:focus) {
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #1a2b3c !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── 响应式 ── */
 @media (max-width: 480px) {
-  .login-page {
-    padding: 16px;
-    align-items: stretch;
-  }
-  .login-card {
-    width: 100%;
-    margin: auto 0;
-  }
-  .phone-row {
-    grid-template-columns: 1fr;
-  }
-  .code-btn {
-    width: 100%;
-  }
+  .login-page { padding: 16px; align-items: stretch; }
+  .login-card { width: 100%; margin: auto 0; }
 }
 </style>
