@@ -6,10 +6,10 @@ import type { Knex } from 'knex';
  */
 export async function up(knex: Knex): Promise<void> {
   await knex.schema.alterTable('modules', (t) => {
-    t.jsonb('reader_settings').nullable().defaultTo(null);
+    t.json('reader_settings').nullable();
   });
   await knex.schema.alterTable('rulesets', (t) => {
-    t.jsonb('reader_settings').nullable().defaultTo(null);
+    t.json('reader_settings').nullable();
   });
 }
 

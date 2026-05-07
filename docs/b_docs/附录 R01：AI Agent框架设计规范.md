@@ -295,6 +295,10 @@ Agent执行接口：
 
 URL：POST /api/agent/execute
 
+契约文件：`docs/b_docs/platform_api_contract.yaml`
+
+说明：匹配结果面板相关接口（采纳发布 / 重新匹配 / 近期不要推荐）已在该契约文件的“匹配相关接口”章节统一定义。
+
 认证：Bearer Token（环境变量AGENT_SERVICE_API_KEY）
 
 请求体示例：
@@ -322,6 +326,19 @@ json
     "actions": ["publish", "draft", "regenerate"]
   }
 }
+
+当 `result.type = "match"` 时，匹配载荷中的频控字段约定如下：
+
+- `cooldown_remaining`：72 小时冷却剩余秒数
+- `snooze_remaining`：30 天静默剩余天数
+
+### F.4 前端按钮与接口映射
+
+| 前端按钮 | 接口 | 说明 |
+|---|---|---|
+| 采纳并发布引荐 | `POST /api/match/accept` | 发布引荐卡片，响应 `{ status: "published", post_id }` |
+| 换一个匹配 | `POST /api/agent/execute` | 发送 `agent_xun + 重新匹配 + previous_match_id` 获取新候选 |
+| 近期不要推荐 | `POST /internal/ai/referral-feedback` | 提交 `feedback = snooze_30d`，返回 `{ status: "ok" }` |
 错误码约定：
 
 错误码	HTTP状态码	说明

@@ -32,7 +32,7 @@ const registerLimiter = rateLimit({
 const registerSchema = z.object({
   phone: z.string().min(1),
   password: z.string().min(8).regex(/(?=.*[a-zA-Z])(?=.*\d)/, '密码需包含字母和数字'),
-  nickname: z.string().min(1),
+  nickname: z.string().trim().min(1).optional(),
 });
 
 const loginSchema = z.object({
@@ -48,7 +48,12 @@ const refreshSchema = z.object({
 router.post('/register', registerLimiter, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'Validation failed', details: parsed.error.flatten() });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstMessage = fieldErrors.phone?.[0]
+      ?? fieldErrors.password?.[0]
+      ?? fieldErrors.nickname?.[0]
+      ?? '请检查注册信息后重试';
+    res.status(400).json({ error: firstMessage, details: parsed.error.flatten() });
     return;
   }
   try {

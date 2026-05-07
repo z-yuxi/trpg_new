@@ -1,0 +1,312 @@
+openapi: 3.0.3
+info:
+  title: 代码包B 平台 API 契约
+  version: 1.1.0
+  description: |
+    代码包B 与代码包A 的接口契约。
+    本版本补充了“匹配相关接口”章节，用于前端匹配结果面板的三个核心动作：采纳发布、换一个匹配、近期不要推荐。
+
+paths:
+  /api/agent/execute:
+    post:
+      summary: 执行 Agent 指令（含重新匹配）
+      operationId: agentExecute
+      tags:
+        - Agent
+        - 匹配相关接口
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentExecuteRequest'
+            examples:
+              retryMatch:
+                summary: 换一个匹配（retry）
+                value:
+                  agent_id: agent_xun
+                  command: 重新匹配
+                  context:
+                    previous_match_id: mat_001
+      responses:
+        '200':
+          description: 执行成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentExecuteResponse'
+              examples:
+                matchResult:
+                  summary: 匹配结果响应
+                  value:
+                    status: success
+                    result:
+                      type: match
+                      match:
+                        match_id: mat_002
+                        match_type_label: GM 队友
+                        overall_score: 0.87
+                        recommendation_text: 诶，我注意到你们都在找 COC 的长团...
+                        cooldown_remaining: 0
+                        snooze_remaining: 0
+                        last_match_at: '2026-05-06T10:00:00Z'
+                        user:
+                          uid: '1000123'
+                          nickname: 城见美苗
+                          avatar: null
+                        criteria:
+                          - name: 风格偏好
+                            score: 0.92
+                          - name: 节奏偏好
+                            score: 0.85
+                        actions:
+                          accept: true
+                          retry: true
+                          snooze: true
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 权限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/match/accept:
+    post:
+      summary: 采纳并发布引荐
+      operationId: matchAccept
+      tags:
+        - 匹配相关接口
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatchAcceptRequest'
+      responses:
+        '200':
+          description: 已发布
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchAcceptResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 权限不足或处于频控中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /internal/ai/referral-feedback:
+    post:
+      summary: 引荐反馈（近期不要推荐）
+      operationId: referralFeedback
+      tags:
+        - 匹配相关接口
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralFeedbackRequest'
+      responses:
+        '200':
+          description: 反馈已记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 权限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AgentExecuteRequest:
+      type: object
+      required:
+        - agent_id
+        - command
+      properties:
+        agent_id:
+          type: string
+          description: Agent 标识，重试匹配固定使用 agent_xun。
+        command:
+          type: string
+          description: 指令文本，重试匹配建议为“重新匹配”。
+        context:
+          type: object
+          additionalProperties: true
+          properties:
+            previous_match_id:
+              type: string
+              description: 上一次匹配结果 ID，用于避免重复推荐。
+    AgentExecuteResponse:
+      type: object
+      required:
+        - status
+        - result
+      properties:
+        status:
+          type: string
+          enum: [success]
+        result:
+          $ref: '#/components/schemas/AgentResult'
+    AgentResult:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [match, post]
+        match:
+          $ref: '#/components/schemas/MatchPayload'
+    MatchPayload:
+      type: object
+      required:
+        - match_id
+        - match_type_label
+        - overall_score
+        - recommendation_text
+        - actions
+      properties:
+        match_id:
+          type: string
+        match_type_label:
+          type: string
+        overall_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        recommendation_text:
+          type: string
+        cooldown_remaining:
+          type: integer
+          minimum: 0
+          description: 72 小时冷却剩余秒数。
+        snooze_remaining:
+          type: integer
+          minimum: 0
+          description: 30 天静默剩余天数。
+        last_match_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/MatchUser'
+        criteria:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchCriteria'
+        actions:
+          $ref: '#/components/schemas/MatchActions'
+    MatchUser:
+      type: object
+      required: [uid, nickname]
+      properties:
+        uid:
+          type: string
+        nickname:
+          type: string
+        avatar:
+          type: string
+          nullable: true
+    MatchCriteria:
+      type: object
+      required: [name, score]
+      properties:
+        name:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 1
+    MatchActions:
+      type: object
+      required: [accept, retry, snooze]
+      properties:
+        accept:
+          type: boolean
+        retry:
+          type: boolean
+        snooze:
+          type: boolean
+
+    MatchAcceptRequest:
+      type: object
+      required: [match_id]
+      properties:
+        match_id:
+          type: string
+        edited_text:
+          type: string
+          nullable: true
+    MatchAcceptResponse:
+      type: object
+      required: [status, post_id]
+      properties:
+        status:
+          type: string
+          enum: [published]
+        post_id:
+          type: string
+
+    ReferralFeedbackRequest:
+      type: object
+      required: [match_id, feedback]
+      properties:
+        match_id:
+          type: string
+        feedback:
+          type: string
+          enum: [snooze_30d]
+    OkResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

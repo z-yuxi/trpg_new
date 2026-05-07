@@ -305,6 +305,32 @@
 | 次要文字 | 4.6:1（灰500/白） | 5.1:1（灰400/黑） | AA |
 | 禁用文字 | 3.0:1（灰400/白） | 3.8:1（灰500/黑） | AA（大文字） |
 
+### 3.4 AI 社交匹配扩展 Token
+
+用于「寻的匹配结果面板」等 AI 社交匹配场景。以下 Token 统一映射到现有语义色，避免直接写十六进制。
+
+```css
+:root {
+  --color-brand-xun-primary: var(--color-primary);
+  --color-brand-xun-dark: var(--color-primary-hover);
+  --color-brand-xun-light: var(--color-primary-light);
+
+  --color-status-success: var(--color-success);
+  --color-status-warning: var(--color-warning);
+  --color-status-error: var(--color-danger);
+
+  --color-brand-primary: var(--color-primary);
+  --color-neutral-disabled: var(--gray-300);
+  --color-neutral-border: var(--border-divider);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-primary: var(--text-primary);
+}
+```
+
+说明：
+- 若业务需要为「寻」建立独立品牌色，应走“品牌色锁定”审批流程，不得在组件层直接覆盖。
+- 夜间模式无需单独重复定义，上述 Token 已自动继承语义色在 `[data-theme="dark"]` 的映射。
+
 ---
 
 ## 四、间距系统

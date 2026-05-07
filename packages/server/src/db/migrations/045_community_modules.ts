@@ -10,72 +10,73 @@ import type { Knex } from 'knex';
  * 设计依据：附录 C §4.8 模组来源与衍生管理
  */
 export async function up(knex: Knex): Promise<void> {
-  // ── 1. modules 表扩展 ────────────────────────────────────────────────────
-  await knex.schema.alterTable('modules', (table) => {
-    // 来源标签（创建时永久确定）
+  // ── 1. modules 表扩展（可重入，支持失败后重跑）────────────────────────────
+  const addModuleColumnIfMissing = async (
+    columnName: string,
+    addColumn: (table: Knex.CreateTableBuilder) => void
+  ): Promise<void> => {
+    if (await knex.schema.hasColumn('modules', columnName)) {
+      return;
+    }
+
+    await knex.schema.alterTable('modules', (table) => {
+      addColumn(table);
+    });
+  };
+
+  await addModuleColumnIfMissing('source_label', (table) => {
     table
       .enu('source_label', [
-        'original',              // 原创
-        'author_version',        // 作者版
-        'community_pending',     // 社区贡献·待认领
-        'community_authorized',  // 社区贡献·已授权
-        'derivative',            // 衍生创作
-        'certified_independent', // 已认证的独立创作
+        'original',
+        'author_version',
+        'community_pending',
+        'community_authorized',
+        'derivative',
+        'certified_independent',
       ])
       .notNullable()
       .defaultTo('original');
+  });
 
-    // 社区状态（仅社区版使用，作者版为 null）
+  await addModuleColumnIfMissing('community_status', (table) => {
     table
       .enu('community_status', [
-        'private_use',    // 私有导入，仅上传者可见
-        'public_share',   // 公开分享，待认领
-        'pending_review', // 等待原作者审核（作者已入驻）
-        'archived_by_author', // 应作者要求已封存
+        'private_use',
+        'public_share',
+        'pending_review',
+        'archived_by_author',
       ])
-      .nullable()
-      .defaultTo(null);
+      .nullable();
+  });
 
-    // 溯源：上游模组 ID（衍生/社区版填写，组成家族树）
-    table
-      .string('upstream_module_id', 64)
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('upstream_module_id', (table) => {
+    table.string('upstream_module_id', 64).nullable();
+  });
 
-    // 贡献者用户 ID（社区版上传者）
-    table
-      .string('contributor_user_id', 64)
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('contributor_user_id', (table) => {
+    table.string('contributor_user_id', 64).nullable();
+  });
 
-    // 原发布链接（搬运版必填）
-    table
-      .string('original_source_url', 1024)
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('original_source_url', (table) => {
+    table.string('original_source_url', 1024).nullable();
+  });
 
-    // 来源说明（搬运版选填）
-    table
-      .text('original_source_note')
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('original_source_note', (table) => {
+    table.text('original_source_note').nullable();
+  });
 
-    // 认领截止时间（认领发生后 +168h）
-    table
-      .dateTime('claim_deadline_at')
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('claim_deadline_at', (table) => {
+    table.dateTime('claim_deadline_at').nullable();
+  });
 
-    // 作者对该模组设置的衍生管理策略
-    table
-      .enu('derivative_policy', ['open', 'closed', 'review'])
-      .nullable()
-      .defaultTo(null);
+  await addModuleColumnIfMissing('derivative_policy', (table) => {
+    table.enu('derivative_policy', ['open', 'closed', 'review']).nullable();
   });
 
   // ── 2. module_claim_letters 表（致作者的信） ─────────────────────────────
-  await knex.schema.createTable('module_claim_letters', (table) => {
-    table.string('id', 64).primary();
+  if (!(await knex.schema.hasTable('module_claim_letters'))) {
+    await knex.schema.createTable('module_claim_letters', (table) => {
+      table.string('id', 64).primary();
 
     // 关联模组
     table
@@ -95,7 +96,7 @@ export async function up(knex: Knex): Promise<void> {
       .defaultTo('public_share');
 
     // 信件正文（富文本 JSON）
-    table.specificType('content', 'LONGTEXT').notNullable().defaultTo('');
+    table.specificType('content', 'LONGTEXT').notNullable();
 
     // 图片附件（JSON array of URLs）
     table.json('attachments').nullable();
@@ -116,13 +117,15 @@ export async function up(knex: Knex): Promise<void> {
     table.dateTime('reviewed_at').nullable();
     table.string('reviewed_by', 64).nullable(); // null = 系统超时自动处理
 
-    table.index(['module_id']);
-    table.index(['applicant_user_id']);
-  });
+      table.index(['module_id']);
+      table.index(['applicant_user_id']);
+    });
+  }
 
   // ── 3. module_contributors 表（贡献者 / 荣誉协作者） ─────────────────────
-  await knex.schema.createTable('module_contributors', (table) => {
-    table.string('id', 64).primary();
+  if (!(await knex.schema.hasTable('module_contributors'))) {
+    await knex.schema.createTable('module_contributors', (table) => {
+      table.string('id', 64).primary();
 
     table
       .string('module_id', 64)
@@ -141,9 +144,10 @@ export async function up(knex: Knex): Promise<void> {
 
     table.timestamp('created_at').defaultTo(knex.fn.now());
 
-    table.unique(['module_id', 'user_id']);
-    table.index(['user_id']);
-  });
+      table.unique(['module_id', 'user_id']);
+      table.index(['user_id']);
+    });
+  }
 }
 
 export async function down(knex: Knex): Promise<void> {

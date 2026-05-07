@@ -73,6 +73,35 @@ cd trpg_new
 
 ## 3. 初始化数据库
 
+关掉所有终端，重新用「管理员身份」打开 PowerShell
+方法：
+点击左下角 Windows 开始菜单
+搜索 PowerShell
+右键 → 以管理员身份运行
+然后在管理员窗口里输入：
+powershell
+net start MySQL80
+
+然后再登录（正常终端即可）
+进入目录：
+plaintext
+cd "C:\Program Files\MySQL\MySQL Server 8.0\bin"
+运行：
+powershell
+.\mysql -u root -p
+输入你之前的密码Root123456!
+
+如果你真的忘记密码
+我直接给你项目能用的密码：
+sql
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'trpg_password';
+FLUSH PRIVILEGES;
+exit;
+改完 项目直接启动，不用改任何配置！
+
+
+PS C:\Program Files\MySQL\MySQL Server 8.0\bin> .\mysql -u root -p
+
 登录 MySQL 后执行：
 
 ```sql
@@ -427,7 +456,7 @@ pnpm --filter @trpg/server seed:phase4
 | 编号 | 测验项 | 操作步骤 | 通过标准 |
 |------|------|------|------|
 | S1 | 首页与登录入口 | 未登录访问首页，点击主按钮进入登录/注册 | 页面可打开，无白屏，无报错弹窗 |
-| S2 | 注册登录 | 使用账号 A 完成登录 | 登录成功后可进入探索页 |
+| S2 | 注册登录 | 使用账号 A 完成注册并登录（仅填写手机号、验证码、密码） | 登录成功后可进入探索页；昵称由系统自动生成 |
 | S3 | 探索加载 | 打开探索页，切换 2 个以上标签 | 列表可刷新，不卡死 |
 | S4 | 招募主链路 | 用账号 C 发 1 条招募帖；账号 A 申请加入 | 发布成功、申请成功、状态可见 |
 | S5 | 私信链路 | 账号 A 给账号 B 发送 1 条消息 | 双方都能看到消息和会话预览更新 |

@@ -12,6 +12,13 @@ describe('E2E - 认证流程', () => {
       expect([200, 201]).toContain(res.status);
     });
 
+    it('未提供昵称时应生成默认昵称', async () => {
+      const phone = makePhone();
+      const res = await request.post('/api/auth/register').send({ phone, password });
+      expect([200, 201]).toContain(res.status);
+      expect(res.body.user?.nickname).toMatch(/^同行者\d+$/);
+    });
+
     it('重复注册相同手机号应返回 4xx', async () => {
       const phone = makePhone();
       await request.post('/api/auth/register').send({ phone, password, nickname: 'A' });
@@ -23,6 +30,13 @@ describe('E2E - 认证流程', () => {
     it('缺少必要字段应返回 400', async () => {
       const res = await request.post('/api/auth/register').send({ password, nickname: '无手机号' });
       expect(res.status).toBe(400);
+    });
+
+    it('密码不符合要求时返回中文提示', async () => {
+      const phone = makePhone();
+      const res = await request.post('/api/auth/register').send({ phone, password: '12345678' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('密码需包含字母和数字');
     });
   });
 

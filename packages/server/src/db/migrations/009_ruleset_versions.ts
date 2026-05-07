@@ -14,7 +14,7 @@ export async function up(knex: Knex): Promise<void> {
       .references('id').inTable('rulesets').onDelete('CASCADE');
     table.string('version_number', 50).notNullable();    // semver string e.g. "1.0.0"
     table.json('snapshot').notNullable();                 // 完整快照：atoms+connections+commands+schema
-    table.text('changelog').defaultTo('');
+    table.text('changelog').nullable();
     table.timestamp('created_at').defaultTo(knex.fn.now());
     table.index(['ruleset_id', 'created_at']);
   });

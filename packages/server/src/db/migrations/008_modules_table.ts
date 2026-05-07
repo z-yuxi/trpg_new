@@ -6,7 +6,7 @@ export async function up(knex: Knex): Promise<void> {
     t.string('name', 200).notNullable();
     t.string('author_id', 64).notNullable().index();
     t.string('ruleset_id', 64).notNullable().index();
-    t.text('description').notNullable().defaultTo('');
+    t.text('description').nullable();
     t.string('cover_url', 512).notNullable().defaultTo('');
     t.enu('status', ['draft', 'public', 'archived']).notNullable().defaultTo('draft').index();
     t.enu('difficulty', ['easy', 'normal', 'hard']).nullable();

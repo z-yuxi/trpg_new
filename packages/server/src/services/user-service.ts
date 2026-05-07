@@ -12,7 +12,7 @@ export class UserService {
   async register(params: {
     phone: string;
     password: string;
-    nickname: string;
+    nickname?: string;
   }): Promise<User> {
     const { phone, password, nickname } = params;
 
@@ -29,6 +29,7 @@ export class UserService {
     // Generate unique UID
     const maxUidRow = await db('users').max('uid as maxUid').first();
     const uid = Math.max(UID_START, ((maxUidRow?.maxUid as number) ?? UID_START - 1) + 1);
+    const resolvedNickname = nickname?.trim() || `同行者${uid}`;
 
     await db('users').insert({
       id,
@@ -36,7 +37,7 @@ export class UserService {
       phone_encrypted: encryptToJson(phone),
       phone_hmac: hmac,
       password_hash,
-      nickname,
+      nickname: resolvedNickname,
       avatar_url: '',
       user_type: JSON.stringify(['player']),
       creator_level: 1,

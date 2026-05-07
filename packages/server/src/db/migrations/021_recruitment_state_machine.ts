@@ -15,30 +15,44 @@ import type { Knex } from 'knex';
  * 新增索引: (post_id, status), invited_expires_at, waiting_position
  */
 export async function up(knex: Knex): Promise<void> {
-  // 1. 扩展 recruitment_posts.status
-  //    SQLite 通过 CHECK 约束实现枚举校验；MySQL/PostgreSQL 需 ALTER TYPE。
-  //    Knex 的 .enu() 在 SQLite 下不生成约束，因此此处只做 string 列重建保证兼容性。
-  //    实际写入由应用层 TypeScript 枚举保证，此处迁移主要处理 grouped 这个新状态。
-  //    已有行的 status='closed' 且 campaign_id IS NOT NULL 迁移为 'grouped'。
+  // 1. 先扩展枚举，再执行数据改写，避免 MySQL ENUM 截断错误
+  await knex.raw(`
+    ALTER TABLE recruitment_posts
+    MODIFY COLUMN status ENUM('draft', 'open', 'full', 'grouped', 'closed', 'dissolved', 'archived')
+    NOT NULL DEFAULT 'open'
+  `);
+
+  await knex.raw(`
+    ALTER TABLE recruitment_applications
+    MODIFY COLUMN status ENUM('pending', 'approved', 'rejected', 'invited', 'confirmed', 'waiting')
+    NOT NULL DEFAULT 'pending'
+  `);
+
+  // 2. recruitment_posts: 已有 status='closed' 且 campaign_id IS NOT NULL 迁移为 'grouped'
   await knex('recruitment_posts')
     .whereNotNull('campaign_id')
     .where('status', 'closed')
     .update({ status: 'grouped' });
 
-  // 2. 扩展 recruitment_applications.status
-  //    已有 'approved' → 改为 'confirmed'（语义等价：玩家已确认席位）
+  // 3. recruitment_applications: 旧值 approved -> confirmed
   await knex('recruitment_applications')
     .where('status', 'approved')
     .update({ status: 'confirmed' });
 
-  // 3. 新增字段
+  await knex.raw(`
+    ALTER TABLE recruitment_applications
+    MODIFY COLUMN status ENUM('pending', 'invited', 'confirmed', 'waiting', 'rejected')
+    NOT NULL DEFAULT 'pending'
+  `);
+
+  // 4. 新增字段
   await knex.schema.alterTable('recruitment_applications', (t) => {
     t.timestamp('invited_expires_at').nullable();
     t.integer('waiting_position').nullable();
     t.text('reject_reason').nullable();
   });
 
-  // 4. 新增索引
+  // 5. 新增索引
   await knex.schema.alterTable('recruitment_applications', (t) => {
     t.index(['post_id', 'status'], 'idx_rec_apps_post_status');
   });
@@ -65,12 +79,42 @@ export async function down(knex: Knex): Promise<void> {
     t.dropColumn('invited_expires_at');
   });
 
-  // 回滚数据：confirmed → approved, grouped → closed
+  // 回滚数据：先把新值改回旧值，再收缩枚举
   await knex('recruitment_applications')
     .where('status', 'confirmed')
     .update({ status: 'approved' });
 
+  await knex('recruitment_applications')
+    .whereIn('status', ['invited', 'waiting'])
+    .update({ status: 'pending' });
+
   await knex('recruitment_posts')
     .where('status', 'grouped')
     .update({ status: 'closed' });
+
+  await knex('recruitment_posts')
+    .where('status', 'draft')
+    .update({ status: 'open' });
+
+  await knex('recruitment_posts')
+    .whereIn('status', ['dissolved', 'archived'])
+    .update({ status: 'closed' });
+
+  await knex.raw(`
+    ALTER TABLE recruitment_applications
+    MODIFY COLUMN status ENUM('pending', 'approved', 'rejected', 'invited', 'confirmed', 'waiting')
+    NOT NULL DEFAULT 'pending'
+  `);
+
+  await knex.raw(`
+    ALTER TABLE recruitment_applications
+    MODIFY COLUMN status ENUM('pending', 'approved', 'rejected')
+    NOT NULL DEFAULT 'pending'
+  `);
+
+  await knex.raw(`
+    ALTER TABLE recruitment_posts
+    MODIFY COLUMN status ENUM('open', 'closed', 'full')
+    NOT NULL DEFAULT 'open'
+  `);
 }

@@ -35,7 +35,7 @@ export async function up(knex: Knex): Promise<void> {
       .references('id').inTable('modules').onDelete('CASCADE');
     table.string('reporter_user_id', 64).notNullable();
     table.enu('report_type', ['plagiarism', 'violation', 'other']).notNullable();
-    table.text('description').notNullable().defaultTo('');
+    table.text('description').notNullable();
     table.enu('status', ['pending', 'resolved', 'dismissed'])
       .notNullable().defaultTo('pending');
     table.timestamp('created_at').defaultTo(knex.fn.now());

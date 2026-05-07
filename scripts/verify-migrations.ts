@@ -45,11 +45,13 @@ function checkMigrations(): CheckResult {
   }
 
   // ── 2. 序号提取与重复检查（已知历史重复列入白名单，不阻断 CI） ────────────
-  // NOTE: 012_character_instance_fields.ts 与 012_recruitment_metadata.ts 是历史遗留
-  // 重复序号，已在 DB 中记录，禁止新增重复，旧重复不影响 CI 通过。
+  // NOTE: 012_* 与 040_* 的重复序号为历史遗留，已在 DB 中记录。
+  // 禁止新增重复，旧重复不影响 CI 通过。
   const KNOWN_DUPLICATE_FILES = new Set([
     '012_character_instance_fields.ts',
     '012_recruitment_metadata.ts',
+    '040_module_snapshots.ts',
+    '040_payment_audit_log.ts',
   ]);
   const numbered = files
     .map((f) => ({ file: f, num: parseInt(f.slice(0, 3), 10) }))

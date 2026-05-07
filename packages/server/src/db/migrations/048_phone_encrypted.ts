@@ -3,7 +3,7 @@
  *
  * 变更：
  *   - 删除明文 phone 字段（含唯一索引）
- *   - 新增 phone_encrypted JSONB（存储 AES-256-GCM 密文载荷）
+ *   - 新增 phone_encrypted JSON（存储 AES-256-GCM 密文载荷）
  *   - 新增 phone_hmac VARCHAR(64)（存储 HMAC-SHA256 盲索引，唯一约束）
  *
  * 说明：
@@ -21,7 +21,7 @@ export async function up(knex: Knex): Promise<void> {
     // 1. 删除旧明文字段（唯一索引由 Knex 自动删除）
     t.dropColumn('phone');
     // 2. 加密密文字段
-    t.jsonb('phone_encrypted').nullable();
+    t.json('phone_encrypted').nullable();
     // 3. HMAC 盲索引（唯一）
     t.string('phone_hmac', 64).nullable().unique();
   });

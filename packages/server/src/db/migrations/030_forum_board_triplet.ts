@@ -26,6 +26,13 @@ export async function up(knex: Knex): Promise<void> {
     SELECT id, board FROM forum_threads
   `);
 
+  // 先把 board 列扩展为包含新旧值的 ENUM，允许数据改写期间两种值并存。
+  await knex.raw(`
+    ALTER TABLE forum_threads
+    MODIFY COLUMN board ENUM('rules','creation','experience','newbie','lounge','tips','share')
+    NOT NULL
+  `);
+
   await knex.raw(`
     UPDATE forum_threads
     SET board = CASE board
@@ -38,11 +45,25 @@ export async function up(knex: Knex): Promise<void> {
       ELSE board
     END
   `);
+
+  // 收缩为最终 ENUM（仅三值）。
+  await knex.raw(`
+    ALTER TABLE forum_threads
+    MODIFY COLUMN board ENUM('tips','share','lounge')
+    NOT NULL
+  `);
 }
 
 export async function down(knex: Knex): Promise<void> {
   const exists = await knex.schema.hasTable(BACKUP_TABLE);
   if (!exists) return;
+
+  // 先扩枚举，允许写回旧值。
+  await knex.raw(`
+    ALTER TABLE forum_threads
+    MODIFY COLUMN board ENUM('rules','creation','experience','newbie','lounge','tips','share')
+    NOT NULL
+  `);
 
   // 依据备份逐条恢复旧分区值，保证跨数据库兼容。
   const backups = await knex(BACKUP_TABLE).select<{ thread_id: string; old_board: string }[]>('thread_id', 'old_board');
@@ -51,6 +72,13 @@ export async function down(knex: Knex): Promise<void> {
       await trx('forum_threads').where({ id: row.thread_id }).update({ board: row.old_board });
     }
   });
+
+  // 收缩回旧版 ENUM。
+  await knex.raw(`
+    ALTER TABLE forum_threads
+    MODIFY COLUMN board ENUM('rules','creation','experience','newbie','lounge')
+    NOT NULL
+  `);
 
   await knex.schema.dropTableIfExists(BACKUP_TABLE);
 }
