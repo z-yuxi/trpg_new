@@ -9,11 +9,15 @@ function normalizeToken(raw: string | null): string {
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string>(normalizeToken(localStorage.getItem('token')));
-  const userId = ref<string>('');
-  const nickname = ref<string>('');
-  const avatarUrl = ref<string>('');
+  const userId = ref<string>(localStorage.getItem('user_id') || '');
+  const nickname = ref<string>(localStorage.getItem('nickname') || '');
+  const avatarUrl = ref<string>(localStorage.getItem('avatar_url') || '');
   const isCreator = ref<boolean>(localStorage.getItem('is_creator') === '1');
   const isAdmin = ref<boolean>(localStorage.getItem('is_admin') === '1');
+
+  type Identity = 'player' | 'creator';
+  const _savedIdentity = localStorage.getItem('active_identity') as Identity | null;
+  const activeIdentity = ref<Identity>(_savedIdentity ?? 'player');
 
   const isLoggedIn = computed(() => !!token.value && !isTokenExpired());
 
@@ -37,6 +41,11 @@ export const useAuthStore = defineStore('auth', () => {
     userId.value = data.userId;
     nickname.value = data.nickname;
     avatarUrl.value = data.avatarUrl || '';
+
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user_id', data.userId);
+    localStorage.setItem('nickname', data.nickname);
+    if (data.avatarUrl !== undefined) localStorage.setItem('avatar_url', data.avatarUrl || '');
 
     // 优先使用 userType 数组派生角色，其次使用显式布尔字段（向后兼容）
     if (Array.isArray(data.userType)) {
@@ -72,10 +81,22 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin.value = false;
     localStorage.removeItem('token');
     localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('nickname');
+    localStorage.removeItem('avatar_url');
     localStorage.removeItem('is_creator');
     localStorage.removeItem('is_admin');
     localStorage.removeItem('token_expires_at');
+    activeIdentity.value = 'player';
+    localStorage.removeItem('active_identity');
   }
 
-  return { token, userId, nickname, avatarUrl, isLoggedIn, isCreator, isAdmin, setAuth, logout, isTokenExpired };
+  function setActiveIdentity(id: Identity): void {
+    // 非创作者不允许切换到 creator 身份
+    if (id === 'creator' && !isCreator.value) return;
+    activeIdentity.value = id;
+    localStorage.setItem('active_identity', id);
+  }
+
+  return { token, userId, nickname, avatarUrl, isLoggedIn, isCreator, isAdmin, activeIdentity, setActiveIdentity, setAuth, logout, isTokenExpired };
 });

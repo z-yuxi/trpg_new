@@ -7,6 +7,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean;
     requiresCreator?: boolean;
     requiresAdmin?: boolean;
+    guestOnly?: boolean;
     title?: string;
     disableBack?: boolean;
     isPrimaryTab?: boolean;
@@ -16,10 +17,10 @@ declare module 'vue-router' {
 const routes = [
   {
     path: '/',
-    component: () => import('../layouts/MainLayout.vue'),
+    component: () => import('../layouts/AppShell.vue'),
     children: [
-      // 根路径：未登录显示首页，已登录跳探索（由 beforeEach 处理）
-      { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页', disableBack: true } },
+      // 根路径：未登录品牌首页；已登录由 beforeEach 跳 Explore
+      { path: '', name: 'Home', component: () => import('../views/Home.vue'), meta: { title: '首页', guestOnly: true, disableBack: true } },
       // 探索
       { path: 'explore', name: 'Explore', component: () => import('../views/AssetLibrary.vue'), meta: { title: '探索', isPrimaryTab: true } },
       // 招募
@@ -38,8 +39,25 @@ const routes = [
         ],
       },
       { path: 'discuss/thread/:id', name: 'ThreadDetail', component: () => import('../views/community/ThreadDetail.vue'), meta: { title: '帖子详情' } },
-      // 团途（原个人中心）
-      { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Personal.vue'), meta: { title: '团途', isPrimaryTab: true } },
+      // 叙途（重构后的主页）
+      { path: 'tuantu', name: 'Tuantu', component: () => import('../views/Tuantu.vue'), meta: { title: '叙途', requiresAuth: true, isPrimaryTab: true } },
+      // 创作台（创作者模式中间 tab）
+      {
+        path: 'creator',
+        component: () => import('../views/CreatorDashboard.vue'),
+        meta: { requiresAuth: true, requiresCreator: true, title: '创作台' },
+        children: [
+          { path: '', redirect: '/creator/dashboard' },
+          { path: 'workshop', name: 'RulesetWorkshop', component: () => import('../views/creator/RulesetWorkshop.vue') },
+          { path: 'workshop/:id/edit', name: 'RulesetEditor', component: () => import('../views/creator/RulesetEditor.vue') },
+          { path: 'modules', name: 'ModuleList', component: () => import('../views/creator/ModuleList.vue') },
+          { path: 'modules/:id/edit', name: 'ModuleEditor', component: () => import('../views/creator/ModuleEditor.vue') },
+          { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/CreatorAssets.vue') },
+          { path: 'dashboard', name: 'CreatorDashboard', component: () => import('../views/creator/DashboardHome.vue') },
+          { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/CreatorProducts.vue') },
+          { path: 'earnings', name: 'CreatorEarnings', component: () => import('../views/creator/CreatorEarnings.vue') },
+        ],
+      },
       { path: 'journey', redirect: '/tuantu' },
       { path: 'tuantu/characters', name: 'TuantuCharacters', component: () => import('../views/personal/PersonalCharacters.vue'), meta: { title: '角色档案' } },
       { path: 'tuantu/assets', name: 'TuantuAssets', component: () => import('../views/personal/MineAssets.vue'), meta: { title: '个人馆藏', requiresAuth: true } },
@@ -113,22 +131,8 @@ const routes = [
     component: () => import('../views/CharacterEditor.vue'),
     meta: { requiresAuth: true, title: '角色编辑' },
   },
-  {
-    path: '/creator',
-    component: () => import('../views/CreatorDashboard.vue'),
-    meta: { requiresAuth: true, requiresCreator: true, title: '创作者专区' },
-    children: [
-      { path: '', redirect: '/creator/dashboard' },
-      { path: 'workshop', name: 'RulesetWorkshop', component: () => import('../views/creator/RulesetWorkshop.vue') },
-      { path: 'workshop/:id/edit', name: 'RulesetEditor', component: () => import('../views/creator/RulesetEditor.vue') },
-      { path: 'modules', name: 'ModuleList', component: () => import('../views/creator/ModuleList.vue') },
-      { path: 'modules/:id/edit', name: 'ModuleEditor', component: () => import('../views/creator/ModuleEditor.vue') },
-      { path: 'assets', name: 'CreatorAssets', component: () => import('../views/creator/CreatorAssets.vue') },
-      { path: 'dashboard', name: 'CreatorDashboard', component: () => import('../views/creator/DashboardHome.vue') },
-      { path: 'products', name: 'CreatorProducts', component: () => import('../views/creator/CreatorProducts.vue') },
-      { path: 'earnings', name: 'CreatorEarnings', component: () => import('../views/creator/CreatorEarnings.vue') },
-    ],
-  },
+  // /creator 已移入 AppShell 子路由，此处保留旧路径兼容重定向
+  { path: '/creator-legacy', redirect: '/creator' },
   {
     path: '/admin',
     component: () => import('../layouts/AdminLayout.vue'),
@@ -212,28 +216,32 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
+
+  // 已登录访问 guestOnly 页（品牌首页）→ 跳探索
+  if (to.meta.guestOnly && authStore.isLoggedIn) {
+    next({ name: 'Explore' });
+    return;
+  }
+
+  // 需要登录
   if (to.meta.requiresAuth && (!authStore.token || authStore.isTokenExpired())) {
     authStore.logout();
     next({ name: 'LoginCode', query: { redirect: to.fullPath } });
     return;
   }
-  if (to.meta.requiresCreator) {
-    if (!authStore.isCreator) {
-      next({ name: 'Forbidden' });
-      return;
-    }
-  }
-  if (to.meta.requiresAdmin) {
-    if (!authStore.isAdmin) {
-      next({ name: 'Forbidden' });
-      return;
-    }
-  }
-  // 已登录访问根路径 → 直接跳探索
-  if (to.name === 'Home' && authStore.isLoggedIn) {
-    next({ name: 'Explore' });
+
+  // 需要创作者身份
+  if (to.meta.requiresCreator && !authStore.isCreator) {
+    next({ name: 'Forbidden' });
     return;
   }
+
+  // 需要管理员
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    next({ name: 'Forbidden' });
+    return;
+  }
+
   next();
 });
 

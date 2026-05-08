@@ -1,27 +1,30 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import SvgIcon from '../components/SvgIcon.vue';
 import { useMessageStore } from '../stores/message-store';
 import { useNotificationStore } from '../stores/notification-store';
+import { useNavTabs } from './nav-config';
 
 const route = useRoute();
 const messageStore = useMessageStore();
 const notificationStore = useNotificationStore();
 
-const campaignUnread = computed(() => Object.values(messageStore.unreadCounts).reduce((sum, count) => sum + count, 0));
+const campaignUnread = computed(() =>
+  Object.values(messageStore.unreadCounts).reduce((sum, count) => sum + count, 0),
+);
 
-const tabs = [
-  { name: 'Explore', label: '探索', icon: 'icon-ruleset', path: '/explore' },
-  { name: 'Recruit', label: '招募', icon: 'icon-recruit', path: '/recruit' },
-  { name: 'Rooms', label: '房间', icon: 'icon-list', path: '/rooms', badge: campaignUnread },
-  { name: 'Discuss', label: '讨论', icon: 'icon-message', path: '/discuss' },
-  { name: 'Tuantu', label: '团途', icon: 'icon-settings', path: '/tuantu', badge: computed(() => notificationStore.unreadCount) },
-];
+const { tabs } = useNavTabs();
 
-function isActive(tab: { name: string; path: string }) {
-  if (tab.path === '/') return route.path === '/';
-  return route.path.startsWith(tab.path);
+function getBadge(name: string): number {
+  if (name === 'Rooms') return campaignUnread.value;
+  if (name === 'Tuantu') return notificationStore.unreadCount;
+  return 0;
+}
+
+function isActive(path: string) {
+  if (path === '/') return route.path === '/';
+  return route.path.startsWith(path);
 }
 </script>
 
@@ -32,11 +35,13 @@ function isActive(tab: { name: string; path: string }) {
       :key="tab.name"
       :to="tab.path"
       class="nav-item"
-      :class="{ active: isActive(tab) }"
+      :class="{ active: isActive(tab.path) }"
     >
       <span class="icon-wrap">
         <SvgIcon :name="tab.icon" :size="22" />
-        <span v-if="tab.badge?.value" class="nav-badge">{{ tab.badge.value > 99 ? '99+' : tab.badge.value }}</span>
+        <span v-if="getBadge(tab.name) > 0" class="nav-badge">
+          {{ getBadge(tab.name) > 99 ? '99+' : getBadge(tab.name) }}
+        </span>
       </span>
       <span class="nav-label">{{ tab.label }}</span>
     </router-link>
@@ -50,8 +55,10 @@ function isActive(tab: { name: string; path: string }) {
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--color-card-bg);
   border-top: 1px solid var(--color-card-border);
-  position: sticky;
+  position: fixed;
   bottom: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
 }
 .nav-item {
@@ -65,7 +72,7 @@ function isActive(tab: { name: string; path: string }) {
   text-decoration: none;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), opacity 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
 .nav-item.active { color: var(--color-accent); }
@@ -78,8 +85,8 @@ function isActive(tab: { name: string; path: string }) {
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--color-danger);
-  color: var(--text-inverse);
+  background: var(--color-danger, #ef4444);
+  color: #fff;
   font-size: 10px;
   line-height: 18px;
   font-weight: 700;

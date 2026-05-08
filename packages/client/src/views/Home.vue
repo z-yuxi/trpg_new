@@ -92,11 +92,14 @@ onMounted(async () => {
       </div>
       <div v-else class="grid-list">
         <TCard v-for="item in modules" :key="item.id" class="preview-card">
-          <div class="preview-card-header">
-            <div class="preview-title">{{ item.name }}</div>
-            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          <img v-if="item.cover_url" :src="item.cover_url" class="card-cover" alt="" />
+          <div class="card-body">
+            <div class="preview-card-header">
+              <div class="preview-title">{{ item.name }}</div>
+              <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+            </div>
+            <p class="preview-author">{{ item.author_name || '未知作者' }}</p>
           </div>
-          <p class="preview-desc">{{ item.description || '暂无简介' }}</p>
         </TCard>
       </div>
     </section>
@@ -109,11 +112,13 @@ onMounted(async () => {
       </div>
       <div v-else class="grid-list">
         <TCard v-for="item in stories" :key="item.id" class="preview-card">
-          <div class="preview-card-header">
-            <div class="preview-title">{{ item.title }}</div>
-            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          <div class="card-body">
+            <div class="preview-card-header">
+              <div class="preview-title">{{ item.title }}</div>
+              <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+            </div>
+            <p class="preview-author">{{ item.author_nickname || '未知作者' }}</p>
           </div>
-          <p class="preview-desc">{{ item.summary || '新的故事正在发生' }}</p>
         </TCard>
       </div>
     </section>
@@ -235,8 +240,18 @@ onMounted(async () => {
 .btn-accent { padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); border: none; background: var(--btn-primary-bg); color: var(--btn-primary-text); font-weight: 700; font-size: var(--text-sm); cursor: pointer; }
 .grid-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-3); }
 .preview-card { border: 1px solid var(--border-default); }
-.preview-title { font-size: var(--text-sm); font-weight: 700; color: var(--text-primary); margin-bottom: var(--space-2); }
-.preview-desc { font-size: var(--text-xs); color: var(--text-secondary); margin: 0; }
+.preview-title { font-size: var(--text-sm); font-weight: 700; color: var(--color-text-primary); margin-bottom: var(--space-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.preview-author { font-size: var(--text-xs); color: var(--color-text-muted); margin: 0; }
+.card-cover {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  display: block;
+}
+.card-body {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
 .home-footer {
   border-top: 1px solid var(--border-default);
   padding-top: var(--space-4);
