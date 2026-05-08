@@ -44,10 +44,44 @@ onMounted(async () => {
 
 <template>
   <div class="home-page">
+    <!-- Hero 背景区域 -->
+    <section class="hero-section">
+      <img 
+        src="/images/hero-temp.svg" 
+        class="hero-bg" 
+        alt="共叙首页背景"
+      />
+      <!-- Hero 上叠加的内容 -->
+      <div class="hero-content">
+        <h1 class="hero-title">共叙，专注人与人之间的共同叙事</h1>
+        <p class="hero-subtitle">与同好相遇，在文字里共同推进一场故事。</p>
+        <button class="btn-hero" @click="router.push('/login')">进入叙事</button>
+      </div>
+    </section>
+
+    <!-- 原有的主页内容区域 -->
+    <div class="home-content">
     <section class="entry-block">
-      <h1 class="entry-title">共叙，专注人与人之间的共同叙事</h1>
-      <p class="entry-subtitle">与同好相遇，在文字里共同推进一场故事。</p>
-      <button class="btn-accent" @click="router.push('/login')">进入叙事</button>
+      <h1 class="entry-title">推荐内容</h1>
+      <div v-if="loading" class="grid-list">
+        <TSkeleton type="card" v-for="i in 4" :key="`recommend-${i}`" />
+      </div>
+      <div v-else class="grid-list">
+        <TCard v-for="item in modules.slice(0, 2)" :key="`recommend-${item.id}`" class="preview-card">
+          <div class="preview-card-header">
+            <div class="preview-title">{{ item.name }}</div>
+            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          </div>
+          <p class="preview-desc">{{ item.description || '暂无简介' }}</p>
+        </TCard>
+        <TCard v-for="item in stories.slice(0, 2)" :key="`recommend-story-${item.id}`" class="preview-card">
+          <div class="preview-card-header">
+            <div class="preview-title">{{ item.title }}</div>
+            <span class="hot-badge">{{ badgeLabel(item.top_badge) }}</span>
+          </div>
+          <p class="preview-desc">{{ item.summary || '新的故事正在发生' }}</p>
+        </TCard>
+      </div>
     </section>
 
     <!-- 精选模组：数据为 0 时隐藏整个区域 -->
@@ -90,11 +124,89 @@ onMounted(async () => {
       <span>联系我们</span>
       <span>协议</span>
     </footer>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.home-page { max-width: 1100px; margin: 0 auto; padding: var(--space-5) var(--space-4) var(--space-8); }
+.home-page { 
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Hero 背景区域 */
+.hero-section {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  color: white;
+  max-width: 600px;
+  padding: var(--space-4);
+}
+
+.hero-title {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  margin: 0 0 var(--space-3);
+  color: #ffffff;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.hero-subtitle {
+  font-size: var(--text-lg);
+  color: rgba(255, 255, 255, 0.95);
+  margin: 0 0 var(--space-4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.btn-hero {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  border: none;
+  background: #ffffff;
+  color: #036fde;
+  font-weight: 700;
+  font-size: var(--text-base);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.btn-hero:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* 内容区域 */
+.home-content {
+  flex: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+  width: 100%;
+}
+
 .entry-block {
   padding: var(--space-7) var(--space-5);
   border-radius: var(--radius-lg);
@@ -103,7 +215,8 @@ onMounted(async () => {
   text-align: center;
   margin-bottom: var(--space-7);
 }
-.entry-title { font-size: var(--text-2xl); font-weight: 800; margin: 0 0 var(--space-3); color: var(--text-primary); }
+
+.entry-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0 0 var(--space-3); }
 .entry-subtitle { font-size: var(--text-base); color: var(--text-secondary); margin: 0 0 var(--space-4); }
 .section { margin-bottom: var(--space-7); }
 .section-title { font-size: var(--text-lg); font-weight: 700; color: var(--text-primary); margin: 0; }
@@ -132,9 +245,22 @@ onMounted(async () => {
   gap: var(--space-3);
   color: var(--text-muted);
   font-size: var(--text-xs);
+  margin-top: auto;
 }
+
 @media (max-width: 768px) {
+  .hero-section {
+    height: 60vh;
+  }
+
+  .hero-title {
+    font-size: var(--text-xl);
+  }
+
+  .hero-subtitle {
+    font-size: var(--text-base);
+  }
+
   .grid-list { grid-template-columns: 1fr; }
-  .entry-title { font-size: var(--text-xl); }
 }
 </style>

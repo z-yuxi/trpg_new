@@ -12,6 +12,13 @@ describe('E2E - 认证流程', () => {
       expect([200, 201]).toContain(res.status);
     });
 
+    it('未设置密码时也应注册成功', async () => {
+      const phone = makePhone();
+      const res = await request.post('/api/auth/register').send({ phone, nickname: '验证码用户' });
+      expect([200, 201]).toContain(res.status);
+      expect(res.body.user?.nickname).toBe('验证码用户');
+    });
+
     it('未提供昵称时应生成默认昵称', async () => {
       const phone = makePhone();
       const res = await request.post('/api/auth/register').send({ phone, password });

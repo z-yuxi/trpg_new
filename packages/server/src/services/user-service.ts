@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 import { db } from '../db';
 import { generateId, generateRoomCode } from '@trpg/shared';
 import type { User } from '@trpg/shared';
@@ -11,7 +12,7 @@ const UID_START = 1000000;
 export class UserService {
   async register(params: {
     phone: string;
-    password: string;
+    password?: string;
     nickname?: string;
   }): Promise<User> {
     const { phone, password, nickname } = params;
@@ -23,8 +24,10 @@ export class UserService {
       throw new AppError(409, '该手机号已注册');
     }
 
-    const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const id = generateId();
+    // users.password_hash 当前为 NOT NULL：免密账号写入内部占位哈希，避免约束失败
+    const passwordSeed = password ?? `code-login-only:${id}:${randomUUID()}`;
+    const password_hash = await bcrypt.hash(passwordSeed, BCRYPT_ROUNDS);
 
     // Generate unique UID
     const maxUidRow = await db('users').max('uid as maxUid').first();
@@ -36,7 +39,8 @@ export class UserService {
       uid,
       phone_encrypted: encryptToJson(phone),
       phone_hmac: hmac,
-      password_hash,
+      password_hash: password_hash,
+      has_password: !!password,
       nickname: resolvedNickname,
       avatar_url: '',
       user_type: JSON.stringify(['player']),

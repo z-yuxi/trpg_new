@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+/**
+ * @deprecated 此组件已拆分为三个独立页面：
+ *   - LoginCode.vue    — 验证码登录（默认入口，路由 /login/code）
+ *   - LoginPassword.vue — 密码登录（弱化入口，路由 /login/password）
+ *   - Register.vue     — 注册（路由 /register）
+ *
+ * /login 路由现重定向至 /login/code，此文件仅作历史备份，不再被路由引用。
+ */
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import TCard from '../components/base/TCard.vue';
@@ -13,14 +20,13 @@ const route = useRoute();
 const authStore = useAuthStore();
 
 // ── 模式 ──────────────────────────────────────────────────────────
-type LoginMode = 'code' | 'password' | 'username';
+type LoginMode = 'code' | 'password';
 const loginMode = ref<LoginMode>('code');
 
 // ── 表单字段 ───────────────────────────────────────────────────────
 const phone = ref('');
 const areaCode = ref('+86');
 const password = ref('');
-const username = ref('');
 const verificationCode = ref('');
 const agreedToTerms = ref(false);
 const loading = ref(false);
@@ -135,9 +141,7 @@ async function submit() {
       if (data?.tokens?.refresh_token) setRefreshToken(data.tokens.refresh_token);
       authStore.setAuth({ token: accessToken, userId: data.user.id, nickname: data.user.nickname, avatarUrl: data.user.avatar_url, userType: data.user.user_type, expiresIn: data?.tokens?.expires_in });
     } else {
-      const body = loginMode.value === 'password'
-        ? { phone: phone.value, password: password.value }
-        : { username: username.value, password: password.value };
+      const body = { phone: phone.value, password: password.value };
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,7 +172,7 @@ async function submit() {
         <h1 class="title">登录 / 注册</h1>
         <p class="tagline">让故事因同行而生动</p>
       </template>
-      <h1 v-else class="title title-compact">{{ loginMode === 'password' ? '密码登录' : '用户名登录' }}</h1>
+      <h1 v-else class="title title-compact">密码登录</h1>
 
       <div class="form">
         <!-- 全局错误（字段级兜底） -->
@@ -249,16 +253,7 @@ async function submit() {
           </div>
         </template>
 
-        <!-- ── 用户名密码模式 ── -->
-        <template v-else>
-          <div class="field-block">
-            <TInput v-model="username" placeholder="请输入用户名" />
-          </div>
-          <div class="field-block">
-            <TInput v-model="password" type="password" placeholder="请输入密码" />
-            <p v-if="passwordError" class="field-error">{{ passwordError }}</p>
-          </div>
-        </template>
+
 
         <!-- 提交按钮 -->
         <TButton
@@ -280,15 +275,8 @@ async function submit() {
           <template v-if="loginMode === 'code'">
             <span class="text-link" @click="switchMode('password')">使用密码登录</span>
           </template>
-          <template v-else-if="loginMode === 'password'">
-            <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
-            <span class="link-sep">|</span>
-            <span class="text-link" @click="switchMode('username')">使用用户名登录</span>
-          </template>
           <template v-else>
             <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
-            <span class="link-sep">|</span>
-            <span class="text-link" @click="switchMode('password')">使用手机号登录</span>
           </template>
         </div>
       </div>

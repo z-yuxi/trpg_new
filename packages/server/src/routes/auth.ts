@@ -31,7 +31,7 @@ const registerLimiter = rateLimit({
 
 const registerSchema = z.object({
   phone: z.string().min(1),
-  password: z.string().min(8).regex(/(?=.*[a-zA-Z])(?=.*\d)/, '密码需包含字母和数字'),
+  password: z.string().min(8).regex(/(?=.*[a-zA-Z])(?=.*\d)/, '密码需包含字母和数字').optional(),
   nickname: z.string().trim().min(1).optional(),
 });
 

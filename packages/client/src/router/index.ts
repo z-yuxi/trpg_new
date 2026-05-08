@@ -146,8 +146,26 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('../views/Login.vue'),
+    redirect: { name: 'LoginCode' },
+    meta: { title: '登录' },
+  },
+  {
+    path: '/login/code',
+    name: 'LoginCode',
+    component: () => import('../views/LoginCode.vue'),
     meta: { title: '登录', disableBack: true },
+  },
+  {
+    path: '/login/password',
+    name: 'LoginPassword',
+    component: () => import('../views/LoginPassword.vue'),
+    meta: { title: '密码登录' },
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('../views/Register.vue'),
+    meta: { title: '注册' },
   },
   {
     path: '/terms',
@@ -196,7 +214,7 @@ router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
   if (to.meta.requiresAuth && (!authStore.token || authStore.isTokenExpired())) {
     authStore.logout();
-    next({ name: 'Login', query: { redirect: to.fullPath } });
+    next({ name: 'LoginCode', query: { redirect: to.fullPath } });
     return;
   }
   if (to.meta.requiresCreator) {
