@@ -150,6 +150,18 @@ const routes = [
     meta: { title: '登录', disableBack: true },
   },
   {
+    path: '/terms',
+    name: 'Terms',
+    component: () => import('../views/Terms.vue'),
+    meta: { title: '共叙平台服务协议' },
+  },
+  {
+    path: '/privacy',
+    name: 'Privacy',
+    component: () => import('../views/Privacy.vue'),
+    meta: { title: '共叙隐私政策' },
+  },
+  {
     path: '/403',
     name: 'Forbidden',
     component: () => import('../views/Forbidden.vue'),

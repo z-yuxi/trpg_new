@@ -168,7 +168,7 @@ async function submit() {
         <h1 class="title">登录 / 注册</h1>
         <p class="tagline">让故事因同行而生动</p>
       </template>
-      <h1 v-else class="title title-compact">登录</h1>
+      <h1 v-else class="title title-compact">{{ loginMode === 'password' ? '密码登录' : '用户名登录' }}</h1>
 
       <div class="form">
         <!-- 全局错误（字段级兜底） -->
@@ -282,12 +282,12 @@ async function submit() {
           </template>
           <template v-else-if="loginMode === 'password'">
             <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
-            <span class="link-sep">·</span>
+            <span class="link-sep">|</span>
             <span class="text-link" @click="switchMode('username')">使用用户名登录</span>
           </template>
           <template v-else>
             <span class="text-link" @click="switchMode('code')">使用验证码登录</span>
-            <span class="link-sep">·</span>
+            <span class="link-sep">|</span>
             <span class="text-link" @click="switchMode('password')">使用手机号登录</span>
           </template>
         </div>
@@ -502,7 +502,7 @@ async function submit() {
   font-size: var(--text-sm, 13px);
   margin-top: 2px;
 }
-.link-sep { color: var(--text-muted, #8fa3b1); }
+.link-sep { color: var(--text-muted, #8fa3b1); margin: 0 4px; }
 
 /* ── autofill 修复 ── */
 :deep(input:-webkit-autofill),
